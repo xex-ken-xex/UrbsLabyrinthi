@@ -73,6 +73,14 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/screens
 
 ## 書き出し(エクスポート)するとき
 
+`export_presets.cfg` に Windows 用のプリセットを入れてある(フィルターも設定ずみ)。書き出しテンプレート 4.7.2 を入れれば、次で作れる。
+
+```sh
+godot --headless --path godot --export-release "Windows Desktop" build/windows/UrbsLabyrinthi.exe
+```
+
+出力は単体の exe(pck 同梱、約110MB)。
+
 `data/floors/*.json` は、リソースではなく生のファイルとして読んでいる。エクスポートの「リソース」タブの「非リソースのファイルを書き出すフィルター」に `data/*, data/floors/*` を入れる。
 
 ## 分かっている限界
