@@ -113,7 +113,7 @@ func _setup_input() -> void:
 		"guard": [KEY_SPACE], "dodge": [KEY_SHIFT],
 		"skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3], "skill4": [KEY_4],
 		"switch": [KEY_Q], "interact": [KEY_E], "search": [KEY_F], "quick_heal": [KEY_R],
-		"inventory": [KEY_TAB], "confirm": [KEY_ENTER, KEY_KP_ENTER], "credits": [KEY_F1],
+		"reload_assets": [KEY_F6], "inventory": [KEY_TAB], "confirm": [KEY_ENTER, KEY_KP_ENTER], "credits": [KEY_F1],
 	}
 	for a in defs:
 		if not InputMap.has_action(a):
@@ -315,6 +315,11 @@ func log_msg(text: String, color: Color = Color.WHITE) -> void:
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("credits"):
 		hud.show_credits = not hud.show_credits
+	if Input.is_action_just_pressed("reload_assets"):
+		Assets.clear()          # 置いた画像を読み込み直す(フォントは再起動後)
+		if current != null:
+			current.queue_redraw()
+		log_msg("画像を読み込み直した", Color(0.7, 0.85, 1.0))
 	match phase:
 		"dungeon": _dungeon_frame(delta)
 		"overlay":

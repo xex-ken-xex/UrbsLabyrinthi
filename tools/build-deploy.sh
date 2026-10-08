@@ -36,6 +36,11 @@ os.remove(exe)
 PY
 # 強制終了などの調査用に、ログを出すためのファイルを添える
 cp "$ROOT/tools/run-with-log.bat" "$ROOT/Deploy/windows/run-with-log.bat"
+# 差し替え画像の説明と、各OSの assets/ の置き場(実行ファイルと同じフォルダ)
+mkdir -p "$ROOT/Deploy/assets" "$ROOT/Deploy/windows/assets" "$ROOT/Deploy/linux/assets"
+cp "$ROOT/godot/assets/OVERRIDE.md" "$ROOT/Deploy/assets/README.md"
+printf "ここに差し替え画像を置く。説明は ../../assets/README.md(キーの一覧と大きさ)。\n見本は ../../assets/samples/。ゲーム中に F6 で読み込み直す。\n" > "$ROOT/Deploy/windows/assets/README.txt"
+cp "$ROOT/Deploy/windows/assets/README.txt" "$ROOT/Deploy/linux/assets/README.txt"
 chmod +x "$ROOT/Deploy/linux/UrbsLabyrinthi.x86_64"
 
 # 書き出したビルドで、迷宮→街→全滅→帰還の札→つづきから、を通す(xvfb があれば)。

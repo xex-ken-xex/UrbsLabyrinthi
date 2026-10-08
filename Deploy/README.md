@@ -32,3 +32,9 @@ cd Deploy/linux
 ## 操作
 
 [`godot/README.md`](../godot/README.md) を見る。移動は WASD、敵へ押し込んで体当たり、スキルは 1〜4、持ち物は Tab。
+
+
+## 画像・フォントの差し替え
+背景、キャラクター、魔物、床や壁、アイコン、ロゴ、フォントを、画像ファイルを置くだけで差し替えられる。
+実行ファイルと同じフォルダの `assets/` に、`キー.png` を置く(`windows/assets/`、`linux/assets/`)。ゲーム中に **F6** で読み込み直す。
+キーの一覧と大きさは [`assets/README.md`](assets/README.md)、見本は [`assets/samples/`](assets/samples/)。

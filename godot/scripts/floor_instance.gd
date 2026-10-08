@@ -25,6 +25,8 @@ var enc_total := {}
 var enc_dead := {}
 var light_pos := Vector2.ZERO
 var exhale := false
+var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
+var _tex_ver := -1
 
 func _init() -> void:
 	process_physics_priority = 100     # 魔物と仲間が動いたあとに、押し合いを決める
@@ -141,7 +143,24 @@ func _hash(x: int, y: int) -> float:
 	var h := (x * 73856093) ^ (y * 19349663)
 	return float(h & 255) / 255.0
 
+func _refresh_tex() -> void:
+	if _tex_ver == Assets.version:
+		return
+	_tex_ver = Assets.version
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var th := String(map.data["meta"].get("theme", ""))
+	tex = {
+		"floor": Assets.first(["floor_" + th, "floor"]),
+		"wall": Assets.first(["wall_" + th, "wall"]),
+		"corr": Assets.first(["corr_" + th, "corr", "floor_" + th, "floor"]),
+		"stairs_up": Assets.texture("icon_stairs_up"),
+		"stairs_down": Assets.texture("icon_stairs_down"),
+		"chest": Assets.texture("icon_chest"),
+		"trap": Assets.texture("icon_trap"),
+	}
+
 func _draw() -> void:
+	_refresh_tex()
 	var C := float(Balance.CELL)
 	var rock: Color = col.get("rock", Color("111111"))
 	var floor_a: Color = col.get("floor", Color("444444"))
@@ -166,9 +185,11 @@ func _draw() -> void:
 			var t := map.tiles[i]
 			var rect := Rect2(x * C, y * C, C, C)
 			if t == FloorMap.ROCK:
-				if map.wall_adj[i] == 1:
+				if map.wall_adj[i] == 1 and tex["wall"] != null:
+					draw_texture_rect(tex["wall"], rect, false, _shade(Color.WHITE, f))
+				elif map.wall_adj[i] == 1:
 					draw_rect(rect, _shade(wall, f))
-					# 床に面した縁に明るい線を引いて、壁の輪郭を出す
+					# 床に面した縁に明るい線を引いて、壁の輪郭を出す(差し替え画像のときは引かない)
 					var edge := _shade(wall.lightened(0.45), f)
 					for dv in FloorMap.DIRS4:
 						var nx: int = x + dv.x
@@ -183,12 +204,22 @@ func _draw() -> void:
 			if t == FloorMap.DOOR:
 				var d: Dictionary = map.door_at[i]
 				if d["type"] == "secret" and not d["found"]:
-					draw_rect(rect, _shade(wall, f))
+					if tex["wall"] != null:
+						draw_texture_rect(tex["wall"], rect, false, _shade(Color.WHITE, f))
+					else:
+						draw_rect(rect, _shade(wall, f))
 					continue
-				draw_rect(rect, _shade(corr, f))
+				if tex["corr"] != null:
+					draw_texture_rect(tex["corr"], rect, false, _shade(Color.WHITE, f))
+				else:
+					draw_rect(rect, _shade(corr, f))
 				_draw_door(d, rect, f)
 				continue
-			draw_rect(rect, _shade(base, f))
+			var ftex: Texture2D = tex["corr"] if t == FloorMap.CORR else tex["floor"]
+			if ftex != null:
+				draw_texture_rect(ftex, rect, false, _shade(Color.WHITE, f))
+			else:
+				draw_rect(rect, _shade(base, f))
 	# 階段
 	_draw_stairs(up_cell, true, glow)
 	_draw_stairs(down_cell, false, glow)
@@ -200,6 +231,9 @@ func _draw() -> void:
 		if map.explored[map.idx(cc.x, cc.y)] == 0:
 			continue
 		var k := 1.0 if map.visible[map.idx(cc.x, cc.y)] == 1 else 0.45
+		if tex["chest"] != null:
+			draw_texture_rect(tex["chest"], Rect2(cc.x * C, cc.y * C, C, C), false, Color(k, k, k))
+			continue
 		var p := Vector2(cc.x * C + 9.0, cc.y * C + 12.0)
 		draw_rect(Rect2(p, Vector2(14, 10)), Color(0.55 * k, 0.38 * k, 0.12 * k))
 		draw_rect(Rect2(p, Vector2(14, 4)), Color(0.8 * k, 0.6 * k, 0.2 * k))
@@ -213,6 +247,9 @@ func _draw() -> void:
 			continue
 		var cen := map.center_of(tc)
 		var a := 0.9 if t["st"] == "revealed" else 0.35
+		if tex["trap"] != null:
+			draw_texture_rect(tex["trap"], Rect2(cen - Vector2(C, C) / 2.0, Vector2(C, C)), false, Color(1, 1, 1, a))
+			continue
 		var cc2 := Color(0.9, 0.25, 0.2, a)
 		draw_line(cen + Vector2(-8, -8), cen + Vector2(8, 8), cc2, 2.5)
 		draw_line(cen + Vector2(-8, 8), cen + Vector2(8, -8), cc2, 2.5)
@@ -249,6 +286,10 @@ func _draw_stairs(cell: Vector2i, up: bool, glow: Color) -> void:
 	var C := float(Balance.CELL)
 	var k := 1.0 if map.visible[map.idx(cell.x, cell.y)] == 1 else 0.5
 	var c := Vector2((cell.x + 0.5) * C, (cell.y + 0.5) * C)
+	var icon: Texture2D = tex["stairs_up"] if up else tex["stairs_down"]
+	if icon != null:
+		draw_texture_rect(icon, Rect2(c - Vector2(C, C) / 2.0, Vector2(C, C)), false, Color(k, k, k))
+		return
 	var col2 := _shade(glow, k)
 	var pts := PackedVector2Array()
 	if up:

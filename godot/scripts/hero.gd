@@ -29,6 +29,8 @@ var ai_target: Enemy = null
 var ai_move := Vector2.ZERO
 var ai_catchup := false
 var guarding := false
+var _tex: Texture2D = null
+var _tex_ver := -1
 
 func setup(fl: FloorInstance, character: Character) -> void:
 	game_floor = fl
@@ -455,9 +457,45 @@ func _ai_skills() -> void:
 
 # ---------- 描画 ----------
 
+func _sprite() -> Texture2D:
+	if _tex_ver != Assets.version:
+		_tex_ver = Assets.version
+		_tex = Assets.hero_texture(ch.name, ch.cls, ch.race)
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return _tex
+
+## 差し替え画像を描く。右向きの絵を、左を向くときは反転する
+func _draw_sprite(tex: Texture2D, tint: Color, face_x: float) -> void:
+	var sz := radius * 3.0
+	var r := Rect2(-sz / 2.0, -sz / 2.0 - radius * 0.25, sz, sz)
+	draw_set_transform(lunge, 0.0, Vector2(-1.0 if face_x < 0.0 else 1.0, 1.0))
+	draw_texture_rect(tex, r, false, tint)
+	draw_set_transform(lunge)
+
 func _draw() -> void:
 	draw_set_transform(lunge)
 	var col := Jobs.class_color(ch.cls)
+	var tex := _sprite()
+	if tex != null:
+		if down:
+			_draw_sprite(tex, Color(0.35, 0.35, 0.4, 0.8), facing.x)
+			draw_line(Vector2(-6, -6), Vector2(6, 6), Color(0.8, 0.2, 0.2), 3.0)
+			draw_line(Vector2(-6, 6), Vector2(6, -6), Color(0.8, 0.2, 0.2), 3.0)
+			UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.6))
+			return
+		for k in buffs:
+			if BUFF_COLORS.has(k):
+				draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 22, BUFF_COLORS[k], 2.0)
+		var tint := Color(1, 0.55, 0.5) if flash > 0.0 else Color.WHITE
+		if roll_t > 0.0:
+			tint.a = 0.55
+		_draw_sprite(tex, tint, facing.x)
+		if guarding:
+			draw_arc(Vector2.ZERO, radius + 5.0, facing.angle() - 1.0, facing.angle() + 1.0, 12, Color("a8d8ff"), 4.0)
+		if controlled:
+			draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 14), Vector2(5, -radius - 22), Vector2(-5, -radius - 22)]), Color("ffe9a8"))
+		UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.85))
+		return
 	if down:
 		draw_circle(Vector2.ZERO, radius, Color(0.35, 0.35, 0.38, 0.8))
 		draw_line(Vector2(-6, -6), Vector2(6, 6), Color(0.8, 0.2, 0.2), 3.0)

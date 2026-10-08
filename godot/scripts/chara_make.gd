@@ -32,6 +32,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var art := TownArt.new()
 	art.style = "inn"
+	art.asset_key = "bg_charamake"
 	add_child(art)
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.55)

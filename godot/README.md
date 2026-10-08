@@ -30,6 +30,7 @@
 | 持ち物(アイテム、装備、スキル、ステータス) | Tab |
 | 治療薬を使う(もっとも傷ついた仲間へ) | R |
 | クレジット(SRD の帰属表示) | F1 |
+| 差し替えた画像を読み込み直す | F6 |
 
 ## 体当たり(ハイドライド式)
 
@@ -141,6 +142,11 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 - 花街は雰囲気だけで、仕組みは無い
 - 音と効果音は無い。固定の画面比(16:9)で作ってある
 - 数値は初版。遊んで直す前提(特に、敵の毎秒ダメージと押し合いの強さ)
+
+## 画像の差し替え
+
+背景、キャラクター、魔物、床や壁、アイコン、ロゴ、フォントは、`assets/` に `キー.png` を置くだけで差し替えられる(`scripts/assets.gd`)。
+ゲーム中に F6 で読み込み直す。置き場所、キーの一覧、大きさは [`assets/OVERRIDE.md`](assets/OVERRIDE.md)。見本は `Deploy/assets/samples/`(`tools/make-asset-samples.py` で作る)。
 
 ## ライセンス
 
