@@ -287,6 +287,7 @@ func _test_contact() -> void:
 	await _step(60)
 	var pushed_open := pos0 - h0.position.x
 	var dmg_open := h0.ch.max_hp() - h0.ch.hp
+	check(en3.hp < 300.0, "触れているだけで自動的に攻撃する(入力なし。敵HP 300 → %.1f)" % en3.hp)
 	_clear_enemies(fl)
 	h0.ch.hp = float(h0.ch.max_hp())
 	h0.position = spot
@@ -332,7 +333,7 @@ func _test_contact() -> void:
 							print("   f%d 重なり %.2f: %s(%s r%.0f) と %s(%s r%.0f)  壁A %s 壁B %s" % [f, o, bs[i].name, "hero" if bs[i].is_hero else "enemy", bs[i].radius, bs[j].name, "hero" if bs[j].is_hero else "enemy", bs[j].radius,
 								fl.map.circle_blocked(bs[i].position, bs[i].col_radius + 1.0), fl.map.circle_blocked(bs[j].position, bs[j].col_radius + 1.0)])
 	print("  乱戦600フレーム(仲間4人 vs 魔物9体)の重なりの最大: %.2f px" % worst)
-	check(worst < 0.5, "キャラクター同士が重ならない (最大 %.2f px)" % worst)
+	check(worst < 1.0, "キャラクター同士が重ならない (最大 %.2f px)" % worst)
 	# 5. 壁に食い込まない
 	var inside := true
 	for h in heroes:

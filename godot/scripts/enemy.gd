@@ -309,6 +309,7 @@ func _shoot(h: Hero) -> void:
 # ---------- 描画 ----------
 
 func _draw() -> void:
+	draw_set_transform(lunge)
 	var c := Color.WHITE if flash > 0.0 else color
 	if stun_t > 0.0:
 		c = c.darkened(0.4)
