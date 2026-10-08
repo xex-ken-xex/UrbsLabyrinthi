@@ -47,6 +47,55 @@ func _ready() -> void:
 	hud.game = self
 	hud_layer.add_child(hud)
 	show_title()
+	if OS.get_cmdline_user_args().has("--autotest-town"):
+		call_deferred("_autotest_town")
+
+## 書き出したビルドで「迷宮 → 街」を再現するための確認用(--autotest-town を付けて起動する)
+func _autotest_town() -> void:
+	await get_tree().create_timer(0.5).timeout
+	show_make()
+	await get_tree().create_timer(0.3).timeout
+	screen._on_start()
+	await get_tree().create_timer(0.3).timeout
+	_on_dive()
+	await get_tree().create_timer(0.5).timeout
+	leader().position = current.map.center_of(current.up_cell)
+	await get_tree().create_timer(0.5).timeout
+	Input.action_press("interact")
+	await get_tree().create_timer(0.1).timeout
+	Input.action_release("interact")
+	await get_tree().create_timer(1.0).timeout
+	print("AUTOTEST 街へ戻る phase=", phase)
+	await get_tree().create_timer(0.5).timeout
+	# 全滅 → 街
+	_on_dive()
+	await get_tree().create_timer(0.8).timeout
+	for h in heroes:
+		h.damage(99999.0, h.position, true)
+	await get_tree().create_timer(0.5).timeout
+	print("AUTOTEST 全滅 phase=", phase)
+	Input.action_press("confirm")
+	await get_tree().create_timer(0.1).timeout
+	Input.action_release("confirm")
+	await get_tree().create_timer(0.8).timeout
+	print("AUTOTEST 全滅のあと phase=", phase)
+	# 持ち物を開いて閉じ、帰還の札で街へ
+	_on_dive()
+	await get_tree().create_timer(0.8).timeout
+	open_inventory()
+	await get_tree().create_timer(0.3).timeout
+	pending_return = true
+	close_inventory()
+	await get_tree().create_timer(0.8).timeout
+	print("AUTOTEST 帰還の札 phase=", phase)
+	show_title()
+	await get_tree().create_timer(0.3).timeout
+	_on_continue()
+	await get_tree().create_timer(0.5).timeout
+	print("AUTOTEST つづきから phase=", phase)
+	await get_tree().create_timer(0.5).timeout
+	print("AUTOTEST done")
+	get_tree().quit()
 
 func _setup_input() -> void:
 	var defs := {
@@ -66,7 +115,7 @@ func _setup_input() -> void:
 			InputMap.action_add_event(a, ev)
 
 func leader() -> Hero:
-	if heroes.is_empty():
+	if heroes.is_empty() or active < 0 or active >= heroes.size() or not is_instance_valid(heroes[active]):
 		return null
 	return heroes[active]
 
@@ -262,6 +311,10 @@ func _dungeon_frame(delta: float) -> void:
 	light_t = maxf(0.0, light_t - delta)
 	_menu_cd = maxf(0.0, _menu_cd - delta)
 	_read_input()
+	# 入力で街へ戻った(heroes が空になった)あとは、迷宮の処理を続けない。
+	# 書き出したビルドでは、null の Hero へ触れると、エラーではなく強制終了になる
+	if phase != "dungeon" or current == null or heroes.is_empty():
+		return
 	var lead := leader()
 	_update_trail(lead)
 	camera.position = lead.position
@@ -298,6 +351,8 @@ func _read_input() -> void:
 		_switch_next()
 	if Input.is_action_just_pressed("interact"):
 		interact()
+		if phase != "dungeon" or heroes.is_empty():
+			return
 	if Input.is_action_just_pressed("search"):
 		search()
 	if Input.is_action_just_pressed("quick_heal"):

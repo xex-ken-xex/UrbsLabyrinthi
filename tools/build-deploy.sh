@@ -35,6 +35,14 @@ if not (os.path.exists(zp) and os.path.exists(marker) and open(marker).read().st
 os.remove(exe)
 PY
 chmod +x "$ROOT/Deploy/linux/UrbsLabyrinthi.x86_64"
+
+# 書き出したビルドで、迷宮→街→全滅→帰還の札→つづきから、を通す(xvfb があれば)。
+# headless のテストでは見つからない強制終了(null の Hero への参照など)を、ここで検出する
+if command -v xvfb-run >/dev/null 2>&1; then
+  OUT="$(cd "$ROOT/Deploy/linux" && timeout 120 xvfb-run -a -s "-screen 0 1280x720x24" ./UrbsLabyrinthi.x86_64 --rendering-driver opengl3 -- --autotest-town 2>&1)" || { echo "$OUT" | tail -5; echo "ビルドの確認で強制終了した" >&2; exit 1; }
+  echo "$OUT" | grep -q "AUTOTEST done" || { echo "$OUT" | tail -5; echo "ビルドの確認が最後まで通らなかった" >&2; exit 1; }
+  echo "ビルドの確認: 迷宮→街→全滅→帰還の札→つづきから が通った"
+fi
 {
   echo "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo "built:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
