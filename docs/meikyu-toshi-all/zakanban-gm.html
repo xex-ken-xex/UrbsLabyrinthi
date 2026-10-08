@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>座環盤（GM用）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+:root{
+  --bg:#DCE4DF; --panel:#E9EFEB; --ink:#12302E; --mute:#4D6764; --line:#B3C5BE;
+  --bronze:#9A6428; --bronze-d:#6E4415; --red:#A83232; --teal:#2A625C; --focus:#1F6B78;
+  --ok:#2A625C; --warn:#9A6428; --open:#A83232;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#101D1C;--panel:#172928;--ink:#DCE9E4;--mute:#8FAAA5;--line:#2B4441;--bronze:#D49A52;--bronze-d:#E3B476;--red:#E5766B;--teal:#6DB8AB;--focus:#8CD0DA;--ok:#6DB8AB;--warn:#D49A52;--open:#E5766B}
+}
+:root[data-theme="dark"]{--bg:#101D1C;--panel:#172928;--ink:#DCE9E4;--mute:#8FAAA5;--line:#2B4441;--bronze:#D49A52;--bronze-d:#E3B476;--red:#E5766B;--teal:#6DB8AB;--focus:#8CD0DA;--ok:#6DB8AB;--warn:#D49A52;--open:#E5766B}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.7 "Zen Kaku Gothic New","Yu Gothic","Hiragino Sans",sans-serif}
+.serif,h1,h2,h3{font-family:"Shippori Mincho","Yu Mincho","Hiragino Mincho ProN",serif}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 20px 56px}
+.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+.top h1{margin:0;font-size:clamp(26px,4vw,36px);letter-spacing:.12em;font-weight:700}
+.gmtag{border:1.5px solid var(--red);color:var(--red);font-weight:700;padding:0 10px;font-size:13px;border-radius:2px}
+.top p{flex-basis:100%;margin:2px 0 0;color:var(--mute);max-width:44em}
+.layout{display:grid;grid-template-columns:minmax(340px,600px) minmax(320px,1fr);gap:36px;align-items:start;margin-top:20px}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.left{position:sticky;top:12px}
+@media (max-width:900px){.left{position:static}}
+.dialbox{outline:none;border-radius:50%}
+.dialbox:focus-visible{outline:3px solid var(--focus);outline-offset:4px}
+svg{display:block;width:100%;height:auto}
+.ring{transform-box:view-box;transform-origin:320px 320px;transition:transform .7s cubic-bezier(.3,.7,.2,1)}
+@media (prefers-reduced-motion:reduce){.ring{transition:none}}
+.rt{font-family:"Shippori Mincho","Yu Mincho",serif;font-weight:700;text-anchor:middle;dominant-baseline:central}
+h2{font-size:17px;margin:0 0 8px;font-weight:700;letter-spacing:.04em}
+.block{padding:0 0 16px;margin:0 0 16px;border-bottom:1px solid var(--line)}
+.row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+label{display:inline-flex;align-items:center;gap:6px;color:var(--mute);font-size:14px}
+input[type=number],select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:5px 8px}
+input[type=number]{width:5.4em;text-align:center}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,max-content));gap:8px 10px;margin-top:12px;justify-content:start}
+.stepg{display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.stepg .nm{color:var(--mute);font-size:13px}
+.stepg div{display:flex;gap:4px}
+button{white-space:nowrap;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:4px 10px;cursor:pointer;min-height:32px}
+button:hover{border-color:var(--bronze)}
+button.main{background:var(--bronze);border-color:var(--bronze);color:#fff;font-weight:700}
+button.main:hover{background:var(--bronze-d)}
+button.red{border-color:var(--red);color:var(--red);font-weight:700}
+.jump{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+dl{margin:0;display:grid;grid-template-columns:7.4em 1fr;gap:5px 14px}
+dt{color:var(--mute)}
+dd{margin:0}
+.big{font:700 19px/1.5 "Shippori Mincho","Yu Mincho",serif;margin:0 0 6px}
+.tag{display:inline-block;border:1px solid var(--bronze);color:var(--bronze-d);padding:0 9px;margin:0 6px 4px 0;border-radius:2px;font-size:13px}
+.state{font-weight:700}
+.state.closed{color:var(--ok)}
+.state.trem{color:var(--warn)}
+.state.open{color:var(--open)}
+.inv{font:700 26px "Shippori Mincho","Yu Mincho",serif;letter-spacing:.28em;color:var(--bronze-d)}
+.inv .off{opacity:.28}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:2px 10px;min-height:28px;font-size:13px}
+.note{color:var(--mute);font-size:13px;margin:6px 0 0}
+details{margin:0 0 10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+details summary{cursor:pointer;font:700 17px "Shippori Mincho","Yu Mincho",serif;padding:4px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:400;font-size:13px}
+tr.cur td{background:color-mix(in srgb,var(--bronze) 14%,transparent)}
+.trace div{display:grid;grid-template-columns:9.5em 1fr;gap:2px 12px;font-variant-numeric:tabular-nums;padding:1px 0}
+.trace span:first-child{color:var(--mute)}
+.mini{max-width:230px;margin:6px 0 4px}
+.rn{font-family:"Shippori Mincho","Yu Mincho",serif;font-weight:700;text-anchor:middle;dominant-baseline:central}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>座環盤</h1><span class="gmtag">GM用</span>
+    <p>座暦と迷宮の周期を重ねて読む盤。プレイヤーには見せないこと。プレイヤー用は、別ファイルの座環盤（情報を絞った版）を使う。</p>
+  </header>
+
+  <div class="layout">
+    <div class="left">
+      <div class="dialbox" id="dialbox" tabindex="0" aria-label="座環盤（GM用）。左右の矢印で一夜、上下の矢印で一巡り進めたり戻したりできます">
+        <svg id="dial" viewBox="0 0 640 640" role="img" aria-label="座環盤"></svg>
+      </div>
+      <p class="note">外から、月・夜・節・七七夜（星の位相）・年の位相・座の番。赤い目盛りは、星の閉じる夜（七七夜環）と、七七年の年（年位相環）。</p>
+    </div>
+
+    <div>
+      <section class="block" aria-label="日付を合わせる">
+        <h2>日付を合わせる</h2>
+        <div class="row">
+          <label>座暦 <input id="fy" type="number" min="1" max="9999" inputmode="numeric"> 年</label>
+          <label><select id="fm" aria-label="月"></select></label>
+          <label><input id="fd" type="number" min="1" max="79" inputmode="numeric" aria-label="夜"> 夜</label>
+        </div>
+        <div class="steps" id="steps"></div>
+        <div class="jump" id="jump"></div>
+      </section>
+
+      <section class="block" aria-live="polite" aria-label="暦">
+        <h2>暦</h2>
+        <p class="big" id="rdate"></p>
+        <div id="rtags"></div>
+        <dl>
+          <dt>節</dt><dd id="rsetsu"></dd>
+          <dt>七七夜の位置</dt><dd id="rpos"></dd>
+          <dt>今年</dt><dd id="ryear"></dd>
+          <dt>年の位相</dt><dd id="rphase"></dd>
+          <dt>年の出来事</dt><dd id="rev"></dd>
+        </dl>
+      </section>
+
+      <section class="block" aria-live="polite" aria-label="迷宮">
+        <h2>迷宮</h2>
+        <dl>
+          <dt>星</dt><dd id="rstar"></dd>
+          <dt>空白</dt><dd id="rgate"></dd>
+          <dt>階段の位置</dt><dd id="rroom"></dd>
+          <dt>息</dt><dd id="rbreath"></dd>
+          <dt>招待状</dt><dd id="rinv"></dd>
+          <dt>シナリオ</dt><dd id="rscn"></dd>
+        </dl>
+        <svg class="mini" id="rooms" viewBox="0 0 230 230" role="img" aria-label="水鏡の間と朔夜の軌跡"></svg>
+      </section>
+
+      <section class="block" aria-label="この年の星の閉じる夜">
+        <h2>この年の星の閉じる夜</h2>
+        <div class="chips" id="closes"></div>
+        <p class="note" id="closenote"></p>
+      </section>
+
+      <details id="tbl"><summary>七七年の年表</summary>
+        <table><thead><tr><th>座暦</th><th>何年前</th><th>区分</th><th>出来事</th><th></th></tr></thead><tbody id="tb"></tbody></table>
+        <p class="note">沈黙の夜と星の閉じる夜が重なる年（49の倍数の年）。大閏は196年ごと。</p>
+      </details>
+
+      <details id="trace"><summary>計算の過程</summary><div class="trace" id="trc"></div></details>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+'use strict';
+const $=s=>document.querySelector(s);
+const SEATS=['天秩の王','大地の母','炉火の神','潮路の神','誓剣の神','星録の女神','癒しの神','荒野の狩人','灯火の女神','賽の神','静寂の母','空座'];
+const SHORT=['天秩','大地','炉火','潮路','誓剣','星録','癒し','狩人','灯火','賽','静寂','空座'];
+const KAN1=['一','二','三','四','五','六','七','八','九','十','十一','十二'];
+const KD=['','一','二','三','四','五','六','七','八','九'];
+const WATARI=['','座降ろし','母の三夜','母の三夜','母の三夜','座昇り'];
+const kan=n=>{const t=Math.floor(n/10),o=n%10;return (t>1?KD[t]:'')+(t>0?'十':'')+KD[o]};
+const mod=(a,m)=>((a%m)+m)%m;
+
+/* 暦の基本 */
+const BASE=365,EXT=49,BIG=196,MAXY=9999;
+const isBig=Y=>Y%BIG===0;
+const startN=Y=>BASE*(Y-1)+EXT*Math.floor((Y-1)/BIG);
+const REF=startN(2352)+360+EXT;          // 座暦2352年の沈黙の夜（座降ろし）= 基準 n=0
+const MAXN=startN(MAXY+1)-1;
+const yearOf=N=>{let Y=Math.floor(N/365.25)+1;while(startN(Y)>N)Y--;while(startN(Y+1)<=N)Y++;return Y};
+const len12=Y=>isBig(Y)?30+EXT:30;
+function parts(Y,i){
+  if(i<330)return{kind:'m',month:Math.floor(i/30)+1,day:i%30+1};
+  const l=len12(Y);
+  if(i<330+l){const day=i-329;return{kind:'m',month:12,day,ext:day>30?day-30:0}}
+  return{kind:'w',z:i-330-l+1};
+}
+const lenOf=(Y,m)=>m<=11?30:m===12?len12(Y):5;
+function indexOf(Y,m,d){d=Math.max(1,Math.min(lenOf(Y,m),d));return m<=11?(m-1)*30+d-1:m===12?330+d-1:330+len12(Y)+d-1}
+const silentOf=Y=>startN(Y)+360+(isBig(Y)?EXT:0);
+const seatOfBig=Y=>((Y/BIG-1)%12+12)%12;
+const nextBig=Y=>Math.ceil(Y/BIG)*BIG;
+
+/* 迷宮：古謡版の息継ぎ */
+const BREATH=[3,1,4,5,6,5,7];
+const ROOM=[0];for(let p=0;p<49;p++)ROOM.push((ROOM[p]+BREATH[p%7])%7);
+const KIZAMI=['底','待','汝','の','つ','を','王'];
+const INVITE=[0,1,2,3,4,5,6].map(j=>KIZAMI[ROOM[7*j]]);   // 底の王汝を待つ
+
+/* 出来事（座暦） */
+const EVENTS={
+  1960:'開闢。第十の大閏（賽の神の番）',
+  2009:'初海嘯（階級三）。坑口盟約の結成',
+  2058:'【未確定】',
+  2107:'【未確定】',
+  2156:'大海嘯（階級五）。第十一の大閏（静寂の母の番）',
+  2205:'返し海嘯（階級三〜四）',
+  2254:'吐く年（階級二〜三）。目覚めの徒の台頭',
+  2303:'空振りの年（封鎖令が出たが、海嘯は起きなかった）',
+  2352:'シナリオ「七七夜の星」。第十二の大閏（空座の番）。海嘯の階級は【未確定】（階級五の条件を満たす）',
+  2401:'（未来）',
+  2450:'（未来）',
+  2499:'（未来）',
+  2548:'（未来）第十三の大閏。座暦の新しい巡り（天秩の王の番）'
+};
+const NOTES={2232:'第九層踏破（暦の重なりなし）'};
+
+/* 状態 */
+let N=REF-EXT;   // シナリオ第0夜（座暦2352年 空座の月31夜目）
+const sel=()=>{const Y=yearOf(N),P=parts(Y,N-startN(Y));return{Y,P,m:P.kind==='w'?13:P.month,d:P.kind==='w'?P.z:P.day}};
+const setN=x=>{N=Math.max(0,Math.min(MAXN,x));render()};
+const setSel=(Y,m,d)=>{Y=Math.max(1,Math.min(MAXY,Y));setN(startN(Y)+indexOf(Y,m,d))};
+const stepYear=k=>{const s=sel();setSel(s.Y+k,s.m,s.d)};
+const stepMonth=k=>{const s=sel();let Y=s.Y,m=s.m+k;if(m>13){Y++;m=1}else if(m<1){Y--;m=13}setSel(Y,m,s.d)};
+
+const monthName=m=>`${KAN1[m-1]}月（${SEATS[m-1]}の月）`;
+function dateStr(Y,P){
+  const y=`座暦${Y}年`;
+  if(P.kind==='w')return `${y} 座渡し 第${KD[P.z]}夜`;
+  return `${y} ${monthName(P.month)} ${kan(P.day)}夜`;
+}
+const shortDate=(Y,P)=>P.kind==='w'?`座渡し第${KD[P.z]}夜`:`${KAN1[P.month-1]}月${kan(P.day)}夜`;
+
+/* 空白の状態 */
+function gate(Y,Nn){
+  if(Y%49!==0)return{cls:'closed',txt:'閉じている（星は閉じるが、空白は開かない）'};
+  const d=silentOf(Y)-Nn;
+  if(isBig(Y)){
+    if(d===0)return{cls:'open',txt:'開く。八つ目の間が現れる'};
+    if(d>0&&d<=EXT)return{cls:'trem',txt:`ひらきつつある（空座の七七夜。開くまであと${d}夜）`};
+  }else{
+    if(d===0)return{cls:'trem',txt:'震える（小七七年。半開）【未確定】'};
+    if(d>0&&d<=EXT)return{cls:'trem',txt:`ざわめいている（小七七年。沈黙の夜まであと${d}夜）`};
+  }
+  return{cls:'closed',txt:'閉じている'};
+}
+
+/* 盤の描画 */
+const CX=320,CY=320;
+const polar=(r,deg,cx=CX,cy=CY)=>{const a=(deg-90)*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]};
+const f=v=>Math.round(v*100)/100;
+function sector(r1,r2,a1,a2){
+  const p1=polar(r2,a1),p2=polar(r2,a2),p3=polar(r1,a2),p4=polar(r1,a1);
+  return `M${f(p1[0])} ${f(p1[1])}A${r2} ${r2} 0 0 1 ${f(p2[0])} ${f(p2[1])}L${f(p3[0])} ${f(p3[1])}A${r1} ${r1} 0 0 0 ${f(p4[0])} ${f(p4[1])}Z`;
+}
+const LIGHT='#EAF2EE',DARK='#0F2422',RED='#A83232';
+const RINGS=[
+  {id:'rm',r1:268,r2:312,n:12,fill:i=>i%2?'#2A625C':'#1F4E4A',txt:()=>LIGHT,size:16,label:i=>SHORT[i]},
+  {id:'rd',r1:230,r2:264,n:30,fill:i=>i%2?'#A6C9BF':'#8DB8AD',txt:()=>DARK,size:11,label:i=>String(i+1)},
+  {id:'rs',r1:196,r2:226,n:7,fill:i=>i%2?'#4B8A81':'#3E7C74',txt:()=>LIGHT,size:14,label:i=>'第'+KD[i+1]+'節'},
+  {id:'rp',r1:158,r2:192,n:49,fill:i=>i===0?RED:i%7===0?'#E7D6B5':i%2?'#DCE9E3':'#C9DDD5',txt:i=>i===0?'#fff':DARK,size:13,label:i=>i%7===0?INVITE[i/7]:''},
+  {id:'ry',r1:122,r2:154,n:49,fill:i=>i===0?RED:i%7===0?'#E7D6B5':i%2?'#7FA79D':'#6E9A90',txt:i=>i===0?'#fff':DARK,size:11,label:i=>i%7===0?String(i):''},
+  {id:'rb',r1:88,r2:118,n:12,fill:i=>i%2?'#2E5C69':'#274E5A',txt:()=>LIGHT,size:13,label:i=>KAN1[i]}
+];
+(function build(){
+  let s='';
+  RINGS.forEach(R=>{
+    s+=`<g class="ring" id="${R.id}">`;
+    for(let i=0;i<R.n;i++){
+      const a=i*360/R.n,h=180/R.n;
+      s+=`<path d="${sector(R.r1,R.r2,a-h,a+h)}" fill="${R.fill(i)}" stroke="${DARK}" stroke-opacity=".28" stroke-width=".7"/>`;
+      const lb=R.label(i);
+      if(lb)s+=`<text class="rt" transform="rotate(${f(a)} ${CX} ${CY})" x="${CX}" y="${f(CY-(R.r1+R.r2)/2)}" font-size="${R.size}" fill="${R.txt(i)}">${lb}</text>`;
+    }
+    s+='</g>';
+  });
+  s+=`<circle cx="${CX}" cy="${CY}" r="315" fill="none" stroke="#9A6428" stroke-width="6"/>`;
+  s+=`<circle cx="${CX}" cy="${CY}" r="318.5" fill="none" stroke="#12302E" stroke-opacity=".35" stroke-width="1"/>`;
+  s+=`<path d="${sector(88,312,-3.6,3.6)}" fill="#fff" fill-opacity=".2" stroke="#9A6428" stroke-width="1.6"/>`;
+  s+=`<path d="M${CX-11} 3 L${CX+11} 3 L${CX} 30 Z" fill="#9A6428" stroke="#6E4415" stroke-width="1.5"/>`;
+  s+=`<circle cx="${CX}" cy="${CY}" r="84" fill="#12302E" stroke="#9A6428" stroke-width="3"/>`;
+  s+=`<text class="rt" id="c1" x="${CX}" y="${CY-32}" font-size="13" fill="#9FC3BA"></text>`;
+  s+=`<text class="rt" id="c2" x="${CX}" y="${CY-3}" font-size="29" fill="#EAF2EE"></text>`;
+  s+=`<text class="rt" id="c3" x="${CX}" y="${CY+30}" font-size="17" fill="#E3B476"></text>`;
+  s+=`<text class="rt" id="c4" x="${CX}" y="${CY+56}" font-size="12" fill="#E5766B"></text>`;
+  $('#dial').innerHTML=s;
+})();
+const ang={};
+function setRing(id,target){
+  const el=document.getElementById(id);
+  const cur=ang[id]===undefined?target:ang[id];
+  const d=mod(target-cur+180,360)-180;
+  ang[id]=cur+d;
+  el.style.transform=`rotate(${ang[id]}deg)`;
+}
+
+/* 水鏡の間（小図） */
+function drawRooms(pp,room,open,complete){
+  const cx=115,cy=115,R=82;
+  const pos=r=>polar(R,r*360/7,cx,cy);
+  let s='';
+  s+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--line)" stroke-width="1"/>`;
+  for(let j=0;j<7;j++){
+    if(pp>=7*(j+1)){
+      const a=pos(ROOM[7*j]),b=pos(ROOM[7*j+7]);
+      s+=`<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="var(--bronze)" stroke-width="2.4" stroke-linecap="round"/>`;
+    }
+  }
+  if(!complete){
+    const b0=7*Math.floor(pp/7),pts=[];
+    for(let q=b0;q<=pp;q++)pts.push(pos(ROOM[q]).map(f).join(','));
+    if(pts.length>1)s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="var(--teal)" stroke-width="1.5" stroke-dasharray="3 4"/>`;
+  }
+  s+=`<circle cx="${cx}" cy="${cy}" r="25" fill="${open?'var(--bronze)':'none'}" stroke="${open?'var(--bronze)':'var(--line)'}" ${open?'':'stroke-dasharray="3 3"'}/>`;
+  s+=`<text class="rn" x="${cx}" y="${cy}" font-size="10" fill="${open?'#fff':'var(--mute)'}">${open?'八つ目':'空白'}</text>`;
+  for(let r=0;r<7;r++){
+    const[x,y]=pos(r),on=r===room;
+    s+=`<circle cx="${f(x)}" cy="${f(y)}" r="17" fill="${on?'var(--teal)':'var(--panel)'}" stroke="${on?'var(--teal)':'var(--line)'}" stroke-width="1.5"/>`;
+    s+=`<text class="rn" x="${f(x)}" y="${f(y-5)}" font-size="9" fill="${on?'#fff':'var(--mute)'}">${r}</text>`;
+    s+=`<text class="rn" x="${f(x)}" y="${f(y+6)}" font-size="13" fill="${on?'#fff':'var(--bronze-d)'}">${KIZAMI[r]}</text>`;
+  }
+  $('#rooms').innerHTML=s;
+}
+
+/* 表示 */
+function render(){
+  const{Y,P,m,d}=sel();
+  const i=N-startN(Y),n=N-REF,s=mod(n,7),p=mod(n,49);
+  const sN=silentOf(Y),coincide=Y%49===0;
+  const isSilentNight=coincide&&N===sN;
+  const pp=isSilentNight?49:p;              // 沈黙の夜は「第49夜」として星が閉じた状態で見せる
+  const room=ROOM[pp];
+  const big=isBig(Y);
+  const k=seatOfBig(big?Y:nextBig(Y));
+  const g=gate(Y,N);
+
+  setRing('rm',-(P.kind==='w'?11:P.month-1)*30);
+  setRing('rd',-(P.kind==='w'?P.z-1:(P.day-1)%30)*12);
+  setRing('rs',-s*360/7);
+  setRing('rp',-p*360/49);
+  setRing('ry',-mod(Y,49)*360/49);
+  setRing('rb',-k*30);
+
+  $('#c1').textContent=`座暦${Y}年`;
+  $('#c2').textContent=P.kind==='w'?'座渡し':`${KAN1[P.month-1]}月`;
+  $('#c3').textContent=P.kind==='w'?WATARI[P.z]:`${kan(P.day)}夜`;
+  $('#c4').textContent=g.cls==='open'?'空白が開く':p===0?'星が閉じる':'';
+  $('#dial').setAttribute('aria-label',`座環盤。${dateStr(Y,P)}、第${KD[s+1]}節の夜、七七夜の位置${p}`);
+
+  $('#rdate').textContent=dateStr(Y,P);
+  const tags=[];
+  if(P.kind==='w'){
+    if(P.z===1)tags.push('座降ろし＝沈黙の夜');
+    else if(P.z<5)tags.push('母の三夜');
+    else tags.push('座昇り');
+  }else{
+    if(P.month===3&&P.day===1)tags.push('炉開き');
+    if(P.month===9)tags.push('灯祭の月');
+    if(P.month===12&&P.ext)tags.push(`空座の七七夜 ${P.ext}夜目`);
+  }
+  $('#rtags').innerHTML=tags.map(t=>`<span class="tag">${t}</span>`).join('');
+
+  $('#rsetsu').textContent=`第${KD[s+1]}節の夜（s = ${s}）`;
+  $("#rpos").textContent=`p = ${p}（第${Math.floor(p/7)+1}巡り目の${p%7+1}夜目${p%7===0?'・朔夜':''}）`;
+  const cls=big?'大閏':coincide?'小七七年':'通常の年';
+  const kk=seatOfBig(big?Y:nextBig(Y));
+  $('#ryear').textContent=big
+    ?`大閏。第${KAN1[kk]}の大閏、${SEATS[kk]}の番。空座の月は79夜。年は414夜`
+    :`${cls}。次の大閏は座暦${nextBig(Y)}年（あと${nextBig(Y)-Y}年）、${SEATS[kk]}の番。年は365夜`;
+  const psil=mod(sN-REF,49);
+  $('#rphase').textContent=`Y mod 49 = ${mod(Y,49)}。沈黙の夜の p = ${psil}${coincide?'（星の閉じる夜と重なる年）':''}`;
+  $('#rev').textContent=[EVENTS[Y],NOTES[Y]].filter(Boolean).join(' / ')||'—';
+
+  $('#rstar').textContent=p===0?(isSilentNight?'今夜、星が閉じる（第49夜）':'星が閉じる夜（p = 0）'):`第${Math.floor(p/7)+1}巡り目。星の完成まであと${49-p}夜`;
+  $('#rgate').innerHTML=`<span class="state ${g.cls}">${g.txt}</span>`;
+  const sak=p%7===0;
+  $('#rroom').textContent=`${room}号室（刻み「${KIZAMI[room]}」）${sak?'・朔夜':''}`;
+  const b=BREATH[p%7];
+  $('#rbreath').textContent=`息継ぎ ${b} → ${b%7}部屋進む。${b%2===0?'吐く夜（魔物が活発）':'静かな夜'}`;
+  $('#rinv').innerHTML=`<span class="inv">${INVITE.map((c,j)=>`<span class="${pp>=7*j&&!(pp===0&&j>0)?'':'off'}">${c}</span>`).join('')}</span>`;
+  const inBlock=big&&P.kind==='m'&&P.month===12&&P.ext>0;
+  $('#rscn').textContent=inBlock?`シナリオ第${p}夜`:isSilentNight&&big?'シナリオ第49夜':'シナリオ期間の外';
+  drawRooms(pp,room,g.cls==='open',isSilentNight);
+
+  /* この年の星の閉じる夜 */
+  const L=BASE+(big?EXT:0),chips=[];
+  for(let x=0;x<L;x++){
+    if(mod(startN(Y)+x-REF,49)===0){
+      const Pq=parts(Y,x);
+      chips.push(`<button type="button" data-n="${startN(Y)+x}"${startN(Y)+x===N?' class="main"':''}>${shortDate(Y,Pq)}</button>`);
+    }
+  }
+  $('#closes').innerHTML=chips.join('');
+  $('#closenote').textContent=`${chips.length}回。沈黙の夜は ${shortDate(Y,parts(Y,sN-startN(Y)))}。${coincide?'この年は、そのうちの一回が沈黙の夜と重なる。':'この年は、沈黙の夜と重ならない。'}`;
+
+  /* 年表 */
+  $('#tb').innerHTML=Object.keys(EVENTS).map(Number).map(y=>{
+    const ago=2352-y,tp=isBig(y)?'大閏':'小七七年';
+    return `<tr${y===Y?' class="cur"':''}><td>${y}</td><td>${ago===0?'今年':ago>0?ago+'年前':(-ago)+'年後'}</td><td>${tp}</td><td>${EVENTS[y]}</td><td><button type="button" data-y="${y}">沈黙の夜へ</button></td></tr>`;
+  }).join('');
+
+  /* 計算の過程 */
+  const rows=[
+    ['年の開始 N₀',`365×(${Y}−1) + 49×⌊(${Y}−1)/196⌋ = ${startN(Y)}`],
+    ['年内の夜',`i = ${i}（${i+1}夜目、年は ${L}夜）`],
+    ['通し夜 N',`${startN(Y)} + ${i} = ${N}`],
+    ['基準 n',`N − ${REF} = ${n}（沈黙の夜 座暦2352年を 0 とする）`],
+    ['節 s',`n mod 7 = ${s}`],
+    ['七七夜の位置 p',`n mod 49 = ${p}`],
+    ['階段',`ΣB[0..${pp-1}] mod 7 = ${room}（B = ${BREATH.join(',')}）`],
+    ['年が替わるごと','節 +1（365 mod 7）、七七夜 +22（365 mod 49 = 3巡り＋1夜）'],
+    ['大閏の補正','49夜。49 ≡ 0（mod 7, mod 49）なので、位相は乱れない'],
+    ['沈黙の夜の p',`22×Y mod 49 = ${mod(22*Y,49)}${mod(22*Y,49)===psil?'（実測と一致）':'（要確認）'}`],
+    ['重なりの条件','22k ≡ 0 (mod 49) ⇔ k ≡ 0 (mod 49)。したがって 49年ごと']
+  ];
+  $('#trc').innerHTML=rows.map(r=>`<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('');
+
+  /* 入力欄 */
+  $('#fy').value=Y;
+  const fm=$('#fm');if(+fm.value!==m)fm.value=m;
+  const fd=$('#fd');fd.max=lenOf(Y,m);fd.value=d;
+}
+
+/* 操作 */
+(function init(){
+  let o='';for(let m=1;m<=12;m++)o+=`<option value="${m}">${KAN1[m-1]}月 ${SEATS[m-1]}の月</option>`;
+  o+='<option value="13">座渡し</option>';
+  $('#fm').innerHTML=o;
+  const groups=[['年',()=>stepYear(-1),()=>stepYear(1)],['月',()=>stepMonth(-1),()=>stepMonth(1)],['七七夜',()=>setN(N-49),()=>setN(N+49)],['一巡り',()=>setN(N-7),()=>setN(N+7)],['一夜',()=>setN(N-1),()=>setN(N+1)]];
+  const st=$('#steps');
+  groups.forEach(([nm,a,b])=>{
+    const g=document.createElement('div');g.className='stepg';
+    g.innerHTML=`<span class="nm">${nm}</span><div><button type="button" aria-label="${nm}戻る">戻る</button><button type="button" aria-label="${nm}進む">進む</button></div>`;
+    const bt=g.querySelectorAll('button');bt[0].onclick=a;bt[1].onclick=b;
+    st.append(g);
+  });
+  const J=[
+    ['シナリオ第0夜',()=>setN(REF-EXT),'main'],
+    ['第49夜（沈黙の夜）',()=>setN(REF),'red'],
+    ['座暦2352年 元日',()=>setN(startN(2352)),''],
+    ['前回の沈黙の夜（大海嘯）',()=>setN(silentOf(2156)),'']
+  ];
+  const jp=$('#jump');
+  J.forEach(([t,fn,c])=>{const b=document.createElement('button');b.type='button';b.textContent=t;if(c)b.className=c;b.onclick=fn;jp.append(b)});
+  $('#fy').onchange=e=>{const s=sel();const v=parseInt(e.target.value,10);if(!isNaN(v))setSel(v,s.m,s.d);else render()};
+  $('#fm').onchange=e=>{const s=sel();setSel(s.Y,+e.target.value,s.d)};
+  $('#fd').onchange=e=>{const s=sel();const v=parseInt(e.target.value,10);if(!isNaN(v))setSel(s.Y,s.m,v);else render()};
+  $('#closes').onclick=e=>{const b=e.target.closest('button[data-n]');if(b)setN(+b.dataset.n)};
+  $('#tb').onclick=e=>{const b=e.target.closest('button[data-y]');if(b)setN(silentOf(+b.dataset.y))};
+  $('#dialbox').addEventListener('keydown',e=>{
+    const k={ArrowRight:1,ArrowLeft:-1,ArrowUp:7,ArrowDown:-7}[e.key];
+    if(k){e.preventDefault();setN(N+k)}
+  });
+  render();
+})();
+})();
+</script>
+</body>
+</html>
