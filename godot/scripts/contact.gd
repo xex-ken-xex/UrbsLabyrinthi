@@ -37,7 +37,7 @@ static func step(delta: float, bodies: Array) -> void:
 		if b.did_hit:
 			b.bump_cd = Balance.BUMP_TICK
 	# 混み合っていると、一組を直すと別の組が重なる。数回、重なりだけを解消し直す
-	for pass_i in 8:
+	for pass_i in 16:
 		var moved := false
 		for i in n:
 			var a: Body = bodies[i]
@@ -57,6 +57,15 @@ static func step(delta: float, bodies: Array) -> void:
 				moved = true
 		if not moved:
 			break
+
+## att が tgt を、触れているだけで攻撃してよいか。toward は、相手へ向かう動きの成分(−1〜1)
+static func _auto_attacks(att: Body, tgt: Body, toward: float) -> bool:
+	if toward < -0.5:
+		return false
+	# 話し合える魔物(交渉の余地あり)は、こちらから押し込まない限り、うっかり殴らない
+	if att.is_hero and tgt is Enemy and (tgt as Enemy).state == "neutral" and toward <= 0.2:
+		return false
+	return true
 
 static func _separate(a: Body, b: Body, n: Vector2, overlap: float) -> void:
 	if overlap <= 0.0:
@@ -101,14 +110,15 @@ static func _fight(a: Body, b: Body, n: Vector2, touch: float, delta: float) -> 
 		var moved := loser.shove(dir_l * absf(shift))
 		winner.shove(dir_l * moved)
 	# 3. 体当たりのダメージ
-	var pa := a.intent.dot(n) > 0.2
-	var pb := b.intent.dot(-n) > 0.2
-	if pa and a.hit_now and a.contact_dps() > 0.0:
+	# 触れていれば、押し込んでいなくても自動で攻撃する。背を向けて離れようとしているときだけ、攻撃しない
+	if _auto_attacks(a, b, a.intent.dot(n)) and a.hit_now and a.contact_dps() > 0.0:
 		b.receive_contact(a.contact_dps() * Balance.BUMP_TICK, a.position, a)
 		a.did_hit = true
-	if pb and b.hit_now and b.contact_dps() > 0.0:
+		a.lunge = n * 5.0
+	if _auto_attacks(b, a, b.intent.dot(-n)) and b.hit_now and b.contact_dps() > 0.0:
 		a.receive_contact(b.contact_dps() * Balance.BUMP_TICK, b.position, b)
 		b.did_hit = true
+		b.lunge = -n * 5.0
 	# 4. 重なりが残っていれば、負けた側を下げる。壁で下がれなければ勝った側が引く
 	var d2 := b.position - a.position
 	var overlap2 := touch - d2.length()

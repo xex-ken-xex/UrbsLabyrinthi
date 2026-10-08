@@ -17,6 +17,7 @@ var flash := 0.0
 var pop_amount := 0.0
 var pop_color := Color.WHITE
 var pop_t := 0.0
+var lunge := Vector2.ZERO      # 体当たりの瞬間の踏み込み(描画だけ)
 
 func is_alive() -> bool:
 	return true
@@ -68,9 +69,10 @@ func queue_popup(amount: float, color: Color) -> void:
 	pop_color = color
 
 func pop_update(delta: float) -> void:
+	lunge = lunge.move_toward(Vector2.ZERO, 60.0 * delta)
 	pop_t -= delta
 	if pop_t <= 0.0:
 		if pop_amount >= 0.5:
 			game_floor.spawn_text(position + Vector2(0, -radius - 8), str(int(round(pop_amount))), pop_color)
 		pop_amount = 0.0
-		pop_t = 0.45
+		pop_t = 0.3

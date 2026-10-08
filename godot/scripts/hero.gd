@@ -89,6 +89,7 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false) -> voi
 	ch.hp -= n
 	flash = 0.12
 	queue_popup(n, Color("ff7a6a"))
+	game_floor.add_child(Spark.make(position + (from_pos - position).normalized() * radius * 0.6, 9.0, Color("ff9a8a"), 0.14))
 	if ch.hp <= 0.0:
 		ch.hp = 0.0
 		down = true
@@ -455,6 +456,7 @@ func _ai_skills() -> void:
 # ---------- 描画 ----------
 
 func _draw() -> void:
+	draw_set_transform(lunge)
 	var col := Jobs.class_color(ch.cls)
 	if down:
 		draw_circle(Vector2.ZERO, radius, Color(0.35, 0.35, 0.38, 0.8))

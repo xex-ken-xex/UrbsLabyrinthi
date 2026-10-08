@@ -76,7 +76,7 @@ func _draw() -> void:
 	_draw_minimap(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
-		var lines := ["移動: WASD/矢印   押し込んで体当たり   構え: Space   転がり: Shift   スキル: 1〜4   仲間の切替: Q",
+		var lines := ["移動: WASD/矢印   触れれば自動で攻撃(押し込むと有利)   構え: Space   転がり: Shift   スキル: 1〜4   仲間の切替: Q",
 			"調べる: E   探る: F   持ち物: Tab   治療薬: R   F1: クレジット",
 			"敵のHPを削るほど押し込める。こちらのHPが減ると押される。"]
 		for i in lines.size():
