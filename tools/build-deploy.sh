@@ -34,6 +34,8 @@ if not (os.path.exists(zp) and os.path.exists(marker) and open(marker).read().st
     print("Windows エンジンを zip にした")
 os.remove(exe)
 PY
+# 強制終了などの調査用に、ログを出すためのファイルを添える
+cp "$ROOT/tools/run-with-log.bat" "$ROOT/Deploy/windows/run-with-log.bat"
 chmod +x "$ROOT/Deploy/linux/UrbsLabyrinthi.x86_64"
 
 # 書き出したビルドで、迷宮→街→全滅→帰還の札→つづきから、を通す(xvfb があれば)。

@@ -59,8 +59,17 @@ func _autotest_town() -> void:
 	await get_tree().create_timer(0.3).timeout
 	_on_dive()
 	await get_tree().create_timer(0.5).timeout
+	# 戦闘のさなかに階段で戻る(魔物と飛び道具が動いている状態)
+	var k := 0
+	for e in current.enemies:
+		if k >= 6:
+			break
+		e.position = leader().position + Vector2.from_angle(k * 1.1) * 40.0
+		e.wake()
+		k += 1
+	await get_tree().create_timer(1.5).timeout
 	leader().position = current.map.center_of(current.up_cell)
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.3).timeout
 	Input.action_press("interact")
 	await get_tree().create_timer(0.1).timeout
 	Input.action_release("interact")
@@ -153,9 +162,14 @@ func _on_continue() -> void:
 	if gs.load_save():
 		go_town(["記録を読み込んだ。第%d日。" % (gs.day + 1)])
 
+func _trace(msg: String) -> void:
+	print("[urbs] ", msg)   # 強制終了の直前の行が、ログに残る
+
 func go_town(report: Array) -> void:
+	_trace("go_town 開始")
 	phase = "town"
 	_clear_dungeon()
+	_trace("go_town: 迷宮を片付けた")
 	# 全員が倒れていたら、灯手隊が担ぎ出して最低限の手当てをしてくれる
 	var any_alive := false
 	for c in gs.party:
@@ -171,8 +185,10 @@ func go_town(report: Array) -> void:
 	t.dive.connect(_on_dive)
 	t.open_inventory.connect(open_inventory)
 	t.to_title.connect(show_title)
+	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)
+	_trace("go_town 完了")
 
 func _on_dive() -> void:
 	var alive := false
@@ -185,6 +201,7 @@ func _on_dive() -> void:
 	start_day()
 
 func _clear_dungeon() -> void:
+	_trace("_clear_dungeon 層%d 仲間%d" % [floors.size(), heroes.size()])
 	for f in floors.values():
 		f.queue_free()
 	floors.clear()
@@ -204,6 +221,7 @@ func floor_path(n: int, night: int) -> String:
 
 ## 夜が替わるので、通路も部屋の中身も組み直される(大部屋と階段は同じ場所)
 func start_day() -> void:
+	_trace("start_day 日%d" % gs.day)
 	_clear_dungeon()
 	bag_silver = 0
 	light_t = 0.0
@@ -410,9 +428,11 @@ func _check_wipe() -> void:
 	]
 
 func _after_overlay() -> void:
+	_trace("_after_overlay %s" % overlay_kind)
 	if overlay_kind == "wipe":
 		gs.day += 1
-		go_town(["全滅した。未査定の燐晶は失ったが、預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は、神殿で蘇らせよう。"])
+		phase = "transition"
+		call_deferred("go_town", ["全滅した。未査定の燐晶は失ったが、預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は、神殿で蘇らせよう。"])
 
 # ---------- 部屋、扉、罠 ----------
 
@@ -607,7 +627,10 @@ func interact() -> void:
 		return
 	if _near(current.up_cell, 1.4):
 		if current.floor_no == 1:
-			return_to_surface()
+			# 物理処理の最中に、仲間や層を片付けない。次の空き時間に街へ移る
+			phase = "transition"
+			hud.hint = ""
+			call_deferred("return_to_surface")
 		else:
 			enter_floor(current.floor_no - 1, "down")
 
@@ -797,6 +820,7 @@ func _on_enemy_killed(en: Enemy) -> void:
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
 
 func return_to_surface() -> void:
+	_trace("return_to_surface 第%d層から" % (current.floor_no if current != null else 0))
 	var gross := bag_silver
 	var tax := int(round(gross * Balance.TAX_RATE))
 	var net := gross - tax

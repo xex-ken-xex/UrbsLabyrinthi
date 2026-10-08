@@ -14,6 +14,12 @@ Linux(x86_64)と Windows(x86_64)向け。コードやデータを変えたら、
 
 2回目以降は、`.pck` だけを入れ替えればよい。
 
+### 強制終了などの調べ方(ログ)
+1. `windows/UrbsLabyrinthi.console.exe` と `windows/run-with-log.bat` を、`UrbsLabyrinthi.exe` と同じフォルダに置く
+2. `run-with-log.bat` を実行して、終了するまで遊ぶ(または再現させる)
+3. 同じフォルダにできた `urbs-log.txt` を渡す。最後の `[urbs]` の行が、どの処理で止まったかを示す
+4. ゲーム自身も、ログを `%APPDATA%\Godot\app_userdata\Urbs Labyrinthi\logs\godot.log` に書く
+
 ## Linux
 
 ```sh

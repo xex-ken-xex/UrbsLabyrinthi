@@ -260,7 +260,7 @@ func _open_doors() -> void:
 		game_floor.map_changed()
 
 func _chase(delta: float) -> void:
-	if target == null or target.down or not is_instance_valid(target):
+	if target == null or not is_instance_valid(target) or target.down:
 		target = _nearest_hero()
 	if target == null:
 		return
