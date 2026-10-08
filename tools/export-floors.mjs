@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+/* Urbs Labyrinthi の生成器(docs/urbs-labyrinthi.html の Core)を Node で動かし、
+   Godot が読む層ごとの JSON を書き出す。
+   使い方: node tools/export-floors.mjs [出力フォルダ] [種] [夜の数] [層の数]
+   既定:   godot/data  vergha  14  10 */
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const out = path.resolve(process.argv[2] || path.join(root, 'godot/data'));
+const seed = process.argv[3] || 'vergha';
+const NIGHTS = +(process.argv[4] || 14), FLOORS = +(process.argv[5] || 10);
+
+const html = fs.readFileSync(path.join(root, 'docs/urbs-labyrinthi.html'), 'utf8');
+const lines = html.split('\n');
+const mons = JSON.parse(/>(\[.*\])<\/script>/.exec(lines.find(l => l.includes('id="mon2014"')))[1]);
+const a = lines.findIndex(l => l.startsWith('const Core = (() => {'));
+const b = lines.findIndex((l, i) => i > a && l === '})();');
+const Core = vm.runInNewContext(lines.slice(a, b + 1).join('\n') + '\nCore;', {});
+
+const monById = new Map(mons.map(m => [m.i, m]));
+fs.mkdirSync(path.join(out, 'floors'), { recursive: true });
+let total = 0;
+for (let night = 0; night < NIGHTS; night++) {
+  for (let floor = 1; floor <= FLOORS; floor++) {
+    const theme = Core.themeForFloor(floor);
+    const th = Core.THEMES[theme];
+    const D = Core.generate({ seed, theme, floor, night, size: 'M', level: th.level, party: 1, edition: '2014' }, mons);
+    const j = Core.exportJSON(D);
+    j.style = { col: th.col, short: th.short, env: th.env, see: th.see, hear: th.hear, smell: th.smell, level: th.level, water: !!th.water };
+    j.meta.floor_label = Core.floorLabel(th, floor);
+    j.meta.night_label = D.night.label;
+    for (const e of j.encounters) for (const m of e.monsters) {   // monLine が落とす項目を足す
+      const src = monById.get(m.index);
+      if (src) { if (src.mu) m.multiattack = true; if (src.la) m.legendary = true; if (src.sp) m.speed = src.sp; }
+    }
+    delete j.walls;               // Godot は grid から壁を扱う
+    const f = path.join(out, 'floors', `f${String(floor).padStart(2, '0')}_n${String(night).padStart(2, '0')}.json`);
+    const s = JSON.stringify(j);
+    fs.writeFileSync(f, s); total += s.length;
+  }
+}
+fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ seed, nights: NIGHTS, floors: FLOORS, schema: Core.SCHEMA }));
+console.log(`wrote ${NIGHTS * FLOORS} floors, ${(total / 1024).toFixed(0)} KB →`, out);
