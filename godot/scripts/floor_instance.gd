@@ -25,6 +25,8 @@ var enc_total := {}
 var enc_dead := {}
 var light_pos := Vector2.ZERO
 var exhale := false
+var arena := false            # 闘技場(階段は上りだけ。魔物は後から出す)
+var enc_serial := 5000
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
 var _tex_ver := -1
 
@@ -40,6 +42,47 @@ func _physics_process(delta: float) -> void:
 		if not e.dead:
 			bodies.append(e)
 	Contact.step(delta, bodies)
+
+static func create_from_dict(d: Dictionary) -> FloorInstance:
+	var fi := FloorInstance.new()
+	fi.setup(FloorMap.new(d))
+	return fi
+
+## 舞台の色などを替える(闘技場で、舞台を切り替えたとき)
+func set_style(st: Dictionary) -> void:
+	style = st
+	col = {}
+	for k in st.get("col", {}):
+		col[k] = Color.html(String(st["col"][k]))
+	queue_redraw()
+
+## 遭遇を、center のまわりに出す。出した魔物の数を返す
+func spawn_encounter(monsters: Array, kind: String, center: Vector2, activity: String = "") -> Array:
+	enc_serial += 1
+	var eid := enc_serial
+	enc_total[eid] = 0
+	enc_dead[eid] = 0
+	var out: Array = []
+	var k := 0
+	for m in monsters:
+		for i in int(m["count"]):
+			var en := Enemy.new()
+			var pos := center
+			for tries in 12:
+				var ang := k * 2.399963 + tries * 0.7
+				var rad := 14.0 + 15.0 * sqrt(float(k)) * (1.0 - tries * 0.07)
+				pos = center + Vector2.from_angle(ang) * rad
+				if not map.circle_blocked(pos, 12.0):
+					break
+			en.setup(self, m, {"id": eid, "kind": kind, "attitude": "敵対", "activity": activity}, pos)
+			en.state = "chase"
+			en.died.connect(_on_enemy_died)
+			add_child(en)
+			enemies.append(en)
+			enc_total[eid] += 1
+			out.append(en)
+			k += 1
+	return out
 
 static func create(path: String) -> FloorInstance:
 	var m := FloorMap.load_file(path)
@@ -222,7 +265,8 @@ func _draw() -> void:
 				draw_rect(rect, _shade(base, f))
 	# 階段
 	_draw_stairs(up_cell, true, glow)
-	_draw_stairs(down_cell, false, glow)
+	if not arena:
+		_draw_stairs(down_cell, false, glow)
 	# 宝箱
 	for c in chests:
 		if c["taken"]:

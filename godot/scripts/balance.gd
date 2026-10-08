@@ -19,18 +19,57 @@ const LIGHT_RADIUS := 7                # 灯りの半径(マス)
 const MAX_PARTY := 4
 
 # 体当たり(ハイドライド式)。触れて押し込んでいる間、一定間隔でダメージが入る
-const BUMP_TICK := 0.25                # ダメージが入る間隔(秒)
-const BUMP_SCALE := 0.55               # クラスの体当たり火力にかける係数
-const PUSH_SCALE := 2.2                # 押し合いの速さにかける係数
-const HP_FLOOR := 0.35                 # HPが0に近いときの押す力の下限(これに 0.65×HP割合 を足す)
-const HP_SCALE := 1.5                  # キャラクターの最大HPにかける係数
-const AC_REDUCTION := 0.035            # 防御1点あたりの軽減率
+static var BUMP_TICK := 0.25                # ダメージが入る間隔(秒)
+static var BUMP_SCALE := 0.55               # クラスの体当たり火力にかける係数
+static var PUSH_SCALE := 2.2                # 押し合いの速さにかける係数
+static var HP_FLOOR := 0.35                 # HPが0に近いときの押す力の下限(これに 0.65×HP割合 を足す)
+static var HP_SCALE := 1.5                  # キャラクターの最大HPにかける係数
+static var AC_REDUCTION := 0.035            # 防御1点あたりの軽減率
 const GUARD_MASS := 2.0                # 構え(Space)の間、押されにくくなる倍率
 
 # SRD の「1ラウンド6秒」を、アクションの手数に直す係数
-const ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当たりでは、これを攻撃間隔で割った毎秒のダメージにする)
-const TRAP_DMG_SCALE := 0.6            # 罠のダメージにかける
-const ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
+static var ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当たりでは、これを攻撃間隔で割った毎秒のダメージにする)
+static var TRAP_DMG_SCALE := 0.6            # 罠のダメージにかける
+static var ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
+
+## 闘技場で、実行中に動かして調整できる係数。[初期値, 最小, 最大, 説明]
+const TUNABLE := {
+	"ENEMY_DMG_SCALE": [0.4, 0.05, 1.5, "敵の攻撃の係数(大きいほど痛い)"],
+	"ENEMY_ATTACK_INTERVAL": [1.6, 0.4, 4.0, "敵の攻撃の間隔・秒(大きいほど痛くない)"],
+	"BUMP_SCALE": [0.55, 0.15, 1.5, "仲間の体当たり火力の係数"],
+	"PUSH_SCALE": [2.2, 0.5, 5.0, "押し合いの強さの係数"],
+	"HP_SCALE": [1.5, 0.5, 3.0, "仲間の最大HPの係数"],
+	"HP_FLOOR": [0.35, 0.0, 0.9, "HPが減っても残る押す力の下限"],
+	"AC_REDUCTION": [0.035, 0.0, 0.08, "防御1点あたりの軽減率"],
+	"TRAP_DMG_SCALE": [0.6, 0.1, 1.5, "罠のダメージの係数"],
+}
+
+static func tune_get(key: String) -> float:
+	match key:
+		"ENEMY_DMG_SCALE": return ENEMY_DMG_SCALE
+		"ENEMY_ATTACK_INTERVAL": return ENEMY_ATTACK_INTERVAL
+		"BUMP_SCALE": return BUMP_SCALE
+		"PUSH_SCALE": return PUSH_SCALE
+		"HP_SCALE": return HP_SCALE
+		"HP_FLOOR": return HP_FLOOR
+		"AC_REDUCTION": return AC_REDUCTION
+		"TRAP_DMG_SCALE": return TRAP_DMG_SCALE
+	return 0.0
+
+static func tune_set(key: String, v: float) -> void:
+	match key:
+		"ENEMY_DMG_SCALE": ENEMY_DMG_SCALE = v
+		"ENEMY_ATTACK_INTERVAL": ENEMY_ATTACK_INTERVAL = v
+		"BUMP_SCALE": BUMP_SCALE = v
+		"PUSH_SCALE": PUSH_SCALE = v
+		"HP_SCALE": HP_SCALE = v
+		"HP_FLOOR": HP_FLOOR = v
+		"AC_REDUCTION": AC_REDUCTION = v
+		"TRAP_DMG_SCALE": TRAP_DMG_SCALE = v
+
+static func tune_reset() -> void:
+	for k in TUNABLE:
+		tune_set(k, float(TUNABLE[k][0]))
 
 const XP_LEVELS := [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
 	85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000]

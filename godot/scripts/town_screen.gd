@@ -6,6 +6,7 @@ extends Control
 signal dive
 signal open_inventory
 signal to_title
+signal arena_requested
 
 const LOCATIONS := {
 	"hub": {"name": "縁環区・坑口広場", "art": "town"},
@@ -176,6 +177,7 @@ func _refresh_menu() -> void:
 	var dive_btn := UIKit.button("迷宮へ潜る", func(): dive.emit())
 	dive_btn.add_theme_stylebox_override("normal", UIKit.box(Color(0.1, 0.22, 0.3, 1.0), UIKit.ACCENT, 2))
 	menu_box.add_child(dive_btn)
+	menu_box.add_child(UIKit.button("闘技場(調整用)", func(): arena_requested.emit()))
 	menu_box.add_child(UIKit.button("タイトルへ", func(): to_title.emit()))
 
 func _go(loc: String) -> void:

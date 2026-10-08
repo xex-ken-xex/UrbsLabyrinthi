@@ -48,7 +48,7 @@ chmod +x "$ROOT/Deploy/linux/UrbsLabyrinthi.x86_64"
 if command -v xvfb-run >/dev/null 2>&1; then
   OUT="$(cd "$ROOT/Deploy/linux" && timeout 120 xvfb-run -a -s "-screen 0 1280x720x24" ./UrbsLabyrinthi.x86_64 --rendering-driver opengl3 -- --autotest-town 2>&1)" || { echo "$OUT" | tail -5; echo "ビルドの確認で強制終了した" >&2; exit 1; }
   echo "$OUT" | grep -q "AUTOTEST done" || { echo "$OUT" | tail -5; echo "ビルドの確認が最後まで通らなかった" >&2; exit 1; }
-  echo "ビルドの確認: 迷宮→街→全滅→帰還の札→つづきから が通った"
+  echo "ビルドの確認: 迷宮→街→全滅→帰還の札→つづきから→闘技場 が通った"
 fi
 {
   echo "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"

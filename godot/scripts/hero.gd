@@ -29,6 +29,8 @@ var ai_target: Enemy = null
 var ai_move := Vector2.ZERO
 var ai_catchup := false
 var guarding := false
+var stat_dealt := 0.0         # 闘技場の記録: 与えたダメージ、受けたダメージ
+var stat_taken := 0.0
 var _tex: Texture2D = null
 var _tex_ver := -1
 
@@ -88,6 +90,7 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false) -> voi
 	if guarding:
 		n *= 0.5
 	n = maxf(0.05, n)
+	stat_taken += n
 	ch.hp -= n
 	flash = 0.12
 	queue_popup(n, Color("ff7a6a"))
