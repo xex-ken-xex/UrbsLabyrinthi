@@ -1,8 +1,9 @@
 class_name Enemy
-extends Node2D
-## 魔物一体。数値は SRD のまま持ち、リアルタイムの手触りに直す係数は Balance に置いてある。
-## 頭は三種(展開メモ §2.5): mindless はまっすぐ迫る、beast は半分倒れると逃げる、
-## smart は遠隔攻撃があれば距離を取り、傷が深いと逃げる。
+extends Body
+## 魔物一体。数値は SRD のまま持ち、リアルタイムに直す係数は Balance に置いてある。
+## 近づいて体当たりで押し込む(Contact が押し合いを決める)。頭は三種:
+##   mindless: まっすぐ迫り、逃げない  beast: 群れの半分が倒れてHPが半分を切ると逃げる
+##   smart: 後衛を狙い、遠隔攻撃があれば距離を取り、傷が深いと逃げる
 
 signal died(enemy: Enemy)
 
@@ -15,38 +16,37 @@ const TYPE_COLOR := {
 }
 const SIZE_RADIUS := {"T": 7.0, "S": 9.0, "M": 11.0, "L": 16.0, "H": 22.0, "G": 30.0}
 
-var game_floor: FloorInstance
 var mon: Dictionary
 var enc_id := -1
 var kind := "beast"
 var attitude := "敵対"
 var display_name := ""
 var max_hp := 1
-var hp := 1
+var hp := 1.0
 var ac := 10
 var speed := 100.0
-var radius := 11.0
-var col_radius := 11.0
 var dmg := 1.0                 # 一撃(係数をかけたあと)
-var hits := 1                  # 一度の攻撃で何回当てるか
+var hits := 1
 var ranged := false
 var xp := 0
+var size_key := "M"
 var color := Color.WHITE
 var asleep := false
-
-var state := "idle"            # idle / neutral / chase / windup / recover / flee
+var state := "idle"            # idle / neutral / chase / flee
 var timer := 0.0
 var atk_cd := 0.0
 var sense_t := 0.0
-var flash := 0.0
-var hits_left := 0
 var fled := false
 var dead := false
 var shown_alert := 0.0
-var knock := Vector2.ZERO
+var slow_t := 0.0
+var slow_v := 0.5
+var stun_t := 0.0
+var target: Hero = null
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
+	is_hero = false
 	mon = m
 	position = pos
 	enc_id = int(e["id"])
@@ -56,12 +56,13 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	asleep = act.contains("休んで") or act.contains("眠")
 	display_name = String(m.get("world_name", m.get("name_ja", m.get("name", "?"))))
 	max_hp = maxi(1, int(m.get("hp", 5)))
-	hp = max_hp
+	hp = float(max_hp)
 	ac = int(m.get("ac", 10))
 	xp = int(m.get("xp", 0))
+	size_key = String(m.get("size", "M"))
 	color = TYPE_COLOR.get(String(m.get("type", "beast")), Color("999999"))
-	radius = SIZE_RADIUS.get(String(m.get("size", "M")), 11.0)
-	col_radius = minf(radius, 13.0)           # 幅1マスの通路を通れるように
+	radius = SIZE_RADIUS.get(size_key, 11.0)
+	col_radius = minf(radius, 13.0)
 	var sp: Dictionary = m.get("speed", {})
 	var best_ft := 0.0
 	for k in sp:
@@ -95,23 +96,57 @@ func _pick_attack() -> void:
 		base = Balance.fallback_round_damage(float(mon.get("cr", 0)))
 	dmg = base * Balance.ENEMY_DMG_SCALE
 
+# ---------- Body ----------
+
+func is_alive() -> bool:
+	return not dead
+
+func hp_frac() -> float:
+	return clampf(hp / float(max_hp), 0.0, 1.0)
+
+func body_mass() -> float:
+	return Balance.SIZE_MASS.get(size_key, 1.0)
+
+func body_speed() -> float:
+	if stun_t > 0.0:
+		return 0.0
+	return speed * (slow_v if slow_t > 0.0 else 1.0)
+
+func contact_dps() -> float:
+	if stun_t > 0.0 or state == "neutral":
+		return 0.0
+	var dps := dmg / Balance.ENEMY_ATTACK_INTERVAL * (1.5 if hits > 1 else 1.0)
+	return dps * (0.5 if ranged else 1.0)
+
+func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
+	take_damage(amount, position - from_pos, src)
+
 # ---------- 被ダメージ ----------
 
-func take_damage(amount: float, from_dir: Vector2) -> void:
+func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	if dead:
 		return
-	# AC は軽減率に直す(展開メモ §3.2 案1)
 	var red := clampf((ac - 10) * 0.03, 0.0, 0.45)
-	var final := maxi(1, int(round(amount * (1.0 - red))))
+	var final := maxf(0.05, amount * (1.0 - red))
 	hp -= final
-	flash = 0.12
-	knock = from_dir.normalized() * 90.0
-	game_floor.spawn_text(position + Vector2(0, -radius - 6), str(final), Color("ffe08a"))
-	if hp <= 0:
+	flash = 0.1
+	queue_popup(final, Color("ffe08a"))
+	game_floor.add_child(Spark.make(position - from_dir.normalized() * radius * 0.6, 10.0, Color("fff0a0"), 0.14))
+	if hp <= 0.0:
 		_die()
 		return
-	game_floor.alert_encounter(enc_id)
+	if state == "idle" or state == "neutral":
+		game_floor.alert_encounter(enc_id)
+	if src is Hero:
+		target = src
 	_check_flee()
+
+func apply_slow(secs: float, v: float = 0.45) -> void:
+	slow_t = maxf(slow_t, secs)
+	slow_v = v
+
+func apply_stun(secs: float) -> void:
+	stun_t = maxf(stun_t, secs)
 
 func _die() -> void:
 	dead = true
@@ -122,12 +157,11 @@ func _die() -> void:
 func _check_flee() -> void:
 	if fled or state == "flee" or kind == "mindless":
 		return
-	var frac := float(hp) / float(max_hp)
 	var go := false
 	if kind == "beast":
-		go = frac <= 0.5 and game_floor.group_dead_fraction(enc_id) >= 0.5
+		go = hp_frac() <= 0.5 and game_floor.group_dead_fraction(enc_id) >= 0.5
 	else:
-		go = frac <= 0.25
+		go = hp_frac() <= 0.25
 	if go:
 		state = "flee"
 		timer = 4.0
@@ -141,7 +175,22 @@ func wake() -> void:
 
 # ---------- 行動 ----------
 
-func _can_sense(pl: Player, dist: float) -> bool:
+func _nearest_hero(max_dist: float = 1e9) -> Hero:
+	var best: Hero = null
+	var bd := max_dist
+	for h in game_floor.heroes:
+		if h.down:
+			continue
+		var d := position.distance_to(h.position)
+		# 知性のある魔物は、後衛(魔術師、僧侶)を優先して狙う
+		if kind == "smart" and (h.ch.cls == "wizard" or h.ch.cls == "cleric"):
+			d *= 0.6
+		if d < bd:
+			bd = d
+			best = h
+	return best
+
+func _can_sense(h: Hero) -> bool:
 	var cells := 8.0
 	if kind == "mindless":
 		cells = 6.0
@@ -149,48 +198,40 @@ func _can_sense(pl: Player, dist: float) -> bool:
 		cells = 3.5
 	if attitude == "警戒":
 		cells = minf(cells, 4.5)
-	if dist > cells * Balance.CELL:
+	if position.distance_to(h.position) > cells * Balance.CELL:
 		return false
 	var a := game_floor.map.cell_of(position)
-	var b := game_floor.map.cell_of(pl.position)
+	var b := game_floor.map.cell_of(h.position)
 	return game_floor.map.los(a.x, a.y, b.x, b.y)
 
 func _physics_process(delta: float) -> void:
-	if dead or game_floor == null or game_floor.player == null:
+	if dead or game_floor == null:
 		return
-	var pl: Player = game_floor.player
-	var to_p := pl.position - position
-	var dist := to_p.length()
+	self_move = Vector2.ZERO
+	intent = Vector2.ZERO
 	flash = maxf(0.0, flash - delta)
 	shown_alert = maxf(0.0, shown_alert - delta)
 	atk_cd = maxf(0.0, atk_cd - delta)
-	if knock.length() > 1.0:
-		position = game_floor.map.move_circle(position, knock * delta, col_radius)
-		knock = knock.move_toward(Vector2.ZERO, 500.0 * delta)
-	var vis := game_floor.map.visible[game_floor.map.idx(game_floor.map.cell_of(position).x, game_floor.map.cell_of(position).y)] == 1
-	if visible != vis:
-		visible = vis
-	if pl.down:
+	slow_t = maxf(0.0, slow_t - delta)
+	stun_t = maxf(0.0, stun_t - delta)
+	pop_update(delta)
+	apply_knock(delta)
+	var c := game_floor.map.cell_of(position)
+	visible = game_floor.map.in_bounds(c.x, c.y) and game_floor.map.visible[game_floor.map.idx(c.x, c.y)] == 1
+	if game_floor.heroes.is_empty() or stun_t > 0.0:
+		queue_redraw()
 		return
 	match state:
 		"idle":
 			sense_t -= delta
 			if sense_t <= 0.0:
 				sense_t = 0.2
-				if _can_sense(pl, dist):
-					game_floor.alert_encounter(enc_id)
-		"neutral":
-			pass
+				for h in game_floor.heroes:
+					if not h.down and _can_sense(h):
+						game_floor.alert_encounter(enc_id)
+						break
 		"chase":
-			_chase(delta, pl, to_p, dist)
-		"windup":
-			timer -= delta
-			if timer <= 0.0:
-				_strike(pl, dist)
-		"recover":
-			timer -= delta
-			if timer <= 0.0:
-				state = "chase"
+			_chase(delta)
 		"flee":
 			timer -= delta
 			_flee(delta)
@@ -198,12 +239,13 @@ func _physics_process(delta: float) -> void:
 				state = "chase"
 	queue_redraw()
 
-func _steer(delta: float, target: Vector2, spd: float) -> void:
-	var dir := target - position
+func _steer(delta: float, to: Vector2, spd: float) -> void:
+	var dir := to - position
 	if dir.length() < 2.0:
 		return
-	var step := dir.normalized() * spd * delta
-	position = game_floor.map.move_circle(position, step, col_radius)
+	intent = dir.normalized()
+	var sp := spd * (slow_v if slow_t > 0.0 else 1.0)
+	walk(intent * sp * delta)
 	_open_doors()
 
 func _open_doors() -> void:
@@ -217,31 +259,36 @@ func _open_doors() -> void:
 		d["open"] = true
 		game_floor.map_changed()
 
-func _chase(delta: float, pl: Player, to_p: Vector2, dist: float) -> void:
+func _chase(delta: float) -> void:
+	if target == null or target.down or not is_instance_valid(target):
+		target = _nearest_hero()
+	if target == null:
+		return
 	var map := game_floor.map
 	var mc := map.cell_of(position)
-	var pc := map.cell_of(pl.position)
-	var seen := map.los(mc.x, mc.y, pc.x, pc.y)
+	var tc := map.cell_of(target.position)
+	var seen := map.los(mc.x, mc.y, tc.x, tc.y)
+	var to_t := target.position - position
+	var dist := to_t.length()
+	# 近くに別の仲間がいれば、そちらへ切り替える(押し込まれている間は目標を固定しない)
+	if dist > radius + 30.0 and Engine.get_physics_frames() % 20 == int(get_instance_id() % 20):
+		var near := _nearest_hero()
+		if near != null:
+			target = near
 	if ranged:
 		if seen and dist < 110.0:
-			_steer(delta, position - to_p, speed * 0.8)
+			_steer(delta, position - to_t, speed * 0.8)
 		elif seen and dist <= 200.0:
 			if atk_cd <= 0.0:
-				_shoot(pl)
+				_shoot(target)
 		else:
-			_approach(delta, pl, seen, mc)
+			_approach(delta, seen, mc)
 		return
-	var reach := radius + Balance.PLAYER_RADIUS + 10.0
-	if dist <= reach and atk_cd <= 0.0:
-		state = "windup"
-		timer = 0.45
-		hits_left = hits
-		return
-	_approach(delta, pl, seen, mc)
+	_approach(delta, seen, mc)
 
-func _approach(delta: float, pl: Player, seen: bool, mc: Vector2i) -> void:
-	if seen and position.distance_to(pl.position) < 220.0:
-		_steer(delta, pl.position, speed)
+func _approach(delta: float, seen: bool, mc: Vector2i) -> void:
+	if seen and position.distance_to(target.position) < 220.0:
+		_steer(delta, target.position, speed)
 		return
 	var nxt := game_floor.map.flow_step(game_floor.flow, mc, true)
 	if nxt.x >= 0:
@@ -253,48 +300,33 @@ func _flee(delta: float) -> void:
 	if nxt.x >= 0:
 		_steer(delta, game_floor.map.center_of(nxt), speed * 1.1)
 
-func _strike(pl: Player, dist: float) -> void:
-	if dist <= radius + Balance.PLAYER_RADIUS + 16.0:
-		pl.take_damage(_roll_dmg(), position)
-	hits_left -= 1
-	if hits_left > 0:
-		timer = 0.28
-	else:
-		state = "recover"
-		timer = 0.5
-		atk_cd = Balance.ENEMY_ATTACK_INTERVAL * randf_range(0.9, 1.3)
-		return
-	# 次の一撃へ(windup のまま)
-
-func _roll_dmg() -> float:
-	return maxf(1.0, dmg * randf_range(0.85, 1.15))
-
-func _shoot(pl: Player) -> void:
+func _shoot(h: Hero) -> void:
 	atk_cd = Balance.ENEMY_ATTACK_INTERVAL * 1.4
 	var p := Projectile.new()
-	p.setup(game_floor, position, (pl.position - position).normalized(), _roll_dmg(), color)
+	p.setup_enemy(game_floor, position, (h.position - position).normalized(), maxf(1.0, dmg * randf_range(0.85, 1.15)), color)
 	game_floor.add_child(p)
 
 # ---------- 描画 ----------
 
 func _draw() -> void:
 	var c := Color.WHITE if flash > 0.0 else color
+	if stun_t > 0.0:
+		c = c.darkened(0.4)
 	draw_circle(Vector2.ZERO, radius, c)
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0, 0, 0, 0.7), 2.0)
-	# 目
-	var pl: Player = game_floor.player if game_floor else null
 	var face := Vector2.RIGHT
-	if pl != null:
-		face = (pl.position - position).normalized()
+	if target != null and is_instance_valid(target):
+		face = (target.position - position).normalized()
 	draw_circle(face * radius * 0.45 + face.orthogonal() * 3.0, 1.8, Color.BLACK)
 	draw_circle(face * radius * 0.45 - face.orthogonal() * 3.0, 1.8, Color.BLACK)
-	if state == "windup":
-		var k := 1.0 - clampf(timer / 0.45, 0.0, 1.0)
-		draw_arc(Vector2.ZERO, radius + 6.0 + 10.0 * k, 0.0, TAU, 24, Color(1, 0.2, 0.2, 0.3 + 0.6 * k), 2.5)
+	if slow_t > 0.0:
+		draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 20, Color(0.5, 0.8, 1.0, 0.8), 2.0)
+	if stun_t > 0.0:
+		UI.text_center(self, 0.0, -radius - 16.0, "zzz", 12, Color(0.8, 0.9, 1.0))
 	if hp < max_hp:
 		var bw := maxf(radius * 2.0, 20.0)
 		draw_rect(Rect2(-bw / 2.0, -radius - 9.0, bw, 4.0), Color(0, 0, 0, 0.7))
-		draw_rect(Rect2(-bw / 2.0, -radius - 9.0, bw * float(hp) / float(max_hp), 4.0), Color("d9534f"))
+		draw_rect(Rect2(-bw / 2.0, -radius - 9.0, bw * hp_frac(), 4.0), Color("d9534f"))
 	if shown_alert > 0.0:
 		UI.text_center(self, 0.0, -radius - 14.0, "!", 18, Color("ff5a4a"))
 	if state == "neutral":
