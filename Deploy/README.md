@@ -14,6 +14,12 @@ Linux(x86_64)と Windows(x86_64)向け。コードやデータを変えたら、
 
 2回目以降は、`.pck` だけを入れ替えればよい。
 
+### 強制終了などの調べ方(ログ)
+1. `windows/UrbsLabyrinthi.console.exe` と `windows/run-with-log.bat` を、`UrbsLabyrinthi.exe` と同じフォルダに置く
+2. `run-with-log.bat` を実行して、終了するまで遊ぶ(または再現させる)
+3. 同じフォルダにできた `urbs-log.txt` を渡す。最後の `[urbs]` の行が、どの処理で止まったかを示す
+4. ゲーム自身も、ログを `%APPDATA%\Godot\app_userdata\Urbs Labyrinthi\logs\godot.log` に書く
+
 ## Linux
 
 ```sh
@@ -26,3 +32,9 @@ cd Deploy/linux
 ## 操作
 
 [`godot/README.md`](../godot/README.md) を見る。移動は WASD、敵へ押し込んで体当たり、スキルは 1〜4、持ち物は Tab。
+
+
+## 画像・フォントの差し替え
+背景、キャラクター、魔物、床や壁、アイコン、ロゴ、フォントを、画像ファイルを置くだけで差し替えられる。
+実行ファイルと同じフォルダの `assets/` に、`キー.png` を置く(`windows/assets/`、`linux/assets/`)。ゲーム中に **F6** で読み込み直す。
+キーの一覧と大きさは [`assets/README.md`](assets/README.md)、見本は [`assets/samples/`](assets/samples/)。

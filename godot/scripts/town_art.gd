@@ -4,6 +4,7 @@ extends Control
 ## style: town(大穴と城壁の夜景) / smith / general / magic / temple / inn / pleasure(寝息通り)
 
 var style := "town"
+var asset_key := ""         # 差し替え画像のキー(無ければ bg_<style>)
 var t := 0.0
 var _rng := RandomNumberGenerator.new()
 var stars: Array = []
@@ -77,6 +78,15 @@ func _p(x: float, y: float) -> Vector2:
 # ---------- 描画 ----------
 
 func _draw() -> void:
+	var tex := Assets.background(style, asset_key)
+	if tex != null:
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		Assets.draw_cover(self, tex, Rect2(Vector2.ZERO, size))
+	else:
+		_draw_procedural()
+	_draw_vignette()
+
+func _draw_procedural() -> void:
 	match style:
 		"town": _draw_town()
 		"smith": _draw_smith()
@@ -86,6 +96,8 @@ func _draw() -> void:
 		"inn": _draw_inn()
 		"pleasure": _draw_pleasure()
 		_: _grad(Rect2(Vector2.ZERO, size), Color("101018"), Color("202030"))
+
+func _draw_vignette() -> void:
 	# 周辺を落として、前面のUIを読みやすくする
 	var v := Color(0, 0, 0, 0.0)
 	draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(size.x, 0), Vector2(size.x, size.y * 0.18), Vector2(0, size.y * 0.18)]),

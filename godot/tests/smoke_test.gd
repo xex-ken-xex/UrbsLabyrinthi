@@ -19,6 +19,7 @@ func _run() -> void:
 	await _test_dice()
 	_test_data()
 	_test_state()
+	await _test_assets()
 	await _test_floors()
 	await _test_contact()
 	await _test_game()
@@ -120,6 +121,68 @@ func _test_state() -> void:
 	check(gs2.load_save() and gs2.party.size() == 4 and gs2.bank_silver == gs.bank_silver and gs2.party[0].equip["weapon"] == "longsword"
 		and gs2.party[2].skills.has("mana_shield") and gs2.count("potion") == gs.count("potion"), "ロードで元に戻る")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
+
+# ---------- 画像の差し替え ----------
+
+func _png(path: String, w: int, h: int, c: Color) -> void:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(c)
+	img.save_png(path)
+
+func _test_assets() -> void:
+	print("[assets]")
+	var dir := ProjectSettings.globalize_path("user://assets")
+	DirAccess.make_dir_recursive_absolute(dir)
+	Assets.clear()
+	check(Assets.hero_texture("セラ", "fighter", "human") == null and Assets.background("smith") == null, "何も置かなければ、元の絵(null)のまま")
+	_png(dir + "/hero_fighter.png", 16, 16, Color.RED)
+	_png(dir + "/hero_セラ.png", 24, 24, Color.BLUE)
+	_png(dir + "/bg_smith.png", 160, 90, Color.GREEN)
+	_png(dir + "/enemy_type_beast.png", 16, 16, Color.YELLOW)
+	_png(dir + "/floor_fuyou.png", 32, 32, Color.GRAY)
+	Assets.clear()
+	var t1 := Assets.hero_texture("セラ", "fighter", "human")
+	var t2 := Assets.hero_texture("ティオ", "fighter", "human")
+	check(t1 != null and t1.get_width() == 24, "名前の画像が、クラスの画像より優先される")
+	check(t2 != null and t2.get_width() == 16, "名前の画像が無ければ、クラスの画像を使う")
+	check(Assets.background("smith") != null and Assets.background("inn") == null, "背景を差し替えられる(置いていない場所は元の絵)")
+	check(Assets.enemy_texture("giant-rat", "beast") != null and Assets.enemy_texture("skeleton", "undead") == null, "魔物は、種別の画像で代用される")
+	# 描画が通る(壊れた画像は無視される)
+	var f := FileAccess.open(dir + "/wall_fuyou.png", FileAccess.WRITE)
+	f.store_string("これは画像ではない")
+	f.close()
+	Assets.clear()
+	check(Assets.first(["wall_fuyou"]) == null, "壊れた画像は無視される")
+	var made := _make_floor(4, 1)
+	var fl: FloorInstance = made[0]
+	var heroes: Array = made[1]
+	heroes[0].ch.name = "セラ"
+	var en := _fake_enemy(fl, heroes[0].position + Vector2(60, 0), 30, "M", 0.0)
+	en.mon["type"] = "beast"
+	var big := Image.create(400, 300, false, Image.FORMAT_RGBA8)
+	big.fill(Color.WHITE)
+	big.save_png(dir + "/bg_town.png")
+	Assets.clear()
+	var art := TownArt.new()
+	var layer := CanvasLayer.new()
+	root.add_child(layer)
+	layer.add_child(art)
+	fl.light_pos = heroes[0].position
+	fl.map.compute_visible(fl.map.cell_of(heroes[0].position).x, fl.map.cell_of(heroes[0].position).y, 7)
+	await _step(4)
+	check(heroes[0]._sprite() != null and en._sprite() != null and fl.tex["floor"] != null, "仲間、魔物、床の差し替え画像が、描画に使われる")
+	for e in fl.enemies.duplicate():
+		e.dead = true
+		e.queue_free()
+	for h in heroes:
+		h.queue_free()
+	fl.queue_free()
+	layer.queue_free()
+	for n in ["hero_fighter", "hero_セラ", "bg_smith", "enemy_type_beast", "floor_fuyou", "wall_fuyou", "bg_town"]:
+		DirAccess.remove_absolute("%s/%s.png" % [dir, n])
+	Assets.clear()
+	check(Assets.hero_texture("セラ", "fighter", "human") == null, "置いたファイルを消して F6 すると、元の絵に戻る")
+	await process_frame
 
 # ---------- 全層 ----------
 

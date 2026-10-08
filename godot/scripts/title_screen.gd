@@ -11,6 +11,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var art := TownArt.new()
 	art.style = "town"
+	art.asset_key = "bg_title"
 	add_child(art)
 	var cc := CenterContainer.new()
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -18,9 +19,18 @@ func _ready() -> void:
 	var v := UIKit.vbox(14)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	cc.add_child(v)
-	var t1 := UIKit.label("Urbs Labyrinthi", 58, UIKit.GOLD)
-	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(t1)
+	var logo := Assets.texture("logo")
+	if logo != null:
+		var tr := TextureRect.new()
+		tr.texture = logo
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.custom_minimum_size = Vector2(620, 180)
+		v.add_child(tr)
+	else:
+		var t1 := UIKit.label("Urbs Labyrinthi", 58, UIKit.GOLD)
+		t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(t1)
 	var t2 := UIKit.label("迷宮都市ヴェルガ・ノクス", 22, Color("a8c8e8"))
 	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t2)

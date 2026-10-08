@@ -47,6 +47,64 @@ func _ready() -> void:
 	hud.game = self
 	hud_layer.add_child(hud)
 	show_title()
+	if OS.get_cmdline_user_args().has("--autotest-town"):
+		call_deferred("_autotest_town")
+
+## 書き出したビルドで「迷宮 → 街」を再現するための確認用(--autotest-town を付けて起動する)
+func _autotest_town() -> void:
+	await get_tree().create_timer(0.5).timeout
+	show_make()
+	await get_tree().create_timer(0.3).timeout
+	screen._on_start()
+	await get_tree().create_timer(0.3).timeout
+	_on_dive()
+	await get_tree().create_timer(0.5).timeout
+	# 戦闘のさなかに階段で戻る(魔物と飛び道具が動いている状態)
+	var k := 0
+	for e in current.enemies:
+		if k >= 6:
+			break
+		e.position = leader().position + Vector2.from_angle(k * 1.1) * 40.0
+		e.wake()
+		k += 1
+	await get_tree().create_timer(1.5).timeout
+	leader().position = current.map.center_of(current.up_cell)
+	await get_tree().create_timer(0.3).timeout
+	Input.action_press("interact")
+	await get_tree().create_timer(0.1).timeout
+	Input.action_release("interact")
+	await get_tree().create_timer(1.0).timeout
+	print("AUTOTEST 街へ戻る phase=", phase)
+	await get_tree().create_timer(0.5).timeout
+	# 全滅 → 街
+	_on_dive()
+	await get_tree().create_timer(0.8).timeout
+	for h in heroes:
+		h.damage(99999.0, h.position, true)
+	await get_tree().create_timer(0.5).timeout
+	print("AUTOTEST 全滅 phase=", phase)
+	Input.action_press("confirm")
+	await get_tree().create_timer(0.1).timeout
+	Input.action_release("confirm")
+	await get_tree().create_timer(0.8).timeout
+	print("AUTOTEST 全滅のあと phase=", phase)
+	# 持ち物を開いて閉じ、帰還の札で街へ
+	_on_dive()
+	await get_tree().create_timer(0.8).timeout
+	open_inventory()
+	await get_tree().create_timer(0.3).timeout
+	pending_return = true
+	close_inventory()
+	await get_tree().create_timer(0.8).timeout
+	print("AUTOTEST 帰還の札 phase=", phase)
+	show_title()
+	await get_tree().create_timer(0.3).timeout
+	_on_continue()
+	await get_tree().create_timer(0.5).timeout
+	print("AUTOTEST つづきから phase=", phase)
+	await get_tree().create_timer(0.5).timeout
+	print("AUTOTEST done")
+	get_tree().quit()
 
 func _setup_input() -> void:
 	var defs := {
@@ -55,7 +113,7 @@ func _setup_input() -> void:
 		"guard": [KEY_SPACE], "dodge": [KEY_SHIFT],
 		"skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3], "skill4": [KEY_4],
 		"switch": [KEY_Q], "interact": [KEY_E], "search": [KEY_F], "quick_heal": [KEY_R],
-		"inventory": [KEY_TAB], "confirm": [KEY_ENTER, KEY_KP_ENTER], "credits": [KEY_F1],
+		"reload_assets": [KEY_F6], "inventory": [KEY_TAB], "confirm": [KEY_ENTER, KEY_KP_ENTER], "credits": [KEY_F1],
 	}
 	for a in defs:
 		if not InputMap.has_action(a):
@@ -66,7 +124,7 @@ func _setup_input() -> void:
 			InputMap.action_add_event(a, ev)
 
 func leader() -> Hero:
-	if heroes.is_empty():
+	if heroes.is_empty() or active < 0 or active >= heroes.size() or not is_instance_valid(heroes[active]):
 		return null
 	return heroes[active]
 
@@ -104,9 +162,14 @@ func _on_continue() -> void:
 	if gs.load_save():
 		go_town(["記録を読み込んだ。第%d日。" % (gs.day + 1)])
 
+func _trace(msg: String) -> void:
+	print("[urbs] ", msg)   # 強制終了の直前の行が、ログに残る
+
 func go_town(report: Array) -> void:
+	_trace("go_town 開始")
 	phase = "town"
 	_clear_dungeon()
+	_trace("go_town: 迷宮を片付けた")
 	# 全員が倒れていたら、灯手隊が担ぎ出して最低限の手当てをしてくれる
 	var any_alive := false
 	for c in gs.party:
@@ -122,8 +185,10 @@ func go_town(report: Array) -> void:
 	t.dive.connect(_on_dive)
 	t.open_inventory.connect(open_inventory)
 	t.to_title.connect(show_title)
+	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)
+	_trace("go_town 完了")
 
 func _on_dive() -> void:
 	var alive := false
@@ -136,6 +201,7 @@ func _on_dive() -> void:
 	start_day()
 
 func _clear_dungeon() -> void:
+	_trace("_clear_dungeon 層%d 仲間%d" % [floors.size(), heroes.size()])
 	for f in floors.values():
 		f.queue_free()
 	floors.clear()
@@ -155,6 +221,7 @@ func floor_path(n: int, night: int) -> String:
 
 ## 夜が替わるので、通路も部屋の中身も組み直される(大部屋と階段は同じ場所)
 func start_day() -> void:
+	_trace("start_day 日%d" % gs.day)
 	_clear_dungeon()
 	bag_silver = 0
 	light_t = 0.0
@@ -248,6 +315,11 @@ func log_msg(text: String, color: Color = Color.WHITE) -> void:
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("credits"):
 		hud.show_credits = not hud.show_credits
+	if Input.is_action_just_pressed("reload_assets"):
+		Assets.clear()          # 置いた画像を読み込み直す(フォントは再起動後)
+		if current != null:
+			current.queue_redraw()
+		log_msg("画像を読み込み直した", Color(0.7, 0.85, 1.0))
 	match phase:
 		"dungeon": _dungeon_frame(delta)
 		"overlay":
@@ -262,6 +334,10 @@ func _dungeon_frame(delta: float) -> void:
 	light_t = maxf(0.0, light_t - delta)
 	_menu_cd = maxf(0.0, _menu_cd - delta)
 	_read_input()
+	# 入力で街へ戻った(heroes が空になった)あとは、迷宮の処理を続けない。
+	# 書き出したビルドでは、null の Hero へ触れると、エラーではなく強制終了になる
+	if phase != "dungeon" or current == null or heroes.is_empty():
+		return
 	var lead := leader()
 	_update_trail(lead)
 	camera.position = lead.position
@@ -298,6 +374,8 @@ func _read_input() -> void:
 		_switch_next()
 	if Input.is_action_just_pressed("interact"):
 		interact()
+		if phase != "dungeon" or heroes.is_empty():
+			return
 	if Input.is_action_just_pressed("search"):
 		search()
 	if Input.is_action_just_pressed("quick_heal"):
@@ -355,9 +433,11 @@ func _check_wipe() -> void:
 	]
 
 func _after_overlay() -> void:
+	_trace("_after_overlay %s" % overlay_kind)
 	if overlay_kind == "wipe":
 		gs.day += 1
-		go_town(["全滅した。未査定の燐晶は失ったが、預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は、神殿で蘇らせよう。"])
+		phase = "transition"
+		call_deferred("go_town", ["全滅した。未査定の燐晶は失ったが、預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は、神殿で蘇らせよう。"])
 
 # ---------- 部屋、扉、罠 ----------
 
@@ -552,7 +632,10 @@ func interact() -> void:
 		return
 	if _near(current.up_cell, 1.4):
 		if current.floor_no == 1:
-			return_to_surface()
+			# 物理処理の最中に、仲間や層を片付けない。次の空き時間に街へ移る
+			phase = "transition"
+			hud.hint = ""
+			call_deferred("return_to_surface")
 		else:
 			enter_floor(current.floor_no - 1, "down")
 
@@ -742,6 +825,7 @@ func _on_enemy_killed(en: Enemy) -> void:
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
 
 func return_to_surface() -> void:
+	_trace("return_to_surface 第%d層から" % (current.floor_no if current != null else 0))
 	var gross := bag_silver
 	var tax := int(round(gross * Balance.TAX_RATE))
 	var net := gross - tax

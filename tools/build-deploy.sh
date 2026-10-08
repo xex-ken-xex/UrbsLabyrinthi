@@ -34,7 +34,22 @@ if not (os.path.exists(zp) and os.path.exists(marker) and open(marker).read().st
     print("Windows エンジンを zip にした")
 os.remove(exe)
 PY
+# 強制終了などの調査用に、ログを出すためのファイルを添える
+cp "$ROOT/tools/run-with-log.bat" "$ROOT/Deploy/windows/run-with-log.bat"
+# 差し替え画像の説明と、各OSの assets/ の置き場(実行ファイルと同じフォルダ)
+mkdir -p "$ROOT/Deploy/assets" "$ROOT/Deploy/windows/assets" "$ROOT/Deploy/linux/assets"
+cp "$ROOT/godot/assets/OVERRIDE.md" "$ROOT/Deploy/assets/README.md"
+printf "ここに差し替え画像を置く。説明は ../../assets/README.md(キーの一覧と大きさ)。\n見本は ../../assets/samples/。ゲーム中に F6 で読み込み直す。\n" > "$ROOT/Deploy/windows/assets/README.txt"
+cp "$ROOT/Deploy/windows/assets/README.txt" "$ROOT/Deploy/linux/assets/README.txt"
 chmod +x "$ROOT/Deploy/linux/UrbsLabyrinthi.x86_64"
+
+# 書き出したビルドで、迷宮→街→全滅→帰還の札→つづきから、を通す(xvfb があれば)。
+# headless のテストでは見つからない強制終了(null の Hero への参照など)を、ここで検出する
+if command -v xvfb-run >/dev/null 2>&1; then
+  OUT="$(cd "$ROOT/Deploy/linux" && timeout 120 xvfb-run -a -s "-screen 0 1280x720x24" ./UrbsLabyrinthi.x86_64 --rendering-driver opengl3 -- --autotest-town 2>&1)" || { echo "$OUT" | tail -5; echo "ビルドの確認で強制終了した" >&2; exit 1; }
+  echo "$OUT" | grep -q "AUTOTEST done" || { echo "$OUT" | tail -5; echo "ビルドの確認が最後まで通らなかった" >&2; exit 1; }
+  echo "ビルドの確認: 迷宮→街→全滅→帰還の札→つづきから が通った"
+fi
 {
   echo "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   echo "built:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"

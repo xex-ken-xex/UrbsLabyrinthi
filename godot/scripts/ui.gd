@@ -6,6 +6,8 @@ static var _font: Font
 
 static func font() -> Font:
 	if _font == null:
+		_font = Assets.font()
+	if _font == null:
 		_font = load("res://assets/fonts/ZenKakuGothicNew-Regular.ttf") as Font
 		if _font == null:
 			_font = ThemeDB.fallback_font

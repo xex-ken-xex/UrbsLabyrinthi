@@ -43,6 +43,8 @@ var slow_t := 0.0
 var slow_v := 0.5
 var stun_t := 0.0
 var target: Hero = null
+var _tex: Texture2D = null
+var _tex_ver := -1
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
@@ -260,7 +262,7 @@ func _open_doors() -> void:
 		game_floor.map_changed()
 
 func _chase(delta: float) -> void:
-	if target == null or target.down or not is_instance_valid(target):
+	if target == null or not is_instance_valid(target) or target.down:
 		target = _nearest_hero()
 	if target == null:
 		return
@@ -308,8 +310,27 @@ func _shoot(h: Hero) -> void:
 
 # ---------- 描画 ----------
 
+func _sprite() -> Texture2D:
+	if _tex_ver != Assets.version:
+		_tex_ver = Assets.version
+		_tex = Assets.enemy_texture(String(mon.get("index", "")), String(mon.get("type", "")))
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return _tex
+
 func _draw() -> void:
 	draw_set_transform(lunge)
+	var tex := _sprite()
+	if tex != null:
+		var fx := 1.0
+		if target != null and is_instance_valid(target):
+			fx = -1.0 if target.position.x < position.x else 1.0
+		var sz := maxf(radius * 2.8, 20.0)
+		var tint := Color(1, 0.6, 0.6) if flash > 0.0 else (Color(0.6, 0.6, 0.7) if stun_t > 0.0 else Color.WHITE)
+		draw_set_transform(lunge, 0.0, Vector2(fx, 1.0))
+		draw_texture_rect(tex, Rect2(-sz / 2.0, -sz / 2.0 - radius * 0.2, sz, sz), false, tint)
+		draw_set_transform(lunge)
+		_draw_overlays()
+		return
 	var c := Color.WHITE if flash > 0.0 else color
 	if stun_t > 0.0:
 		c = c.darkened(0.4)
@@ -320,6 +341,9 @@ func _draw() -> void:
 		face = (target.position - position).normalized()
 	draw_circle(face * radius * 0.45 + face.orthogonal() * 3.0, 1.8, Color.BLACK)
 	draw_circle(face * radius * 0.45 - face.orthogonal() * 3.0, 1.8, Color.BLACK)
+	_draw_overlays()
+
+func _draw_overlays() -> void:
 	if slow_t > 0.0:
 		draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 20, Color(0.5, 0.8, 1.0, 0.8), 2.0)
 	if stun_t > 0.0:
