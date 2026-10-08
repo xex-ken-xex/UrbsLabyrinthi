@@ -6,22 +6,29 @@ extends RefCounted
 const CELL := 32                       # 1マス(5フィート)の画素数
 const FT_TO_PX := 4.0                  # 移動速度: 1フィート/ラウンド → 画素/秒(30フィートで120)
 const MAX_FLOOR := 10                  # 書き出してある層の数
-const NIGHTS := 14                     # 書き出してある夜の数。過ぎたら最初に戻る
+const NIGHTS := 7                      # 書き出してある夜の数(7夜で一巡。世界の「節」と同じ周期)
 const TAX_RATE := 0.3                  # 燐晶税(都市GM資料)
 
-# プレイヤー
-const PLAYER_RADIUS := 9.0
-const PLAYER_SPEED := 150.0
+# 仲間(キャラクター)
+const HERO_RADIUS := 9.0
+const HERO_SPEED := 150.0
 const ROLL_SPEED := 340.0
 const ROLL_TIME := 0.22
-const ROLL_COOLDOWN := 0.7
-const ATTACK_COOLDOWN := 0.5
-const ATTACK_REACH := 46.0
-const ATTACK_ARC_DEG := 75.0           # 正面から左右に何度まで当たるか
+const ROLL_COOLDOWN := 0.8
 const LIGHT_RADIUS := 7                # 灯りの半径(マス)
+const MAX_PARTY := 4
+
+# 体当たり(ハイドライド式)。触れて押し込んでいる間、一定間隔でダメージが入る
+const BUMP_TICK := 0.25                # ダメージが入る間隔(秒)
+const BUMP_SCALE := 0.55               # クラスの体当たり火力にかける係数
+const PUSH_SCALE := 2.2                # 押し合いの速さにかける係数
+const HP_FLOOR := 0.35                 # HPが0に近いときの押す力の下限(これに 0.65×HP割合 を足す)
+const HP_SCALE := 1.5                  # キャラクターの最大HPにかける係数
+const AC_REDUCTION := 0.035            # 防御1点あたりの軽減率
+const GUARD_MASS := 2.0                # 構え(Space)の間、押されにくくなる倍率
 
 # SRD の「1ラウンド6秒」を、アクションの手数に直す係数
-const ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける
+const ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当たりでは、これを攻撃間隔で割った毎秒のダメージにする)
 const TRAP_DMG_SCALE := 0.6            # 罠のダメージにかける
 const ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
 
@@ -31,12 +38,6 @@ const XP_LEVELS := [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
 # 平均ダメージ/ラウンド。攻撃の数値が取れなかった魔物の代用(脅威度から)
 static func fallback_round_damage(cr: float) -> float:
 	return 1.5 + cr * 6.0
-
-static func player_max_hp(lv: int) -> int:
-	return 18 + 8 * (lv - 1)
-
-static func player_damage(lv: int) -> float:
-	return 4.5 + 1.2 * (lv - 1)
 
 static func level_for_xp(xp: int) -> int:
 	var lv := 1
@@ -51,3 +52,5 @@ static func passive_perception(lv: int) -> int:
 
 static func skill_bonus(lv: int) -> int:
 	return 2 + lv / 2
+
+const SIZE_MASS := {"T": 0.4, "S": 0.7, "M": 1.0, "L": 1.8, "H": 2.8, "G": 4.0}

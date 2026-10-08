@@ -11,7 +11,8 @@ var style: Dictionary
 var col := {}
 var floor_no := 1
 var night_no := 0
-var player: Player
+var heroes: Array = []        # Hero(パーティ全員。Main が持つ体への参照)
+var leader: Hero = null
 var enemies: Array = []
 var chests: Array = []        # {cell, silver, items, taken}
 var traps: Array = []         # 書き出しの罠 + st(hidden / revealed / triggered / disarmed)
@@ -24,6 +25,19 @@ var enc_total := {}
 var enc_dead := {}
 var light_pos := Vector2.ZERO
 var exhale := false
+
+func _init() -> void:
+	process_physics_priority = 100     # 魔物と仲間が動いたあとに、押し合いを決める
+
+func _physics_process(delta: float) -> void:
+	var bodies: Array = []
+	for h in heroes:
+		if h.is_alive():
+			bodies.append(h)
+	for e in enemies:
+		if not e.dead:
+			bodies.append(e)
+	Contact.step(delta, bodies)
 
 static func create(path: String) -> FloorInstance:
 	var m := FloorMap.load_file(path)
@@ -83,7 +97,7 @@ func _spawn_enemies() -> void:
 			enc_total[eid] += 1
 
 func _on_enemy_died(en: Enemy) -> void:
-	enc_dead[en.enc_id] += 1
+	enc_dead[en.enc_id] = int(enc_dead.get(en.enc_id, 0)) + 1
 	enemies.erase(en)
 	enemy_killed.emit(en)
 
