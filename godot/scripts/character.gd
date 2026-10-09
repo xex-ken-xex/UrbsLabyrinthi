@@ -6,6 +6,7 @@ extends RefCounted
 var name := "名無し"
 var race := "human"
 var cls := "fighter"
+var look := "M"                     # 見た目(スプライトシート): M 男性 / F 女性
 var level := 1
 var xp := 0
 var stats := {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}   # 種族の補正を含む最終値
@@ -17,9 +18,10 @@ var slots: Array = ["", "", "", ""] # ショートカット 1〜4
 var max_hp_cache := 1
 var max_mp_cache := 0
 
-static func create(nm: String, race_id: String, cls_id: String, base_stats: Dictionary) -> Character:
+static func create(nm: String, race_id: String, cls_id: String, base_stats: Dictionary, look_id: String = "M") -> Character:
 	var c := Character.new()
 	c.name = nm
+	c.look = look_id
 	c.race = race_id
 	c.cls = cls_id
 	var bonus: Dictionary = Jobs.RACES[race_id]["bonus"]
@@ -210,7 +212,7 @@ func clamp_resources() -> void:
 # ---------- 保存 ----------
 
 func to_dict() -> Dictionary:
-	return {"name": name, "race": race, "cls": cls, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
+	return {"name": name, "race": race, "cls": cls, "look": look, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
 		"equip": equip, "skills": skills, "slots": slots}
 
 static func from_dict(d: Dictionary) -> Character:
@@ -218,6 +220,7 @@ static func from_dict(d: Dictionary) -> Character:
 	c.name = String(d.get("name", "名無し"))
 	c.race = String(d.get("race", "human"))
 	c.cls = String(d.get("cls", "fighter"))
+	c.look = String(d.get("look", "M"))
 	c.level = int(d.get("level", 1))
 	c.xp = int(d.get("xp", 0))
 	var st: Dictionary = d.get("stats", {})

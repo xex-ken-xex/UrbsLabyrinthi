@@ -51,7 +51,11 @@ var slow_v := 0.5
 var stun_t := 0.0
 var target: Hero = null
 var _tex: Texture2D = null
+var _is_sheet := false
 var _tex_ver := -1
+var walk_t := 0.0
+var moving := false
+var face := Vector2.DOWN
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
@@ -218,6 +222,12 @@ func _can_sense(h: Hero) -> bool:
 func _physics_process(delta: float) -> void:
 	if dead or game_floor == null:
 		return
+	moving = self_move.length() > 0.15
+	walk_t = walk_t + delta * 8.0 if moving else 0.0
+	if intent.length() > 0.1:
+		face = intent
+	elif target != null and is_instance_valid(target):
+		face = (target.position - position).normalized()
 	self_move = Vector2.ZERO
 	intent = Vector2.ZERO
 	flash = maxf(0.0, flash - delta)
@@ -322,13 +332,21 @@ func _shoot(h: Hero) -> void:
 func _sprite() -> Texture2D:
 	if _tex_ver != Assets.version:
 		_tex_ver = Assets.version
-		_tex = Assets.enemy_texture(String(mon.get("index", "")), String(mon.get("type", "")))
-		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		var v := Assets.enemy_visual(String(mon.get("index", "")), String(mon.get("type", "")))
+		_tex = v["tex"]
+		_is_sheet = v["sheet"]
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if _is_sheet else CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return _tex
 
 func _draw() -> void:
 	draw_set_transform(lunge)
 	var tex := _sprite()
+	if tex != null and _is_sheet:
+		var tint0 := Color(1, 0.6, 0.6) if flash > 0.0 else (Color(0.6, 0.6, 0.7) if stun_t > 0.0 else Color.WHITE)
+		var size_px := maxf(radius * 3.6, 26.0)
+		Assets.draw_sheet_frame(self, tex, Assets.sheet_frame(Assets.sheet_dir(face), walk_t, moving), size_px, radius + 5.0, tint0)
+		_draw_overlays(-(size_px - radius - 5.0) + radius + 5.0 - 10.0)
+		return
 	if tex != null:
 		var fx := 1.0
 		if target != null and is_instance_valid(target):
@@ -352,17 +370,17 @@ func _draw() -> void:
 	draw_circle(face * radius * 0.45 - face.orthogonal() * 3.0, 1.8, Color.BLACK)
 	_draw_overlays()
 
-func _draw_overlays() -> void:
+func _draw_overlays(dy: float = 0.0) -> void:
 	if slow_t > 0.0:
 		draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 20, Color(0.5, 0.8, 1.0, 0.8), 2.0)
 	if stun_t > 0.0:
-		UI.text_center(self, 0.0, -radius - 16.0, "zzz", 12, Color(0.8, 0.9, 1.0))
+		UI.text_center(self, 0.0, -radius - 16.0 + dy, "zzz", 12, Color(0.8, 0.9, 1.0))
 	if hp < max_hp:
 		var bw := maxf(radius * 2.0, 20.0)
-		draw_rect(Rect2(-bw / 2.0, -radius - 9.0, bw, 4.0), Color(0, 0, 0, 0.7))
-		draw_rect(Rect2(-bw / 2.0, -radius - 9.0, bw * hp_frac(), 4.0), Color("d9534f"))
+		draw_rect(Rect2(-bw / 2.0, -radius - 9.0 + dy, bw, 4.0), Color(0, 0, 0, 0.7))
+		draw_rect(Rect2(-bw / 2.0, -radius - 9.0 + dy, bw * hp_frac(), 4.0), Color("d9534f"))
 	if shown_alert > 0.0:
-		UI.text_center(self, 0.0, -radius - 14.0, "!", 18, Color("ff5a4a"))
+		UI.text_center(self, 0.0, -radius - 14.0 + dy, "!", 18, Color("ff5a4a"))
 	if state == "neutral":
-		UI.text_center(self, 0.0, -radius - 12.0, "…", 14, Color("c8d8ff"))
+		UI.text_center(self, 0.0, -radius - 12.0 + dy, "…", 14, Color("c8d8ff"))
 	UI.text_center(self, 0.0, radius + 14.0, display_name, 11, Color(1, 1, 1, 0.8))

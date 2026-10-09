@@ -25,6 +25,7 @@ static func search_dirs() -> Array:
 
 static func clear() -> void:
 	_cache.clear()
+	_sheet_cache.clear()
 	_font_cache = false
 	version += 1
 
@@ -68,6 +69,90 @@ static func background(style: String, asset_key: String = "") -> Texture2D:
 		keys.append(asset_key)
 	keys.append("bg_" + style)
 	return first(keys)
+
+## クラス → スプライトシートの種類(男女 × WARRIOR / CLERIC / FIGHTER / THIEF / MAGE)
+const SHEET_TYPE := {"fighter": "WARRIOR", "cleric": "CLERIC", "rogue": "THIEF", "wizard": "MAGE", "barbarian": "FIGHTER", "ranger": "FIGHTER"}
+const SHEET_FRAMES := 12                      # 下向き3、左向き3、右向き3、上向き3 を、横一列に
+
+static var _sheet_cache := {}
+
+## スプライトシート(12コマを横一列)。builtin が true なら、ゲームに同梱の絵も探す。最近傍で描くので、ミップマップは作らない
+static func sheet(key: String, builtin: bool = true) -> Texture2D:
+	var ck := "%s|%s" % [key, builtin]
+	if _sheet_cache.has(ck):
+		return _sheet_cache[ck]
+	var tex: Texture2D = null
+	for d in search_dirs():
+		for e in EXTS:
+			var path: String = String(d).path_join("%s.%s" % [key, e])
+			if FileAccess.file_exists(path):
+				var img := Image.load_from_file(path)
+				if img != null and not img.is_empty():
+					tex = ImageTexture.create_from_image(img)
+					print("[urbs] 差し替え画像を読み込んだ: ", path)
+					break
+		if tex != null:
+			break
+	if tex == null:
+		var dirs: Array = ["res://override"]
+		if builtin:
+			dirs.append("res://assets/sprites")
+		for dd in dirs:
+			for e in EXTS:
+				var rp := "%s/%s.%s" % [dd, key, e]
+				if ResourceLoader.exists(rp):
+					tex = load(rp) as Texture2D
+					break
+			if tex != null:
+				break
+	_sheet_cache[ck] = tex
+	return tex
+
+## 仲間の見た目。{tex, sheet}。順番は、差し替えのシート → 差し替えの1枚絵 → 同梱のシート
+static func hero_visual(char_name: String, cls: String, race: String, look: String) -> Dictionary:
+	var keys := ["sheet_" + char_name, "sheet_%s_%s" % [cls, look], "sheet_%s_%s" % [look, String(SHEET_TYPE.get(cls, "WARRIOR"))]]
+	for k in keys:
+		var t := sheet(String(k), false)
+		if t != null:
+			return {"tex": t, "sheet": true}
+	var one := hero_texture(char_name, cls, race)
+	if one != null:
+		return {"tex": one, "sheet": false}
+	var b := sheet(String(keys[2]), true)
+	if b != null:
+		return {"tex": b, "sheet": true}
+	return {"tex": null, "sheet": false}
+
+## 魔物の見た目。{tex, sheet}。esheet_<index> → esheet_type_<種別> → 1枚絵(enemy_*)の順
+static func enemy_visual(index: String, type: String) -> Dictionary:
+	var tp := "swarm" if type.begins_with("swarm") else type
+	for k in ["esheet_" + index, "esheet_type_" + tp]:
+		var t := sheet(String(k), true)
+		if t != null:
+			return {"tex": t, "sheet": true}
+	var one := enemy_texture(index, type)
+	if one != null:
+		return {"tex": one, "sheet": false}
+	return {"tex": null, "sheet": false}
+
+## 向きから、シートの向きの番号(0 下、1 左、2 右、3 上)
+static func sheet_dir(v: Vector2) -> int:
+	if absf(v.x) > absf(v.y):
+		return 1 if v.x < 0.0 else 2
+	return 0 if v.y >= 0.0 else 3
+
+## 歩きの3コマを、0、1、2、1 の順に回す。止まっているときは、真ん中(1)
+static func sheet_frame(dir: int, walk_t: float, moving: bool) -> int:
+	var step := 1
+	if moving:
+		step = [0, 1, 2, 1][int(walk_t) % 4]
+	return dir * 3 + step
+
+## シートの一コマを描く。feet は、足もとの y。size は、1コマを描く大きさ
+static func draw_sheet_frame(ci: CanvasItem, tex: Texture2D, frame: int, size: float, feet_y: float, tint: Color = Color.WHITE) -> void:
+	var cw := float(tex.get_width()) / SHEET_FRAMES
+	var ch := float(tex.get_height())
+	ci.draw_texture_rect_region(tex, Rect2(-size / 2.0, feet_y - size, size, size), Rect2(frame * cw, 0.0, cw, ch), tint)
 
 ## 仲間の絵: hero_<名前> → hero_<クラスid>_<種族id> → hero_<クラスid>
 static func hero_texture(char_name: String, cls: String, race: String = "") -> Texture2D:

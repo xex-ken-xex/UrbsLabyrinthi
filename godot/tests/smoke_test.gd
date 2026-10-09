@@ -182,7 +182,48 @@ func _test_assets() -> void:
 		DirAccess.remove_absolute("%s/%s.png" % [dir, n])
 	Assets.clear()
 	check(Assets.hero_texture("セラ", "fighter", "human") == null, "置いたファイルを消して F6 すると、元の絵に戻る")
+	_test_sheets(dir)
 	await process_frame
+
+## スプライトシート(12コマ × 64×64)
+func _test_sheets(dir: String) -> void:
+	check(Assets.sheet_dir(Vector2.DOWN) == 0 and Assets.sheet_dir(Vector2.LEFT) == 1 and Assets.sheet_dir(Vector2.RIGHT) == 2 and Assets.sheet_dir(Vector2.UP) == 3
+		and Assets.sheet_dir(Vector2(-1, 0.3)) == 1 and Assets.sheet_dir(Vector2(0.2, -1)) == 3, "向きから、シートの向き(下、左、右、上)が決まる")
+	var steps: Array = []
+	for t in [0.0, 1.0, 2.0, 3.0, 4.0]:
+		steps.append(Assets.sheet_frame(1, t, true) - 3)
+	check(steps == [0, 1, 2, 1, 0] and Assets.sheet_frame(2, 7.0, false) == 7, "歩きは 0,1,2,1 と回り、止まると真ん中のコマ")
+	var bad := 0
+	for cls in Jobs.CLASSES:
+		for look in ["M", "F"]:
+			var v := Assets.hero_visual("だれか", cls, "human", look)
+			if not v["sheet"] or v["tex"].get_width() != 768 or v["tex"].get_height() != 64:
+				bad += 1
+	check(bad == 0, "6クラス × 男女の、同梱のスプライトシート(768×64)が揃っている (不足 %d)" % bad)
+	var ev := Assets.enemy_visual("giant-rat", "beast")
+	check(ev["sheet"] and Assets.enemy_visual("skeleton", "undead")["sheet"] and Assets.enemy_visual("x-unknown", "unknown")["tex"] == null, "魔物のシートは、あるものだけ使い、無ければ元の絵")
+	var encd: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/encounter-data.json"))
+	var uncovered: Array = []
+	for m in encd["monsters"]:
+		if not Assets.enemy_visual(String(m["i"]), String(m["t"]))["sheet"]:
+			uncovered.append(m["i"])
+	check(uncovered.is_empty(), "SRDの全魔物(%d体)が、スプライトシートで描ける (未対応: %s)" % [encd["monsters"].size(), str(uncovered)])
+	var img := Image.create(192, 16, false, Image.FORMAT_RGBA8)
+	img.fill(Color.RED)
+	img.save_png(dir + "/sheet_M_WARRIOR.png")
+	img.save_png(dir + "/esheet_giant-rat.png")
+	Assets.clear()
+	check(Assets.hero_visual("セラ", "fighter", "human", "M")["tex"].get_width() == 192 and Assets.enemy_visual("giant-rat", "beast")["tex"].get_width() == 192,
+		"差し替えたシートが、同梱のシートより優先される")
+	check(Assets.hero_visual("セラ", "fighter", "human", "F")["tex"].get_width() == 768, "差し替えていない組み合わせは、同梱のまま")
+	DirAccess.remove_absolute(dir + "/sheet_M_WARRIOR.png")
+	DirAccess.remove_absolute(dir + "/esheet_giant-rat.png")
+	Assets.clear()
+	var c := Character.create("リラ", "elf", "wizard", Jobs.auto_stats("wizard"), "F")
+	var c2 := Character.from_dict(c.to_dict())
+	var old := c.to_dict()
+	old.erase("look")
+	check(c2.look == "F" and Character.from_dict(old).look == "M", "見た目(男女)が、セーブで残る。古いセーブは男性")
 
 # ---------- 全層 ----------
 
