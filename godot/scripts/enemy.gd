@@ -25,7 +25,14 @@ var max_hp := 1
 var hp := 1.0
 var ac := 10
 var speed := 100.0
-var dmg := 1.0                 # 一撃(係数をかけたあと)
+var dmg_base := 1.0            # SRD の攻撃の平均ダメージ(係数をかける前)
+var dmg_mult := 1.0
+## 一撃(係数をかけたあと)。係数は実行中に変えられるので、毎回かけ直す
+var dmg: float:
+	get:
+		return dmg_base * Balance.ENEMY_DMG_SCALE * dmg_mult
+	set(v):
+		dmg_base = v / maxf(0.0001, Balance.ENEMY_DMG_SCALE * dmg_mult)
 var hits := 1
 var ranged := false
 var xp := 0
@@ -96,7 +103,7 @@ func _pick_attack() -> void:
 		ranged = best_ranged > 0.0
 	if base <= 0.0:
 		base = Balance.fallback_round_damage(float(mon.get("cr", 0)))
-	dmg = base * Balance.ENEMY_DMG_SCALE
+	dmg_base = base
 
 # ---------- Body ----------
 
@@ -131,6 +138,8 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	var red := clampf((ac - 10) * 0.03, 0.0, 0.45)
 	var final := maxf(0.05, amount * (1.0 - red))
 	hp -= final
+	if src is Hero and is_instance_valid(src):
+		(src as Hero).stat_dealt += final
 	flash = 0.1
 	queue_popup(final, Color("ffe08a"))
 	game_floor.add_child(Spark.make(position - from_dir.normalized() * radius * 0.6, 10.0, Color("fff0a0"), 0.14))

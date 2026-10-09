@@ -43,5 +43,14 @@ for (let night = 0; night < NIGHTS; night++) {
     fs.writeFileSync(f, s); total += s.length;
   }
 }
+/* 闘技場が、遭遇を作るためのデータ(魔物の一覧、舞台ごとの重み、経験点の予算)。
+   Core.buildPool / genEncounter を GDScript へ写したもの(scripts/encounter_gen.gd)が読む */
+const themes = {};
+for (const [id, th] of Object.entries(Core.THEMES)) {
+  themes[id] = { name: th.name, short: th.short, level: th.level, water: !!th.water, types: th.types,
+    beastRe: th.beastRe ? th.beastRe.source : '', humanoidRe: th.humanoidRe ? th.humanoidRe.source : '', elementalRe: th.elementalRe ? th.elementalRe.source : '',
+    sig: th.sig, floors: th.floors };
+}
+fs.writeFileSync(path.join(out, 'encounter-data.json'), JSON.stringify({ monsters: mons, themes, xp_budget: Core.XP_BUDGET }));
 fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ seed, nights: NIGHTS, floors: FLOORS, schema: Core.SCHEMA }));
 console.log(`wrote ${NIGHTS * FLOORS * 4} floors, ${(total / 1024).toFixed(0)} KB →`, out);

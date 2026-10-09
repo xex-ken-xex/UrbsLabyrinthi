@@ -38,7 +38,10 @@ func _draw() -> void:
 	var heroes: Array = game.heroes
 	var meta: Dictionary = fl.map.data["meta"]
 	UI.text(self, Vector2(16, 28), "%s  %s" % [meta.get("floor_label", "第%d層" % fl.floor_no), fl.style.get("short", "")], 20, Color("e8dcb0"))
-	UI.text(self, Vector2(16, 48), "潜行 %d日目  %s" % [game.gs.day + 1, meta.get("night_label", "")], 13, Color(0.8, 0.85, 0.9))
+	if game.arena != null:
+		UI.text(self, Vector2(16, 48), "調整用(経験点も宝も出ない)", 13, Color(0.8, 0.85, 0.9))
+	else:
+		UI.text(self, Vector2(16, 48), "潜行 %d日目  %s" % [game.gs.day + 1, meta.get("night_label", "")], 13, Color(0.8, 0.85, 0.9))
 	# パーティ
 	var y := 58.0
 	for i in heroes.size():
@@ -73,7 +76,8 @@ func _draw() -> void:
 	_draw_skillbar(size_v)
 	if hint != "":
 		UI.text_center(self, size_v.x / 2.0, size_v.y - 96.0, hint, 18, Color("ffe9a8"))
-	_draw_minimap(fl, size_v)
+	if game.arena == null:
+		_draw_minimap(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var lines := ["移動: WASD/矢印   触れれば自動で攻撃(押し込むと有利)   構え: Space   転がり: Shift   スキル: 1〜4   仲間の切替: Q",

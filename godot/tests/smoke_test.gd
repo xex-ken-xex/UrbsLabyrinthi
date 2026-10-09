@@ -529,6 +529,7 @@ func _test_game() -> void:
 	main.close_inventory()
 	await _step(2)
 	check(main.inventory == null, "持ち物画面を閉じる")
+	await _test_arena(main)
 	# 潜る
 	main.gs.party[2].hp = float(main.gs.party[2].max_hp())
 	main._on_dive()
@@ -633,3 +634,115 @@ func _test_game() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 	main.queue_free()
 	await process_frame
+
+# ---------- 闘技場 ----------
+
+func _test_encounter_gen() -> void:
+	print("[encounter gen]")
+	var bad := 0
+	var empty := 0
+	var total := 0
+	for theme in EncounterGen.theme_ids():
+		for level in [1, 3, 5, 9, 14, 20]:
+			for diff in 3:
+				for k in 6:
+					var enc := EncounterGen.generate(theme, level, diff, 4)
+					total += 1
+					if enc.is_empty():
+						empty += 1
+						continue
+					var xp := 0
+					for g in enc["groups"]:
+						if float(g["m"]["cr"]) > level + 3 or int(g["n"]) < 1:
+							bad += 1
+						xp += int(g["m"]["xp"]) * int(g["n"])
+					if xp != int(enc["xp"]):
+						bad += 1
+	check(bad == 0 and empty == 0, "6舞台×6レベル×3難度の遭遇が作れる (%d件、不正 %d、作れず %d)" % [total, bad, empty])
+	var low := EncounterGen.generate("fuyou", 1, 0, 1)
+	var high := EncounterGen.generate("fuyou", 1, 2, 1)
+	check(int(low["xp"]) <= 50 and int(high["xp"]) <= 100, "予算を守る (レベル1・1人: 低 %d / 高 %d)" % [int(low["xp"]), int(high["xp"])])
+	var xs := []
+	for lv in [1, 5, 10, 15]:
+		var t := 0
+		for k in 20:
+			t += int(EncounterGen.generate("sabi", lv, 1, 4)["xp"])
+		xs.append(t / 20)
+	check(xs[0] < xs[1] and xs[1] < xs[2] and xs[2] < xs[3], "レベルが上がるほど遭遇が大きい (平均XP %s)" % [str(xs)])
+
+func _test_arena(main: Node) -> void:
+	print("[arena]")
+	_test_encounter_gen()
+	var real_levels: Array = []
+	for c in main.gs.party:
+		real_levels.append(c.level)
+	main.start_arena()
+	await _step(5)
+	var ar: Arena = main.arena
+	check(ar != null and main.phase == "dungeon" and main.heroes.size() == main.gs.party.size() and main.arena_panel != null, "街から闘技場へ入れる")
+	check(main.heroes[0].ch != main.gs.party[0], "闘技場のパーティは、本編の複製")
+	ar.enc_level = 6
+	ar.diff = 2
+	ar.set_theme("hone")
+	var msg := ar.pop()
+	await _step(3)
+	check(main.current.enemies.size() > 0 and msg.begins_with("Lv6"), "選んだ遭遇レベルの敵が出る (%s)" % msg)
+	var max_cr := 0.0
+	for e in main.current.enemies:
+		max_cr = maxf(max_cr, float(e.mon["cr"]))
+	check(max_cr <= 9.0, "遭遇レベル+3を超える魔物は出ない (最大CR %.2f)" % max_cr)
+	var n_before: int = main.current.enemies.size()
+	ar.pop()
+	check(main.current.enemies.size() > n_before, "続けてポップできる")
+	ar.clear_enemies()
+	check(main.current.enemies.is_empty(), "全消去できる")
+	ar.set_all_levels(8)
+	var h0: Hero = main.heroes[0]
+	check(h0.ch.level == 8 and h0.ch.hp == float(h0.ch.max_hp()) and main.gs.party[0].level == real_levels[0], "キャラクターのレベルを変えても、本編には影響しない (Lv%d、本編 Lv%d)" % [h0.ch.level, main.gs.party[0].level])
+	var hp8: int = h0.ch.max_hp()
+	ar.set_level(0, 2)
+	check(h0.ch.level == 2 and h0.ch.max_hp() < hp8, "レベルを下げられる (HP %d → %d)" % [hp8, h0.ch.max_hp()])
+	ar.set_all_levels(3)
+	ar.enc_level = 1
+	ar.diff = 0
+	ar.set_theme("fuyou")
+	ar.pop()
+	var en: Enemy = main.current.enemies[0]
+	var d1 := en.contact_dps()
+	Balance.tune_set("ENEMY_DMG_SCALE", Balance.tune_get("ENEMY_DMG_SCALE") * 2.0)
+	check(is_equal_approx(en.contact_dps(), d1 * 2.0), "係数を変えると、敵のダメージがその場で変わる (%.2f → %.2f)" % [d1, en.contact_dps()])
+	var b1: float = h0.ch.bump_power()
+	Balance.tune_set("BUMP_SCALE", Balance.tune_get("BUMP_SCALE") * 2.0)
+	check(is_equal_approx(h0.ch.bump_power(), b1 * 2.0), "体当たりの係数も、その場で効く")
+	Balance.tune_reset()
+	check(is_equal_approx(en.contact_dps(), d1), "初期値に戻せる")
+	ar.clear_enemies()
+	ar.reset_stats()
+	ar.pop()
+	for e in main.current.enemies.duplicate():
+		e.take_damage(9999.0, Vector2.RIGHT, main.heroes[0])
+	await _step(5)
+	check(ar.history.size() == 1 and not ar.wave_active and ar.history[0].contains("勝利"), "波が終わると記録される (%s)" % (ar.history[0] if ar.history.size() > 0 else "-"))
+	check(main.heroes[0].stat_dealt > 0.0, "与えたダメージが数えられる")
+	ar.auto_waves = true
+	ar.level_up_each = true
+	ar.heal_between = true
+	var lv0 := ar.enc_level
+	ar._next_t = 0.3
+	await _step(60)
+	check(ar.wave_active and ar.enc_level == lv0 + 1 and main.current.enemies.size() > 0, "連戦: 次の波が出て、レベルが上がる (Lv%d → Lv%d)" % [lv0, ar.enc_level])
+	for h in main.heroes:
+		h.damage(99999.0, h.position, true)
+	await _step(5)
+	var revived := true
+	for h in main.heroes:
+		if h.down:
+			revived = false
+	check(revived and main.current.enemies.is_empty() and not ar.auto_waves and main.phase == "dungeon", "全滅しても、記録して全快し、止まらない")
+	main.exit_arena()
+	await _step(5)
+	var same := true
+	for i in main.gs.party.size():
+		if main.gs.party[i].level != real_levels[i]:
+			same = false
+	check(main.phase == "town" and main.arena == null and same and main.camera.zoom.x > 1.6, "街へ戻れる。本編のパーティは、そのまま")

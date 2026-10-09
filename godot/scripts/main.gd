@@ -27,6 +27,8 @@ var _search_cd := 0.0
 var _pick_cd := 0.0
 var _prev_phase := ""
 var _menu_cd := 0.0
+var arena: Arena = null            # 闘技場にいるとき
+var arena_panel: ArenaPanel = null
 var scripted_input := false        # テスト用: true の間は、キー入力を読まない
 
 func _ready() -> void:
@@ -102,6 +104,22 @@ func _autotest_town() -> void:
 	_on_continue()
 	await get_tree().create_timer(0.5).timeout
 	print("AUTOTEST つづきから phase=", phase)
+	# 闘技場: 入る、出す、連戦、全滅、出る
+	start_arena()
+	await get_tree().create_timer(0.5).timeout
+	arena.enc_level = 4
+	arena.pop()
+	arena.pop()
+	await get_tree().create_timer(1.5).timeout
+	for h in heroes:
+		h.damage(99999.0, h.position, true)
+	await get_tree().create_timer(0.5).timeout
+	arena.auto_waves = true
+	arena._next_t = 0.1
+	await get_tree().create_timer(1.0).timeout
+	exit_arena()
+	await get_tree().create_timer(0.8).timeout
+	print("AUTOTEST 闘技場 phase=", phase)
 	await get_tree().create_timer(0.5).timeout
 	print("AUTOTEST done")
 	get_tree().quit()
@@ -184,6 +202,7 @@ func go_town(report: Array) -> void:
 	t.setup(gs)
 	t.dive.connect(_on_dive)
 	t.open_inventory.connect(open_inventory)
+	t.arena_requested.connect(start_arena)
 	t.to_title.connect(show_title)
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
@@ -210,11 +229,67 @@ func _clear_dungeon() -> void:
 	heroes.clear()
 	if current != null and current.get_parent() == self:
 		remove_child(current)
+	if arena != null:
+		arena.queue_free()
+		arena = null
+	if arena_panel != null:
+		arena_panel.queue_free()
+		arena_panel = null
+	camera.zoom = Vector2(1.7, 1.7)
+	camera.offset = Vector2.ZERO
 	current = null
 	hud.overlay = []
 	hud.hint = ""
 
 # ---------- 日と層 ----------
+
+## 闘技場(戦闘バランスの調整用)。パーティは複製を使う。経験点も宝も出ない
+func start_arena() -> void:
+	_trace("start_arena")
+	_set_screen(null)
+	_clear_dungeon()
+	bag_silver = 0
+	light_t = 0.0
+	active = 0
+	arena = Arena.new()
+	add_child(arena)
+	arena.setup(self, gs.party)
+	for c in arena.chars:
+		var h := Hero.new()
+		h.setup(null, c)
+		add_child(h)
+		heroes.append(h)
+	_apply_control()
+	phase = "dungeon"
+	current = arena.fl
+	add_child(current)
+	move_child(current, 0)
+	current.heroes = heroes
+	current.leader = leader()
+	current.message.connect(log_msg)
+	current.enemy_killed.connect(_on_enemy_killed)
+	var center := current.map.center_of(current.up_cell)
+	for i in heroes.size():
+		var h: Hero = heroes[i]
+		h.game_floor = current
+		h.position = center + Vector2.from_angle(TAU * i / maxf(1.0, heroes.size()) + 0.6) * (22.0 if i != active else 0.0)
+	trail = [leader().position]
+	camera.zoom = Vector2(1.05, 1.05)
+	camera.offset = Vector2(190.0 / 1.05, 0.0)       # 右の盤にかからないよう、闘技場を左へ寄せる
+	camera.position = Vector2(Arena.W, Arena.H) * Balance.CELL / 2.0
+	camera.reset_smoothing()
+	_last_cell = Vector2i(-99, -99)
+	_refresh_view()
+	arena_panel = ArenaPanel.new()
+	arena_panel.setup(arena, self)
+	ui_layer.add_child(arena_panel)
+	log_msg("闘技場。右の盤で、敵をポップ、レベル、係数を調整できる(F2 で出し入れ)", Color("ffe9a8"))
+
+func exit_arena() -> void:
+	if arena == null:
+		return
+	phase = "transition"
+	call_deferred("go_town", ["闘技場から戻った。本編のパーティには、影響しない。"])
 
 func floor_path(n: int, night: int) -> String:
 	return "res://data/floors/f%02d_n%02d_p%d.json" % [n, night % Balance.NIGHTS, clampi(gs.party.size(), 1, 4)]
@@ -340,14 +415,16 @@ func _dungeon_frame(delta: float) -> void:
 		return
 	var lead := leader()
 	_update_trail(lead)
-	camera.position = lead.position
+	camera.position = (Vector2(Arena.W, Arena.H) * Balance.CELL / 2.0) if arena != null else lead.position
 	var pc := current.map.cell_of(lead.position)
 	if pc != _last_cell:
 		_last_cell = pc
 		_refresh_view()
-		_enter_room(pc)
+		if arena == null:
+			_enter_room(pc)
 	_open_doors_near_heroes()
-	_check_traps()
+	if arena == null:
+		_check_traps()
 	_detect_t -= delta
 	if _detect_t <= 0.0:
 		_detect_t = 0.2
@@ -418,6 +495,10 @@ func _check_wipe() -> void:
 	for h in heroes:
 		if not h.down:
 			return
+	if arena != null:
+		arena.on_wipe()
+		log_msg("全滅。記録して、全回復した", Color("ff9a8a"))
+		return
 	var lost := bag_silver
 	bag_silver = 0
 	phase = "overlay"
@@ -603,6 +684,8 @@ func _update_hint() -> void:
 		h = "E: 解錠を試みる"
 	elif _nearest_trap_to_disarm() != null:
 		h = "E: 罠を解除する"
+	elif arena != null:
+		h = "E: 闘技場を出る" if _near(current.up_cell, 1.4) else ""
 	elif _near(current.down_cell, 1.4):
 		h = "E: 下へ降りる" if current.floor_no < Balance.MAX_FLOOR else "この先は未踏(まだ道がない)"
 	elif _near(current.up_cell, 1.4):
@@ -623,6 +706,10 @@ func interact() -> void:
 	var trap: Variant = _nearest_trap_to_disarm()
 	if trap != null:
 		_disarm(trap)
+		return
+	if arena != null:
+		if _near(current.up_cell, 1.4):
+			exit_arena()
 		return
 	if _near(current.down_cell, 1.4):
 		if current.floor_no >= Balance.MAX_FLOOR:
@@ -731,7 +818,7 @@ func search() -> void:
 		log_msg("探ってみたが、何も見つからない", Color(0.7, 0.75, 0.8))
 
 func quick_heal() -> void:
-	if phase != "dungeon":
+	if phase != "dungeon" or arena != null:
 		return
 	var worst: Character = null
 	var wr := 0.9
@@ -755,6 +842,9 @@ func quick_heal() -> void:
 
 func open_inventory() -> void:
 	if inventory != null:
+		return
+	if arena != null:
+		log_msg("闘技場では、持ち物を開けない", Color(0.7, 0.75, 0.8))
 		return
 	_prev_phase = phase
 	if phase == "dungeon":
@@ -812,6 +902,8 @@ func use_special(id: String, _c: Character) -> bool:
 # ---------- 出来事 ----------
 
 func _on_enemy_killed(en: Enemy) -> void:
+	if arena != null:
+		return          # 闘技場では経験点が入らない
 	var alive: Array = []
 	for h in heroes:
 		if not h.down:
