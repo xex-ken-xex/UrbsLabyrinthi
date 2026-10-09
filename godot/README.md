@@ -56,6 +56,7 @@
 | 僧侶 | 回復と聖撃 | 治癒(1) 聖撃(2) 祝福(3) 大治癒(5) |
 | 野伏 | 弓。罠の察知 | 速射(1) 三連射(2) 足止めの矢(4) 狙撃(6) |
 
+キャラ作成では、**見た目(男性・女性)**も選ぶ。見た目と、クラスで、ドット絵のスプライトが決まる(歩きのアニメーションつき)。
 種族は 人間(全能力+1)、エルフ(敏捷+2 知力+1、灯りの半径+1)、ドワーフ(耐久+2 筋力+1、レベルごとにHP+1)、ハーフリング(敏捷+2 魅力+1)。
 スキルは、魔法屋の呪文書で増やせる(魔法の盾、眠りの雲、再生の光、閃光)。ショートカット 1〜4 への割り当ては、Tab のスキル欄で替えられる。
 仲間の自動操作は、前衛は突っ込み、後衛は距離を取り、僧侶は傷ついた仲間を癒やし、技を状況に合わせて使う。
@@ -161,8 +162,9 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 
 ## 画像の差し替え
 
-背景、キャラクター、魔物、床や壁、アイコン、ロゴ、フォントは、`assets/` に `キー.png` を置くだけで差し替えられる(`scripts/assets.gd`)。
-ゲーム中に F6 で読み込み直す。置き場所、キーの一覧、大きさは [`assets/OVERRIDE.md`](assets/OVERRIDE.md)。見本は `Deploy/assets/samples/`(`tools/make-asset-samples.py` で作る)。
+仲間10種(男女×5種)と魔物11種は、ドット絵のスプライトシート(`assets/sprites/`、`tools/make-sprites.py` が描く)を同梱している。
+背景、キャラクター、魔物(1枚絵とスプライトシート)、床や壁、アイコン、ロゴ、フォントは、`assets/` に `キー.png` を置くだけで差し替えられる(`scripts/assets.gd`)。
+ゲーム中に F6 で読み込み直す。置き場所、キーの一覧、大きさは [`assets/OVERRIDE.md`](assets/OVERRIDE.md)。見本は `Deploy/assets/samples/`(`tools/make-asset-samples.py` で作る)。AI 画像生成用のプロンプトは [`docs/asset-prompts.md`](../docs/asset-prompts.md)。
 
 ## ライセンス
 

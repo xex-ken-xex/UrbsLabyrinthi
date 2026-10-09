@@ -73,4 +73,10 @@ for style in ["town", "smith", "general", "magic", "temple", "inn", "pleasure"]:
     f = os.path.join(src, f"art_{style}.png")
     if os.path.exists(f):
         shutil.copy(f, os.path.join(OUT, f"bg_{style}.png"))
+# 同梱のスプライトシート(tools/make-sprites.py が描いたもの)も、形式の見本として添える
+spr = os.path.join(ROOT, "godot", "assets", "sprites")
+if os.path.isdir(spr):
+    for f in sorted(os.listdir(spr)):
+        if f.endswith(".png"):
+            shutil.copy(os.path.join(spr, f), os.path.join(OUT, f))
 print("samples ->", OUT, len(os.listdir(OUT)), "files")

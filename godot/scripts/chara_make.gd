@@ -8,7 +8,7 @@ signal cancelled
 
 const NAMES := ["アルド", "セラ", "ロカ", "ミナ", "ガロ", "イルマ", "ティオ", "ネリ", "ダルク", "フィーネ", "ボルグ", "ユナ",
 	"カイ", "リーゼ", "ハンス", "ルカ", "ベルナ", "オルト", "シェリ", "グレン", "マルタ", "ノエ", "ヴィクト", "ラナ"]
-const DEFAULT_PARTY := [["fighter", "human"], ["cleric", "dwarf"], ["wizard", "elf"], ["rogue", "halfling"]]
+const DEFAULT_PARTY := [["fighter", "human", "M"], ["cleric", "dwarf", "F"], ["wizard", "elf", "M"], ["rogue", "halfling", "F"]]
 const RACE_IDS := ["human", "elf", "dwarf", "halfling"]
 const CLASS_IDS := ["fighter", "barbarian", "rogue", "wizard", "cleric", "ranger"]
 
@@ -18,6 +18,7 @@ var _updating := false
 var slot_box: VBoxContainer
 var name_edit: LineEdit
 var race_opt: OptionButton
+var look_opt: OptionButton
 var class_opt: OptionButton
 var use_check: CheckBox
 var stat_rows := {}          # abil → {val, bonus, minus, plus}
@@ -40,7 +41,7 @@ func _ready() -> void:
 	add_child(dim)
 	for i in Balance.MAX_PARTY:
 		var d: Array = DEFAULT_PARTY[i]
-		slots.append({"use": true, "name": NAMES[(i * 5 + 1) % NAMES.size()], "race": d[1], "cls": d[0], "stats": Jobs.auto_stats(d[0])})
+		slots.append({"use": true, "name": NAMES[(i * 5 + 1) % NAMES.size()], "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0])})
 	_build()
 	_select(0)
 
@@ -95,6 +96,12 @@ func _build() -> void:
 		class_opt.add_item(Jobs.CLASSES[id]["name"])
 	class_opt.item_selected.connect(_on_class)
 	rr.add_child(class_opt)
+	rr.add_child(UIKit.label("見た目", 16, UIKit.DIM))
+	look_opt = OptionButton.new()
+	look_opt.add_item("男性")
+	look_opt.add_item("女性")
+	look_opt.item_selected.connect(_on_look)
+	rr.add_child(look_opt)
 	form.add_child(rr)
 	form.add_child(UIKit.label("能力値(ポイントバイ27点。8〜15)", 16, UIKit.DIM))
 	for a in Jobs.ABILS:
@@ -173,6 +180,7 @@ func _refresh_all() -> void:
 	name_edit.text = s["name"]
 	race_opt.select(RACE_IDS.find(s["race"]))
 	class_opt.select(CLASS_IDS.find(s["cls"]))
+	look_opt.select(0 if s["look"] == "M" else 1)
 	_updating = false
 	_refresh_slots()
 	_refresh_form()
@@ -183,6 +191,7 @@ func _refresh_form() -> void:
 	name_edit.editable = on
 	race_opt.disabled = not on
 	class_opt.disabled = not on
+	look_opt.disabled = not on
 	var bonus: Dictionary = Jobs.RACES[s["race"]]["bonus"]
 	var used := Jobs.points_used(s["stats"])
 	for a in Jobs.ABILS:
@@ -203,7 +212,7 @@ func _refresh_preview() -> void:
 	if not s["use"]:
 		preview.text = "[color=#8a90a0]この枠は使わない。[/color]"
 		return
-	var c := Character.create(s["name"], s["race"], s["cls"], s["stats"])
+	var c := Character.create(s["name"], s["race"], s["cls"], s["stats"], s["look"])
 	var cd := c.class_data()
 	var race: Dictionary = Jobs.RACES[s["race"]]
 	var t := "[b][color=#e8dcb0]%s[/color][/b]  %s・%s\n" % [c.name, race["name"], cd["name"]]
@@ -250,6 +259,12 @@ func _on_race(i: int) -> void:
 	if _updating:
 		return
 	_cur()["race"] = RACE_IDS[i]
+	_refresh_all()
+
+func _on_look(i: int) -> void:
+	if _updating:
+		return
+	_cur()["look"] = "M" if i == 0 else "F"
 	_refresh_all()
 
 func _on_class(i: int) -> void:
@@ -300,7 +315,7 @@ func _on_start() -> void:
 		if String(s["name"]).strip_edges() == "":
 			msg.text = "名前のない仲間がいる"
 			return
-		chars.append(Character.create(String(s["name"]).strip_edges(), s["race"], s["cls"], s["stats"]))
+		chars.append(Character.create(String(s["name"]).strip_edges(), s["race"], s["cls"], s["stats"], s["look"]))
 	if chars.is_empty():
 		msg.text = "一人は必要だ"
 		return

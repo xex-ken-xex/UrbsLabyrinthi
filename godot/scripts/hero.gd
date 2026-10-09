@@ -32,7 +32,10 @@ var guarding := false
 var stat_dealt := 0.0         # 闘技場の記録: 与えたダメージ、受けたダメージ
 var stat_taken := 0.0
 var _tex: Texture2D = null
+var _is_sheet := false
 var _tex_ver := -1
+var walk_t := 0.0             # 歩きの絵を送る時間(スプライトシート用)
+var moving := false
 
 func setup(fl: FloorInstance, character: Character) -> void:
 	game_floor = fl
@@ -133,6 +136,8 @@ func _physics_process(delta: float) -> void:
 	if not controlled:
 		_ai(delta)
 	_move(delta)
+	moving = self_move.length() > 0.15
+	walk_t = walk_t + delta * 9.0 if moving else 0.0
 	queue_redraw()
 
 func _tick(delta: float) -> void:
@@ -463,12 +468,19 @@ func _ai_skills() -> void:
 func _sprite() -> Texture2D:
 	if _tex_ver != Assets.version:
 		_tex_ver = Assets.version
-		_tex = Assets.hero_texture(ch.name, ch.cls, ch.race)
-		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		var v := Assets.hero_visual(ch.name, ch.cls, ch.race, ch.look)
+		_tex = v["tex"]
+		_is_sheet = v["sheet"]
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if _is_sheet else CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return _tex
 
 ## 差し替え画像を描く。右向きの絵を、左を向くときは反転する
 func _draw_sprite(tex: Texture2D, tint: Color, face_x: float) -> void:
+	if _is_sheet:
+		# スプライトシート: 向きと歩きで、コマを選ぶ
+		draw_set_transform(lunge)
+		Assets.draw_sheet_frame(self, tex, Assets.sheet_frame(Assets.sheet_dir(facing), walk_t, moving and not down), radius * 4.6, radius + 4.0, tint)
+		return
 	var sz := radius * 3.0
 	var r := Rect2(-sz / 2.0, -sz / 2.0 - radius * 0.25, sz, sz)
 	draw_set_transform(lunge, 0.0, Vector2(-1.0 if face_x < 0.0 else 1.0, 1.0))
@@ -496,7 +508,8 @@ func _draw() -> void:
 		if guarding:
 			draw_arc(Vector2.ZERO, radius + 5.0, facing.angle() - 1.0, facing.angle() + 1.0, 12, Color("a8d8ff"), 4.0)
 		if controlled:
-			draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 14), Vector2(5, -radius - 22), Vector2(-5, -radius - 22)]), Color("ffe9a8"))
+			var my := -radius - (30.0 if _is_sheet else 14.0)
+			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
 		UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.85))
 		return
 	if down:
