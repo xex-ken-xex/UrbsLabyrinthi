@@ -63,6 +63,8 @@
 | `esheet_<SRDのindex>` | その魔物(例: `esheet_giant-rat`) | 1番目 |
 | `esheet_type_<種別>` | その種別すべて | 2番目 |
 
+同梱のシートは、SRD の全魔物(334体)と、種別の代表(`esheet_type_aberration` など15種)。同じ名前のファイルを置けば差し替わる。外見とサイズの方針は `docs/monster-visuals.md`。
+
 クラスと種類の対応: 戦士=WARRIOR、僧侶=CLERIC、盗賊=THIEF、魔術師=MAGE、蛮族=FIGHTER、野伏=FIGHTER。
 キャラ作成で「見た目」(男性 M / 女性 F)を選ぶ。**同梱のシート**: 仲間の `sheet_M_*` `sheet_F_*` の10枚と、魔物 11種(`giant-rat` `rat` `gray-ooze` `green-slime` `giant-spider` `giant-bat` `bat` `skeleton` `zombie` `bandit` `goblin`)。
 同梱のシートは、`tools/make-sprites.py` が、コードで描いたもの。AI で作った絵(プロンプトは `docs/asset-prompts.md`)に、同じファイル名で差し替えられる。

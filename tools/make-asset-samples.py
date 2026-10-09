@@ -74,9 +74,11 @@ for style in ["town", "smith", "general", "magic", "temple", "inn", "pleasure"]:
     if os.path.exists(f):
         shutil.copy(f, os.path.join(OUT, f"bg_{style}.png"))
 # 同梱のスプライトシート(tools/make-sprites.py が描いたもの)も、形式の見本として添える
+SAMPLE_MONSTERS = {"bandit", "bat", "giant-bat", "giant-rat", "giant-spider", "goblin", "gray-ooze", "green-slime", "rat", "skeleton", "zombie"}
 spr = os.path.join(ROOT, "godot", "assets", "sprites")
 if os.path.isdir(spr):
     for f in sorted(os.listdir(spr)):
-        if f.endswith(".png"):
+        # 魔物は300体を超えるので、見本には、種別の代表と最初の11体だけ
+        if f.endswith(".png") and (not f.startswith("esheet_") or f.startswith("esheet_type_") or f[7:-4] in SAMPLE_MONSTERS):
             shutil.copy(os.path.join(spr, f), os.path.join(OUT, f))
 print("samples ->", OUT, len(os.listdir(OUT)), "files")

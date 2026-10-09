@@ -201,7 +201,13 @@ func _test_sheets(dir: String) -> void:
 				bad += 1
 	check(bad == 0, "6クラス × 男女の、同梱のスプライトシート(768×64)が揃っている (不足 %d)" % bad)
 	var ev := Assets.enemy_visual("giant-rat", "beast")
-	check(ev["sheet"] and Assets.enemy_visual("skeleton", "undead")["sheet"] and Assets.enemy_visual("dragon-x", "dragon")["tex"] == null, "魔物のシートは、あるものだけ使い、無ければ元の絵")
+	check(ev["sheet"] and Assets.enemy_visual("skeleton", "undead")["sheet"] and Assets.enemy_visual("x-unknown", "unknown")["tex"] == null, "魔物のシートは、あるものだけ使い、無ければ元の絵")
+	var encd: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/encounter-data.json"))
+	var uncovered: Array = []
+	for m in encd["monsters"]:
+		if not Assets.enemy_visual(String(m["i"]), String(m["t"]))["sheet"]:
+			uncovered.append(m["i"])
+	check(uncovered.is_empty(), "SRDの全魔物(%d体)が、スプライトシートで描ける (未対応: %s)" % [encd["monsters"].size(), str(uncovered)])
 	var img := Image.create(192, 16, false, Image.FORMAT_RGBA8)
 	img.fill(Color.RED)
 	img.save_png(dir + "/sheet_M_WARRIOR.png")

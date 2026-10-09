@@ -125,7 +125,8 @@ static func hero_visual(char_name: String, cls: String, race: String, look: Stri
 
 ## 魔物の見た目。{tex, sheet}。esheet_<index> → esheet_type_<種別> → 1枚絵(enemy_*)の順
 static func enemy_visual(index: String, type: String) -> Dictionary:
-	for k in ["esheet_" + index, "esheet_type_" + type]:
+	var tp := "swarm" if type.begins_with("swarm") else type
+	for k in ["esheet_" + index, "esheet_type_" + tp]:
 		var t := sheet(String(k), true)
 		if t != null:
 			return {"tex": t, "sheet": true}

@@ -162,7 +162,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 
 ## 画像の差し替え
 
-仲間10種(男女×5種)と魔物11種は、ドット絵のスプライトシート(`assets/sprites/`、`tools/make-sprites.py` が描く)を同梱している。
+仲間10種(男女×5種)と、SRD の全魔物334体+種別の代表15種は、ドット絵のスプライトシート(`assets/sprites/`、`tools/make-sprites.py` と `tools/make-monster-sprites.py` が描く)を同梱している。外見とサイズは `docs/monster-visuals.md`。
 背景、キャラクター、魔物(1枚絵とスプライトシート)、床や壁、アイコン、ロゴ、フォントは、`assets/` に `キー.png` を置くだけで差し替えられる(`scripts/assets.gd`)。
 ゲーム中に F6 で読み込み直す。置き場所、キーの一覧、大きさは [`assets/OVERRIDE.md`](assets/OVERRIDE.md)。見本は `Deploy/assets/samples/`(`tools/make-asset-samples.py` で作る)。AI 画像生成用のプロンプトは [`docs/asset-prompts.md`](../docs/asset-prompts.md)。
 

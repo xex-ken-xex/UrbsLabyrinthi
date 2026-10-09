@@ -156,3 +156,8 @@ A large gray-brown giant rat with a pink nose, small round ears, a long pink tai
 1. 作った PNG を、`assets/` フォルダに置く(実行ファイルと同じフォルダ。詳しくは `godot/assets/OVERRIDE.md`)。
 2. ゲーム中に F6 で、読み込み直す。
 3. 大きさが違う(例: 128×128 のコマ)ときも、横幅÷12 を1コマとして読む。ただし、コマは正方形にすること。
+
+## 同梱の魔物シートについて
+
+SRD の全魔物(334体)と、種別の代表(`esheet_type_<type>`)は、`tools/make-monster-sprites.py` で描いた仮のドット絵を同梱している。
+上のプロンプトで作った絵は、同じ名前(`esheet_<index>.png`)で置けば差し替わる。外見の方針とサイズは `docs/monster-visuals.md` を参照。

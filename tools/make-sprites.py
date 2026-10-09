@@ -42,6 +42,7 @@ class Canvas:
                 self.p(x, y, c)
 
     def line(self, x0, y0, x1, y1, c):
+        x0, y0, x1, y1 = round(x0), round(y0), round(x1), round(y1)
         n = max(abs(x1 - x0), abs(y1 - y0), 1)
         for i in range(n + 1):
             self.p(round(x0 + (x1 - x0) * i / n), round(y0 + (y1 - y0) * i / n), c)
@@ -135,6 +136,15 @@ def headgear_front(c, st, bob, back):
         c.r(hx0, hy0, hx1, hy0, shade(hc, 1.15))
         if st.get("trim"):
             c.r(hx0 - 1, hy0 + 2, hx1 + 1, hy0 + 2, st["trim"])
+    if st.get("muzzle") and not back:
+        mz = st["muzzle"]
+        c.r(13, 8 + bob, 18, 11 + bob, mz); c.p(14, 10 + bob, C("14141c")); c.p(17, 10 + bob, C("14141c"))
+    if st.get("horns"):
+        hc2 = st["horns"]
+        c.r(hx0 - 1, hy0 - 3, hx0, hy0, hc2); c.p(hx0 - 2, hy0 - 4, hc2); c.r(hx1, hy0 - 3, hx1 + 1, hy0, hc2); c.p(hx1 + 2, hy0 - 4, hc2)
+    if st.get("ears"):
+        e2 = st.get("ear_col", skin)
+        c.r(hx0 - 3, hy0 + 2, hx0 - 1, hy0 + 3, e2); c.p(hx0 - 4, hy0 + 1, e2); c.r(hx1 + 1, hy0 + 2, hx1 + 3, hy0 + 3, e2); c.p(hx1 + 4, hy0 + 1, e2)
     # 髪
     hair = st.get("hair")
     if hair and h in ("bare", "hat", "veil"):
@@ -155,7 +165,12 @@ def headgear_front(c, st, bob, back):
             c.r(hx1 + 1, hy0 + 1, hx1 + 2, hy0 + 5, st["ponytail"])
     # 目、覆面、髭
     if not back and h in ("bare", "hat", "veil", "hood"):
-        c.p(14, 7 + bob, C("14141c")); c.p(17, 7 + bob, C("14141c"))
+        ec = st.get("eye", C("14141c"))
+        c.p(14, 7 + bob, ec); c.p(17, 7 + bob, ec)
+        if st.get("tusks"):
+            c.p(13, 10 + bob, st["tusks"]); c.p(18, 10 + bob, st["tusks"]); c.p(13, 11 + bob, st["tusks"]); c.p(18, 11 + bob, st["tusks"])
+        if st.get("fangs"):
+            c.p(14, 10 + bob, C("f0f0f0")); c.p(17, 10 + bob, C("f0f0f0"))
         if st.get("mask"):
             c.r(hx0, 8 + bob, hx1, hy1, st["mask"]); c.r(hx0, 8 + bob, hx1, 8 + bob, shade(st["mask"], 1.25))
         elif st.get("beard"):
@@ -166,10 +181,24 @@ def headgear_front(c, st, bob, back):
         pass
 
 
+def wings_front(c, st, bob):
+    wc = st["wings"]
+    for x0, x1, sg in ((3, 9, -1), (22, 28, 1)):
+        c.r(x0, 8 + bob, x1, 17 + bob, wc)
+        c.r(x0 if sg < 0 else x1 - 3, 17 + bob, x0 + 3 if sg < 0 else x1, 21 + bob, wc)
+        c.r(x0, 8 + bob, x1, 8 + bob, shade(wc, 1.3))
+        c.line(x0, 9 + bob, x0 + 5 if sg < 0 else x1 - 5, 18 + bob, shade(wc, 0.7))
+
+
 def humanoid_front(c, st, sw, bob, back):
     cx = 16
     female = st.get("female")
     tw0, tw1 = (12, 19) if female else (11, 20)
+    tw0 -= st.get("wide", 0); tw1 += st.get("wide", 0)
+    if st.get("wings") and not back:
+        wings_front(c, st, bob)
+    if st.get("tail") and not back:
+        c.line(16, 26, 16, 30, st["tail"]); c.p(15, 30, st["tail"]); c.p(17, 31, st["tail"])
     ty0, ty1 = 12 + bob, 21 + bob
     robe = st.get("robe")
     torso, trim, belt = st["torso"], st.get("trim"), st.get("belt")
@@ -224,6 +253,16 @@ def humanoid_front(c, st, sw, bob, back):
         sc = st["shoulder"]
         for x0 in (9, 20):
             c.r(x0, 12 + bob, x0 + 2, 14 + bob, sc); c.r(x0, 12 + bob, x0 + 2, 12 + bob, shade(sc, 1.3))
+    if st.get("wings") and back:
+        wings_front(c, st, bob)
+    if st.get("tail") and back:
+        c.line(16, 24, 16, 30, st["tail"]); c.p(15, 30, st["tail"]); c.p(17, 31, st["tail"])
+    if st.get("fur"):
+        for yy in range(ty0 + 1, ty1, 3):
+            c.r(tw0, yy, tw1, yy, shade(torso, 0.8))
+    if st.get("bandage"):
+        for yy in range(ty0 + 1, ty1 + 1, 2):
+            c.r(tw0, yy, tw1, yy, st["bandage"])
     # 頭
     headgear_front(c, st, bob, back)
     # 持ち物: 画面の左(その人の右手)と右(左手)。後ろ向きは逆
@@ -253,6 +292,11 @@ def item_draw(c, spec, x, y, back):
 def humanoid_side(c, st, sw, bob):
     """左向き。右向きは、これを反転する"""
     female = st.get("female")
+    if st.get("wings"):
+        wc = st["wings"]
+        c.r(17, 8 + bob, 25, 17 + bob, wc); c.r(21, 17 + bob, 25, 21 + bob, wc); c.r(17, 8 + bob, 25, 8 + bob, shade(wc, 1.3))
+    if st.get("tail"):
+        c.line(19, 24, 25, 25, st["tail"]); c.line(25, 25, 27, 22, st["tail"])
     ty0, ty1 = 12 + bob, 21 + bob
     robe = st.get("robe")
     torso = st["torso"]
@@ -269,8 +313,12 @@ def humanoid_side(c, st, sw, bob):
             c.r(x, 21 + bob, x + 2, 28, shade(st["pants"], dark))
             c.r(x - 1, 26, x + 2, 28, shade(st["boots"], dark))
     # 胴
-    c.r(13, ty0, 19, ty1, torso)
-    c.r(13, ty0, 19, ty0, shade(torso, 1.25)); c.r(19, ty0, 19, ty1, shade(torso, 0.8))
+    wd = st.get("wide", 0)
+    c.r(13 - wd, ty0, 19 + wd, ty1, torso)
+    c.r(13 - wd, ty0, 19 + wd, ty0, shade(torso, 1.25)); c.r(19 + wd, ty0, 19 + wd, ty1, shade(torso, 0.8))
+    if st.get("bandage"):
+        for yy in range(ty0 + 1, ty1 + 1, 2):
+            c.r(13 - wd, yy, 19 + wd, yy, st["bandage"])
     if st.get("belt"):
         c.r(13, ty1 - 2, 19, ty1 - 2, st["belt"])
     if st.get("chest"):
@@ -314,8 +362,17 @@ def humanoid_side(c, st, sw, bob):
             c.r(15, hy0 + 2, 19, hy1 + 6, hair)
     if st.get("ponytail") and h in ("helmet", "bare", "hood"):
         c.r(19, hy0 + 2, 20, hy1 + 4, st["ponytail"]); c.r(19, hy0 + 2, 21, hy0 + 3, st["ponytail"])
+    if st.get("horns"):
+        c.r(14, hy0 - 3, 15, hy0, st["horns"]); c.p(13, hy0 - 4, st["horns"]); c.r(17, hy0 - 2, 18, hy0, st["horns"])
+    if st.get("ears"):
+        e2 = st.get("ear_col", skin)
+        c.r(17, hy0 + 2, 20, hy0 + 3, e2); c.p(21, hy0 + 1, e2)
+    if st.get("tusks"):
+        c.p(hx0, 10 + bob, st["tusks"]); c.p(hx0, 11 + bob, st["tusks"])
+    if st.get("muzzle"):
+        c.r(hx0 - 3, 8 + bob, hx0 + 2, 11 + bob, st["muzzle"]); c.p(hx0 - 3, 9 + bob, C("14141c"))
     if h in ("bare", "hat", "veil", "hood"):
-        c.p(hx0 + 1, 7 + bob, C("14141c"))
+        c.p(hx0 + 1, 7 + bob, st.get("eye", C("14141c")))
         if st.get("mask"):
             c.r(hx0 - 1, 8 + bob, 16, hy1, st["mask"])
         elif st.get("beard"):
@@ -341,7 +398,7 @@ def humanoid_side(c, st, sw, bob):
         item(c, "shortsword", ax + 3 - 2 * sw, 19 + bob)
 
 
-def render_humanoid(st, d, ph):
+def render_humanoid(st, d, ph, ol=True):
     c = Canvas()
     sw = (1, 0, -1)[ph]
     bob = -1 if ph == 1 else 0
@@ -349,7 +406,8 @@ def render_humanoid(st, d, ph):
         humanoid_side(c, st, sw, bob)
     else:
         humanoid_front(c, st, sw, bob, back=(d == "U"))
-    c.outline()
+    if ol:
+        c.outline()
     return c.im.transpose(Image.FLIP_LEFT_RIGHT) if d == "R" else c.im
 
 
