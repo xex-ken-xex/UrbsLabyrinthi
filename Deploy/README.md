@@ -6,6 +6,11 @@ Linux(x86_64)と Windows(x86_64)向け。コードやデータを変えたら、
 エンジン本体(変わらない)と、ゲームの中身 `UrbsLabyrinthi.pck`(変わる)を分けてある。
 **`.pck` は、実行ファイルと同じフォルダに、同じ名前で置く。**
 
+## Release(配布用 ZIP)
+
+`main` にマージされるたびに、GitHub Actions(`.github/workflows/release.yml`)が、この `Deploy/` から `UrbsLabyrinthi-windows.zip` と `UrbsLabyrinthi-linux.zip` を作り、Releases に出す(タグは `v<実行番号>`、最新版の印が付く)。
+手元で作るなら `tools/package-release.sh`(`dist/` に出る)。ZIP の中身は `Deploy/` のコミット済みのビルドなので、コードを変えたら先に `tools/build-deploy.sh` を実行してコミットする。
+
 ## セットアップ(必要なライブラリを入れる)
 
 [`SetupScript/`](SetupScript/README.md) に、Ubuntu 用(`setup-ubuntu.sh`)と Windows 用(`setup-windows.bat`)がある。
