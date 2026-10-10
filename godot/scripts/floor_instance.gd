@@ -198,6 +198,7 @@ func _refresh_tex() -> void:
 		# ばらつき用(_2、_3)。置いた「floor」(1枚)があるときは使わず、その1枚だけで敷く
 		"floor_v": _variants("floor", th),
 		"wall_v": _variants("wall", th),
+		"walltop": _walltop(th),
 		"door": Assets.first(["door_" + th, "door"]),
 		"door_open": Assets.first(["door_open_" + th, "door_open"]),
 		"stairs_up": Assets.texture("icon_stairs_up"),
@@ -216,6 +217,18 @@ func _variants(kind: String, th: String) -> Array:
 		if t != null:
 			out.append(t)
 	return out
+
+## 壁の天面。壁の絵だけを置き換えたときは、同梱の天面と食い違うので使わず、置いた壁の絵で通す
+func _walltop(th: String) -> Texture2D:
+	var user_top := Assets.first(["walltop_" + th, "walltop"], false)
+	if user_top != null:
+		return user_top
+	if Assets.first(["wall_" + th, "wall"], false) != null:
+		return null
+	return Assets.texture("walltop_" + th, true)
+
+func _is_rock(x: int, y: int) -> bool:
+	return map.in_bounds(x, y) and map.tiles[map.idx(x, y)] == FloorMap.ROCK
 
 func _pick(variants: Array, fallback: Texture2D, x: int, y: int) -> Texture2D:
 	if variants.size() <= 1:
@@ -254,7 +267,18 @@ func _draw() -> void:
 			var rect := Rect2(x * C, y * C, C, C)
 			if t == FloorMap.ROCK:
 				if map.wall_adj[i] == 1 and tex["wall"] != null:
-					draw_texture_rect(_pick(tex["wall_v"], tex["wall"], x, y), rect, false, _shade(Color.WHITE, f))
+					var face_side := tex["walltop"] == null or not _is_rock(x, y + 1)    # 南が床なら、壁の正面
+					if face_side:
+						draw_texture_rect(_pick(tex["wall_v"], tex["wall"], x, y), rect, false, _shade(Color.WHITE, f))
+					else:
+						draw_texture_rect(tex["walltop"], rect, false, _shade(Color.WHITE, f))
+						# 床に面した縁に、細い明るい線(天面の角)
+						var rim := _shade(Color(0.7, 0.7, 0.78), f)
+						rim.a = 0.22
+						for dv in FloorMap.DIRS4:
+							if not _is_rock(x + dv.x, y + dv.y) and map.in_bounds(x + dv.x, y + dv.y):
+								var a2 := rect.position + Vector2(C if dv.x > 0 else 0.0, C if dv.y > 0 else 0.0)
+								draw_line(a2, a2 + (Vector2(0, C) if dv.x != 0 else Vector2(C, 0)), rim, 1.0)
 				elif map.wall_adj[i] == 1:
 					draw_rect(rect, _shade(wall, f))
 					# 床に面した縁に明るい線を引いて、壁の輪郭を出す(差し替え画像のときは引かない)
@@ -288,6 +312,10 @@ func _draw() -> void:
 				draw_texture_rect(ftex, rect, false, _shade(Color.WHITE, f))
 			else:
 				draw_rect(rect, _shade(base, f))
+			# 壁の正面の真下の床に、影を落とす(壁が立って見える)
+			if tex["walltop"] != null and map.wall_adj[map.idx(x, y - 1)] == 1 and _is_rock(x, y - 1):
+				for k in 4:
+					draw_rect(Rect2(rect.position.x, rect.position.y + k * 3.0, C, 3.0), Color(0, 0, 0, _shade(Color.WHITE, f).r * (0.42 - k * 0.1)))
 	# 階段
 	_draw_stairs(up_cell, true, glow)
 	if not arena:

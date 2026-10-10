@@ -371,6 +371,49 @@ def generic(kind, v):
     return None
 
 
+
+# ---------- 壁の見せ方 ----------
+# 真上から見た壁は、床と同じ平らな絵になって、壁に見えない。そこで、壁を2枚に分ける。
+#   wall_<舞台>     … 壁の「正面」。南側が床のマスに使う。上端に明るい縁(天端)、下端に暗い接地線を焼き込み、高さを出す
+#   walltop_<舞台>  … 壁の「天面」。それ以外の岩のマスに使う。床よりずっと暗い、平らな石の上面
+LIP = {"fuyou": C("6a9a50"), "sabi": C("8a6a48"), "kagami": C("a8d8e8"), "hone": C("e0d8c0"), "soko": C("a8a0f0"), "generic": C("9a9aa8")}
+CAP = {"fuyou": C("232a22"), "sabi": C("261c16"), "kagami": C("0f1c24"), "hone": C("1e1a24"), "soko": C("141428"), "generic": C("26262e")}
+
+
+def face_finish(im, name):
+    t = T(); t.im = im.copy(); t.px = t.im.load()
+    lip = LIP[name]
+    for x in range(N):
+        t.px[x, 0] = mix(t.px[x, 0], lip, 0.85)
+        t.px[x, 1] = mix(t.px[x, 1], lip, 0.5)
+        t.px[x, 2] = mix(t.px[x, 2], lip, 0.2)
+        t.px[x, 3] = sh(t.px[x, 3], 1.15)
+    for i, k in enumerate((0.8, 0.66, 0.5, 0.36, 0.22)):          # 下へ向かって暗く(接地)
+        y = N - 5 + i
+        for x in range(N):
+            t.px[x, y] = sh(t.px[x, y], k)
+    return t.im
+
+
+def wall_top(name, v=0):
+    cap = CAP[name]
+    t = T()
+    t.fill(lambda x, y: sh(cap, 0.85 + fbm(x, y, 300 + v) * 0.5))
+    for row in range(4):                                          # 天面の石積み(段ごとに半分ずらす)
+        for col in range(2):
+            x0, y0 = col * 16 + (8 if row % 2 else 0), row * 8
+            for k in range(16):
+                t.p(x0 + k, y0, sh(cap, 0.45))                   # 目地(暗)
+                t.p(x0 + k, y0 + 1, sh(cap, 1.55))               # 面の上の縁(明)
+            for k in range(8):
+                t.p(x0, y0 + k, sh(cap, 0.45))
+            t.p(x0 + 1, y0 + 2, sh(cap, 1.3))
+    for i in range(10):
+        x, y = int(hsh(i, 1, 310 + v) * N), int(hsh(i, 2, 310 + v) * N)
+        t.p(x, y, sh(cap, 0.7))
+    return t.im
+
+
 # ---------- 扉と記号 ----------
 def door(theme_name, open_):
     """縦長の板(東西に抜ける扉の向き)。南北に抜ける扉は、ゲームが 90 度回して使う"""
@@ -460,7 +503,8 @@ def main():
             fn("floor", v).save(os.path.join(OUT, f"floor_{name}{suffix}.png")); n += 1
         fn("corr", 0).save(os.path.join(OUT, f"corr_{name}.png")); n += 1
         for v, suffix in enumerate(("", "_2")):
-            fn("wall", v).save(os.path.join(OUT, f"wall_{name}{suffix}.png")); n += 1
+            face_finish(fn("wall", v), name).save(os.path.join(OUT, f"wall_{name}{suffix}.png")); n += 1
+        wall_top(name).save(os.path.join(OUT, f"walltop_{name}.png")); n += 1
         door(name, False).save(os.path.join(OUT, f"door_{name}.png"))
         door(name, True).save(os.path.join(OUT, f"door_open_{name}.png")); n += 2
     icon_stairs(True).save(os.path.join(OUT, "icon_stairs_up.png"))
