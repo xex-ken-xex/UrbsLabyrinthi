@@ -190,20 +190,58 @@ func _refresh_tex() -> void:
 	if _tex_ver == Assets.version:
 		return
 	_tex_ver = Assets.version
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	var th := String(map.data["meta"].get("theme", ""))
 	tex = {
 		"floor": Assets.first(["floor_" + th, "floor"]),
 		"wall": Assets.first(["wall_" + th, "wall"]),
 		"corr": Assets.first(["corr_" + th, "corr", "floor_" + th, "floor"]),
+		# ばらつき用(_2、_3)。置いた「floor」(1枚)があるときは使わず、その1枚だけで敷く
+		"floor_v": _variants("floor", th),
+		"wall_v": _variants("wall", th),
+		"walltop": _walltop(th),
+		"door": Assets.first(["door_" + th, "door"]),
+		"door_open": Assets.first(["door_open_" + th, "door_open"]),
 		"stairs_up": Assets.texture("icon_stairs_up"),
 		"stairs_down": Assets.texture("icon_stairs_down"),
 		"chest": Assets.texture("icon_chest"),
 		"trap": Assets.texture("icon_trap"),
 	}
 
+## 「floor_舞台」「floor_舞台_2」「floor_舞台_3」…を集める。同梱の絵が小さい(ドット絵)ときは、ぼかさず拡大する
+func _variants(kind: String, th: String) -> Array:
+	var out: Array = []
+	if Assets.texture(kind, false) != null and Assets.texture("%s_%s" % [kind, th], false) == null:
+		return out
+	for suffix in ["", "_2", "_3", "_4"]:
+		var t := Assets.texture("%s_%s%s" % [kind, th, suffix], true)
+		if t != null:
+			out.append(t)
+	return out
+
+## 壁の天面。壁の絵だけを置き換えたときは、同梱の天面と食い違うので使わず、置いた壁の絵で通す
+func _walltop(th: String) -> Texture2D:
+	var user_top := Assets.first(["walltop_" + th, "walltop"], false)
+	if user_top != null:
+		return user_top
+	if Assets.first(["wall_" + th, "wall"], false) != null:
+		return null
+	return Assets.texture("walltop_" + th, true)
+
+func _is_rock(x: int, y: int) -> bool:
+	return map.in_bounds(x, y) and map.tiles[map.idx(x, y)] == FloorMap.ROCK
+
+func _pick(variants: Array, fallback: Texture2D, x: int, y: int) -> Texture2D:
+	if variants.size() <= 1:
+		return fallback
+	# 1枚目を多めにして、ばらつきを控えめにする
+	var h := _hash(x, y)
+	return variants[0] if h < 0.7 else variants[1 + int((h - 0.7) / 0.3 * (variants.size() - 1)) % (variants.size() - 1)]
+
 func _draw() -> void:
 	_refresh_tex()
+	# 小さな絵(ドット絵)は、ぼかさずに拡大する。大きな絵は、縮めたときにざらつかないようにぼかす
+	var small: bool = tex["floor"] != null and tex["floor"].get_width() <= 64
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if small else CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	var C := float(Balance.CELL)
 	var rock: Color = col.get("rock", Color("111111"))
 	var floor_a: Color = col.get("floor", Color("444444"))
@@ -229,7 +267,18 @@ func _draw() -> void:
 			var rect := Rect2(x * C, y * C, C, C)
 			if t == FloorMap.ROCK:
 				if map.wall_adj[i] == 1 and tex["wall"] != null:
-					draw_texture_rect(tex["wall"], rect, false, _shade(Color.WHITE, f))
+					var face_side := tex["walltop"] == null or not _is_rock(x, y + 1)    # 南が床なら、壁の正面
+					if face_side:
+						draw_texture_rect(_pick(tex["wall_v"], tex["wall"], x, y), rect, false, _shade(Color.WHITE, f))
+					else:
+						draw_texture_rect(tex["walltop"], rect, false, _shade(Color.WHITE, f))
+						# 床に面した縁に、細い明るい線(天面の角)
+						var rim := _shade(Color(0.7, 0.7, 0.78), f)
+						rim.a = 0.22
+						for dv in FloorMap.DIRS4:
+							if not _is_rock(x + dv.x, y + dv.y) and map.in_bounds(x + dv.x, y + dv.y):
+								var a2 := rect.position + Vector2(C if dv.x > 0 else 0.0, C if dv.y > 0 else 0.0)
+								draw_line(a2, a2 + (Vector2(0, C) if dv.x != 0 else Vector2(C, 0)), rim, 1.0)
 				elif map.wall_adj[i] == 1:
 					draw_rect(rect, _shade(wall, f))
 					# 床に面した縁に明るい線を引いて、壁の輪郭を出す(差し替え画像のときは引かない)
@@ -258,11 +307,15 @@ func _draw() -> void:
 					draw_rect(rect, _shade(corr, f))
 				_draw_door(d, rect, f)
 				continue
-			var ftex: Texture2D = tex["corr"] if t == FloorMap.CORR else tex["floor"]
+			var ftex: Texture2D = tex["corr"] if t == FloorMap.CORR else _pick(tex["floor_v"], tex["floor"], x, y)
 			if ftex != null:
 				draw_texture_rect(ftex, rect, false, _shade(Color.WHITE, f))
 			else:
 				draw_rect(rect, _shade(base, f))
+			# 壁の正面の真下の床に、影を落とす(壁が立って見える)
+			if tex["walltop"] != null and map.wall_adj[map.idx(x, y - 1)] == 1 and _is_rock(x, y - 1):
+				for k in 4:
+					draw_rect(Rect2(rect.position.x, rect.position.y + k * 3.0, C, 3.0), Color(0, 0, 0, _shade(Color.WHITE, f).r * (0.42 - k * 0.1)))
 	# 階段
 	_draw_stairs(up_cell, true, glow)
 	if not arena:
@@ -304,6 +357,22 @@ func _shade(c: Color, f: float) -> Color:
 
 func _draw_door(d: Dictionary, rect: Rect2, f: float) -> void:
 	var tall: bool = d["axis"] == "ew"       # 東西に抜ける扉は、縦長の板
+	var dt: Texture2D = tex["door_open"] if d["open"] else tex["door"]
+	if dt != null:
+		var tint := _shade(Color.WHITE, f)
+		if d["type"] == "locked" and not d["unlocked"]:
+			tint = _shade(Color(1.0, 0.55, 0.5), f)
+		elif d["type"] == "secret":
+			tint = _shade(Color(0.6, 0.9, 1.0), f)
+		if tall:
+			draw_texture_rect(dt, rect, false, tint)
+		else:                                  # 南北に抜ける扉は、90度回す
+			draw_set_transform(rect.get_center(), PI / 2.0, Vector2.ONE)
+			draw_texture_rect(dt, Rect2(-rect.size / 2.0, rect.size), false, tint)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if d["type"] == "locked" and not d["unlocked"] and not d["open"]:
+			draw_circle(rect.get_center(), 3.0, _shade(Color("e0c070"), f))
+		return
 	var c := Color("8a5a2b")
 	if d["type"] == "locked" and not d["unlocked"]:
 		c = Color("a8362b")

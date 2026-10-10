@@ -30,9 +30,10 @@ static func clear() -> void:
 	version += 1
 
 ## キーに合う画像を探す。無ければ null
-static func texture(key: String) -> Texture2D:
-	if _cache.has(key):
-		return _cache[key]
+static func texture(key: String, builtin: bool = true) -> Texture2D:
+	var ck := "%s|%s" % [key, builtin]
+	if _cache.has(ck):
+		return _cache[ck]
 	var tex: Texture2D = null
 	for d in search_dirs():
 		for e in EXTS:
@@ -52,15 +53,27 @@ static func texture(key: String) -> Texture2D:
 			if ResourceLoader.exists(rp):
 				tex = load(rp) as Texture2D
 				break
-	_cache[key] = tex
+	if tex == null and builtin:
+		for e in EXTS:                             # 同梱のマップチップ(床、壁、扉、記号)
+			var tp := "res://assets/tiles/%s.%s" % [key, e]
+			if ResourceLoader.exists(tp):
+				tex = load(tp) as Texture2D
+				break
+	_cache[ck] = tex
 	return tex
 
 ## 候補のキーを順に試す
-static func first(keys: Array) -> Texture2D:
+## 置いた画像を先に探し、無ければ同梱の絵を探す(置いた「floor」が、同梱の「floor_fuyou」より優先)
+static func first(keys: Array, builtin: bool = true) -> Texture2D:
 	for k in keys:
-		var t := texture(String(k))
+		var t := texture(String(k), false)
 		if t != null:
 			return t
+	if builtin:
+		for k in keys:
+			var t := texture(String(k), true)
+			if t != null:
+				return t
 	return null
 
 static func background(style: String, asset_key: String = "") -> Texture2D:

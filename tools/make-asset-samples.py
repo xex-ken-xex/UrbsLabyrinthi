@@ -75,6 +75,11 @@ for style in ["town", "smith", "general", "magic", "temple", "inn", "pleasure"]:
         shutil.copy(f, os.path.join(OUT, f"bg_{style}.png"))
 # 同梱のスプライトシート(tools/make-sprites.py が描いたもの)も、形式の見本として添える
 SAMPLE_MONSTERS = {"bandit", "bat", "giant-bat", "giant-rat", "giant-spider", "goblin", "gray-ooze", "green-slime", "rat", "skeleton", "zombie"}
+tiles_dir = os.path.join(ROOT, "godot", "assets", "tiles")
+if os.path.isdir(tiles_dir):
+    for f in sorted(os.listdir(tiles_dir)):
+        if f.endswith(".png") and (f.endswith("_fuyou.png") or f.startswith("icon_")):
+            shutil.copy(os.path.join(tiles_dir, f), os.path.join(OUT, f))
 spr = os.path.join(ROOT, "godot", "assets", "sprites")
 if os.path.isdir(spr):
     for f in sorted(os.listdir(spr)):

@@ -152,7 +152,7 @@ func _test_assets() -> void:
 	f.store_string("これは画像ではない")
 	f.close()
 	Assets.clear()
-	check(Assets.first(["wall_fuyou"]) == null, "壊れた画像は無視される")
+	check(Assets.first(["wall_fuyou"], false) == null, "壊れた画像は無視される")
 	var made := _make_floor(4, 1)
 	var fl: FloorInstance = made[0]
 	var heroes: Array = made[1]
@@ -208,6 +208,12 @@ func _test_sheets(dir: String) -> void:
 		if not Assets.enemy_visual(String(m["i"]), String(m["t"]))["sheet"]:
 			uncovered.append(m["i"])
 	check(uncovered.is_empty(), "SRDの全魔物(%d体)が、スプライトシートで描ける (未対応: %s)" % [encd["monsters"].size(), str(uncovered)])
+	var tiles_ok := true
+	for th in ["fuyou", "sabi", "kagami", "hone", "soko", "generic"]:
+		for k in ["floor_", "corr_", "wall_", "door_", "door_open_"]:
+			if Assets.first([k + th]) == null:
+				tiles_ok = false
+	check(tiles_ok and Assets.first(["icon_chest"]) != null and Assets.first(["floor_fuyou_2"]) != null, "同梱のマップチップ(全舞台の床、通路、壁、扉)が読める")
 	var img := Image.create(192, 16, false, Image.FORMAT_RGBA8)
 	img.fill(Color.RED)
 	img.save_png(dir + "/sheet_M_WARRIOR.png")

@@ -170,3 +170,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 
 魔物データは SRD 5.1(CC-BY-4.0)から縮めたもの。帰属表示は F1 のクレジット画面にある(原文は `docs/srd-data-sources.md` §3)。
 フォントは Zen Kaku Gothic New(SIL OFL 1.1、`assets/fonts/OFL.txt`)。
+
+## マップチップ
+
+床、通路、壁、扉、階段、宝箱、罠は、舞台ごとのドット絵(32×32、つなぎ目なし)を同梱している(`assets/tiles/`、`tools/make-tiles.py` が描く)。床と壁は変種を混ぜて敷く。置いた画像が優先される。作り方のプロンプトは `docs/tile-prompts.md`。
