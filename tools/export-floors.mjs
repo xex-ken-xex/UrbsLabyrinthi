@@ -13,6 +13,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.resolve(process.argv[2] || path.join(root, 'godot/data'));
 const seed = process.argv[3] || 'vergha';
 const NIGHTS = +(process.argv[4] || 7), FLOORS = +(process.argv[5] || 10);
+/* 層の広さ。上の層ほど、潜る冒険者が多く、広い(docs/dungeon-scale.md)。 */
+const FLOOR_SIZE = floor => (floor <= 2 ? 'XXL' : floor <= 4 ? 'XL' : floor <= 6 ? 'L' : 'M');
 
 const html = fs.readFileSync(path.join(root, 'docs/urbs-labyrinthi.html'), 'utf8');
 const lines = html.split('\n');
@@ -28,7 +30,7 @@ for (let night = 0; night < NIGHTS; night++) {
   for (let party = 1; party <= 4; party++) for (let floor = 1; floor <= FLOORS; floor++) {
     const theme = Core.themeForFloor(floor);
     const th = Core.THEMES[theme];
-    const D = Core.generate({ seed, theme, floor, night, size: 'M', level: th.level, party, edition: '2014' }, mons);
+    const D = Core.generate({ seed, theme, floor, night, size: FLOOR_SIZE(floor), level: th.level, party, edition: '2014' }, mons);
     const j = Core.exportJSON(D);
     j.style = { col: th.col, short: th.short, env: th.env, see: th.see, hear: th.hear, smell: th.smell, level: th.level, water: !!th.water };
     j.meta.floor_label = Core.floorLabel(th, floor);

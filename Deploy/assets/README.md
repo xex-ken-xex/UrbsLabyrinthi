@@ -81,7 +81,6 @@
 | `door_<舞台>` / `door` | 閉じた扉(縦長の板。南北の扉は、90度回して描く。透明な背景) |
 | `door_open_<舞台>` / `door_open` | 開いた扉(左端に寄せた細い板。透明な背景) |
 | `icon_stairs_up` `icon_stairs_down` | 階段(透明な背景) |
-| `icon_chest` | 宝箱 |
 | `icon_trap` | 気づいた罠 |
 
 ### フォント
@@ -97,3 +96,14 @@
 
 
 同梱のマップチップ(32×32、つなぎ目なしのドット絵)は、`godot/assets/tiles/` にある。全舞台の床・通路・壁・扉と、階段・宝箱・罠。プロンプトは `docs/tile-prompts.md`。
+
+
+## アイテムの絵(燐晶、自生物、素材、遺品、消耗品)
+
+| キー | 内容 | 大きさ |
+|---|---|---|
+| `items_sheet` | 全アイテムの絵を並べたシート | 16列。1マス 32×32(横幅÷16 が1マスの大きさ。高さは行数ぶん) |
+| `item_<id>` | 1つだけ差し替える(例: `item_kuro_take`、`item_crystal_high_m`)。シートより優先 | 1枚。正方形、透明な背景 |
+
+マスの並び(id と番号)は `godot/data/item-icons.json`、一覧と絵の指示は `docs/item-prompts.md`。同梱の絵は `godot/assets/items/items_sheet.png`。
+燐晶の絵は `crystal_<純度>_<大きさ>`(純度: low mid high pure unk、大きさ: s m l)。

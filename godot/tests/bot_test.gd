@@ -34,7 +34,7 @@ func _run() -> void:
 			if fl_no > 1:
 				main.enter_floor(fl_no, "up")
 			var res: Array = await _clear_floor(fl_no)
-			line += "  F%d[%s %ds kills%d Lv%d hp%d%%]" % [fl_no, res[0], res[1], res[2], main.gs.party[0].level, res[3]]
+			line += "  F%d[%s %ds kills%d Lv%d hp%d%% 袋%d銀]" % [fl_no, res[0], res[1], res[2], main.gs.party[0].level, res[3], main.bag_value()]
 			if res[0] != "clear":
 				wiped = res[0] == "wipe"
 				break
@@ -57,9 +57,11 @@ func _clear_floor(fl_no: int) -> Array:
 	var frames := 0
 	var flow := PackedInt32Array()
 	var target: Enemy = null
-	while frames < 7200:
+	while frames < 36000:
 		frames += 1
 		await physics_frame
+		if frames % 3600 == 0 or (frames % 120 == 0 and frames <= 1200 and OS.get_cmdline_user_args().has("verbose")):
+			print("  ...%d秒 敵 %d 袋 %d銀 (実時間 %d ms)" % [frames / 60, fl.enemies.size(), main.bag_value(), Time.get_ticks_msec()])
 		var lead: Hero = main.leader()
 		if main.phase != "dungeon":
 			return ["wipe", frames / 60, total0 - fl.enemies.size(), _hp_pct()]

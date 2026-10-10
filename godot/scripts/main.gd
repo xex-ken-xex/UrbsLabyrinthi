@@ -15,7 +15,8 @@ var screen: Control                # 開いている画面(タイトル、作成
 var inventory: InventoryScreen
 var current: FloorInstance
 var floors := {}                   # 層の番号 → FloorInstance(この日の控え)
-var bag_silver := 0
+var bag_silver := 0                # 燐晶以外で、査定が要るもの(いまは使わない。テストと将来の拡張用)
+var bag_crystal := {}              # 純度 → kg。持ち帰るとき、査定と燐晶税がかかる
 var phase := "title"               # title / make / town / dungeon / menu / overlay
 var overlay_kind := ""
 var trail: Array = []
@@ -248,7 +249,7 @@ func start_arena() -> void:
 	_trace("start_arena")
 	_set_screen(null)
 	_clear_dungeon()
-	bag_silver = 0
+	_clear_bag()
 	light_t = 0.0
 	active = 0
 	arena = Arena.new()
@@ -268,6 +269,7 @@ func start_arena() -> void:
 	current.leader = leader()
 	current.message.connect(log_msg)
 	current.enemy_killed.connect(_on_enemy_killed)
+	current.ground_picked.connect(_on_ground_picked)
 	var center := current.map.center_of(current.up_cell)
 	for i in heroes.size():
 		var h: Hero = heroes[i]
@@ -298,7 +300,7 @@ func floor_path(n: int, night: int) -> String:
 func start_day() -> void:
 	_trace("start_day 日%d" % gs.day)
 	_clear_dungeon()
-	bag_silver = 0
+	_clear_bag()
 	light_t = 0.0
 	active = 0
 	for c in gs.party:
@@ -336,6 +338,7 @@ func enter_floor(n: int, arrive: String) -> void:
 			return
 		fl.message.connect(log_msg)
 		fl.enemy_killed.connect(_on_enemy_killed)
+		fl.ground_picked.connect(_on_ground_picked)
 		floors[n] = fl
 	if current != null and current.get_parent() == self:
 		remove_child(current)
@@ -499,8 +502,8 @@ func _check_wipe() -> void:
 		arena.on_wipe()
 		log_msg("全滅。記録して、全回復した", Color("ff9a8a"))
 		return
-	var lost := bag_silver
-	bag_silver = 0
+	var lost := bag_value()
+	_clear_bag()
 	phase = "overlay"
 	overlay_kind = "wipe"
 	hud.hint = ""
@@ -650,18 +653,6 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 func _near(cell: Vector2i, cells: float) -> bool:
 	return leader().position.distance_to(current.map.center_of(cell)) <= cells * Balance.CELL
 
-func _nearest_chest() -> Variant:
-	var best: Variant = null
-	var bd := 44.0
-	for c in current.chests:
-		if c["taken"]:
-			continue
-		var dd := leader().position.distance_to(current.map.center_of(c["cell"]))
-		if dd <= bd:
-			bd = dd
-			best = c
-	return best
-
 func _nearest_locked_door() -> Variant:
 	for d in current.map.doors_near(leader().position, 46.0):
 		if d["type"] == "locked" and not d["unlocked"]:
@@ -678,9 +669,7 @@ func _nearest_trap_to_disarm() -> Variant:
 
 func _update_hint() -> void:
 	var h := ""
-	if _nearest_chest() != null:
-		h = "E: 宝を回収"
-	elif _nearest_locked_door() != null:
+	if _nearest_locked_door() != null:
 		h = "E: 解錠を試みる"
 	elif _nearest_trap_to_disarm() != null:
 		h = "E: 罠を解除する"
@@ -694,10 +683,6 @@ func _update_hint() -> void:
 
 func interact() -> void:
 	if phase != "dungeon" or leader().down:
-		return
-	var chest: Variant = _nearest_chest()
-	if chest != null:
-		_open_chest(chest)
 		return
 	var door: Variant = _nearest_locked_door()
 	if door != null:
@@ -726,43 +711,30 @@ func interact() -> void:
 		else:
 			enter_floor(current.floor_no - 1, "down")
 
-func _open_chest(c: Dictionary) -> void:
-	c["taken"] = true
-	current.queue_redraw()
-	var items: Array = c["items"]
-	bag_silver += int(c["silver"])
-	if int(c["silver"]) > 0:
-		log_msg("燐晶を回収: 約%d銀貨相当(税は持ち帰ったときに引かれる)" % int(c["silver"]), Color("f1d98a"))
-	for i in range(1, items.size()):
-		var s := String(items[i])
-		if s.contains("治療薬"):
-			gs.add_item("potion")
-			log_msg("拾った: 治療薬", Color("d8e6ff"))
-		elif s.contains("灯具"):
-			gs.add_item("lamp_oil")
-			log_msg("拾った: 燐晶の灯油", Color("d8e6ff"))
-		else:
-			var v := 40 + current.floor_no * 25 + Dice.rng.randi_range(0, 30)
-			bag_silver += v
-			log_msg("拾った: %s(約%d銀貨相当)" % [s.get_slice("(", 0).get_slice("（", 0), v], Color("d8e6ff"))
-	# 深い層ほど、装備が出やすい
-	if Dice.rng.randf() < 0.22:
-		var id := _roll_gear(current.floor_no)
-		if id != "":
-			gs.add_item(id)
-			log_msg("装備を見つけた: %s" % ItemDB.item_name(id), Color("ffe9a8"))
+## 落ちているものを拾った。燐晶は袋へ(税は持ち帰るときに)、自生物や遺品は持ち物へ(税なし)
+func _on_ground_picked(e: Dictionary, h: Hero) -> void:
+	if String(e["kind"]) == "crystal":
+		var pid := String(e["purity"])
+		var kg := float(e["kg"])
+		bag_crystal[pid] = float(bag_crystal.get(pid, 0.0)) + kg
+		h.game_floor.spawn_text(e["pos"] + Vector2(0, -14), "%s %.2fkg" % [Crystal.jp(pid), kg], Crystal.COLORS.get(pid, Color.WHITE))
+		return
+	var id := String(e["id"])
+	var qty := int(e.get("qty", 1))
+	gs.add_item(id, qty)
+	var it := ItemDB.get_item(id)
+	var rare := int(it.get("price", 0)) >= 40 or String(it.get("kind", "")) in ["weapon", "armor", "acc"]
+	h.game_floor.spawn_text(e["pos"] + Vector2(0, -14), "%s%s" % [ItemDB.item_name(id), "" if qty == 1 else " ×%d" % qty], Color("d8f0d8") if not rare else Color("ffe9a8"))
+	if rare:
+		log_msg("拾った: %s" % ItemDB.item_name(id), Color("ffe9a8"))
 
-func _roll_gear(floor_no: int) -> String:
-	var cap := 120 + floor_no * 130
-	var pool: Array = []
-	for id in ItemDB.ITEMS:
-		var it: Dictionary = ItemDB.ITEMS[id]
-		var k := String(it["kind"])
-		if (k == "weapon" or k == "armor" or k == "acc") and int(it["price"]) <= cap:
-			pool.append(id)
-	if pool.is_empty():
-		return ""
-	return String(pool[Dice.rng.randi_range(0, pool.size() - 1)])
+func _clear_bag() -> void:
+	bag_silver = 0
+	bag_crystal = {}
+
+## 袋の中身の見積もり(銀貨)。税を引く前
+func bag_value() -> int:
+	return bag_silver + Crystal.value_of(bag_crystal)
 
 func _pick_lock(d: Dictionary) -> void:
 	if _pick_cd > 0.0:
@@ -891,9 +863,19 @@ func use_special(id: String, _c: Character) -> bool:
 		return false
 	match String(ItemDB.ITEMS[id]["use"]):
 		"light":
-			light_t = 180.0
+			light_t = maxf(light_t, float(ItemDB.ITEMS[id].get("t", 180.0)))
 			_refresh_view()
 			return true
+		"buff":
+			var it: Dictionary = ItemDB.ITEMS[id]
+			for h in heroes:
+				if h.ch == _c:
+					var v := float(it["v"])
+					if String(it["buff"]) == "regen":
+						v = h.ch.max_hp() * v / float(it["t"])      # 時間をかけて、最大HPの v 割
+					h.buffs[String(it["buff"])] = {"t": float(it["t"]), "v": v}
+					return true
+			return false
 		"return":
 			pending_return = true
 			return true
@@ -903,7 +885,8 @@ func use_special(id: String, _c: Character) -> bool:
 
 func _on_enemy_killed(en: Enemy) -> void:
 	if arena != null:
-		return          # 闘技場では経験点が入らない
+		return          # 闘技場では、経験点も落とし物もない
+	en.game_floor.ground.drop_from_enemy(en)
 	var alive: Array = []
 	for h in heroes:
 		if not h.down:
@@ -918,16 +901,24 @@ func _on_enemy_killed(en: Enemy) -> void:
 
 func return_to_surface() -> void:
 	_trace("return_to_surface 第%d層から" % (current.floor_no if current != null else 0))
-	var gross := bag_silver
+	var gross := bag_value()
 	var tax := int(round(gross * Balance.TAX_RATE))
 	var net := gross - tax
 	gs.bank_silver += net
-	bag_silver = 0
+	var detail: Array = []
+	for pid in Crystal.ORDER + ["unk"]:
+		if bag_crystal.has(pid) and float(bag_crystal[pid]) > 0.0:
+			detail.append("%s %.2fkg × %d銀" % [Crystal.jp(pid), float(bag_crystal[pid]), Crystal.price(pid)])
+	_clear_bag()
 	gs.day += 1
-	var lines: Array = [
+	var lines: Array = []
+	if not detail.is_empty():
+		lines.append("査定:  " + "   ".join(detail))
+	lines += [
 		"持ち帰った燐晶(査定前の見積もり)  %d銀貨" % gross,
 		"燐晶税(3割)  −%d銀貨" % tax,
 		"預け金に加えた額  +%d銀貨   →   預け金 %d銀貨" % [net, gs.bank_silver],
+		"茸や素材など、迷宮の自生物は、持ち物のまま(燐晶ではないので、税はかからない)",
 	]
 	var downed: Array = []
 	for c in gs.party:

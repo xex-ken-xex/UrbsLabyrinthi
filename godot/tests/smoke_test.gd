@@ -21,6 +21,7 @@ func _run() -> void:
 	_test_state()
 	await _test_assets()
 	await _test_floors()
+	await _test_ground()
 	await _test_contact()
 	await _test_game()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
@@ -213,7 +214,7 @@ func _test_sheets(dir: String) -> void:
 		for k in ["floor_", "corr_", "wall_", "door_", "door_open_"]:
 			if Assets.first([k + th]) == null:
 				tiles_ok = false
-	check(tiles_ok and Assets.first(["icon_chest"]) != null and Assets.first(["floor_fuyou_2"]) != null, "同梱のマップチップ(全舞台の床、通路、壁、扉)が読める")
+	check(tiles_ok and Assets.first(["icon_stairs_up"]) != null and Assets.first(["floor_fuyou_2"]) != null, "同梱のマップチップ(全舞台の床、通路、壁、扉)が読める")
 	var img := Image.create(192, 16, false, Image.FORMAT_RGBA8)
 	img.fill(Color.RED)
 	img.save_png(dir + "/sheet_M_WARRIOR.png")
@@ -238,6 +239,7 @@ func _test_floors() -> void:
 	var bad := 0
 	var enemies := 0
 	var unreachable := 0
+	var ground_n := 0
 	var count := 0
 	for party in range(1, 5):
 		for night in Balance.NIGHTS:
@@ -252,7 +254,7 @@ func _test_floors() -> void:
 				for d in m.doors:
 					d["unlocked"] = true
 					d["found"] = true
-				var flow := m.compute_flow(inst.up_cell.x, inst.up_cell.y, 400)
+				var flow := m.compute_flow(inst.up_cell.x, inst.up_cell.y, 2000)
 				if flow[m.idx(inst.down_cell.x, inst.down_cell.y)] < 0:
 					unreachable += 1
 				for en in inst.enemies:
@@ -261,14 +263,111 @@ func _test_floors() -> void:
 						unreachable += 1
 					if en.dmg <= 0.0 or en.hp <= 0.0:
 						bad += 1
-				for c in inst.chests:
-					if flow[m.idx(c["cell"].x, c["cell"].y)] < 0:
+				for g in inst.ground.entries:
+					var gc := m.cell_of(g["pos"])
+					if flow[m.idx(gc.x, gc.y)] < 0:
 						unreachable += 1
+					ground_n += 1
 				inst.free()
 	check(bad == 0 and count == 280, "全%d層が読める (不良 %d)" % [count, bad])
-	check(unreachable == 0, "階段・敵・宝箱へ着ける (到達不能 %d)" % unreachable)
+	check(unreachable == 0, "階段・敵・落ちている燐晶や自生物へ着ける (到達不能 %d)" % unreachable)
+	print("  落ちているもの: %d" % ground_n)
 	print("  集計: 敵 %d" % enemies)
 	await process_frame
+
+
+# ---------- 落ちているもの(光る燐晶、自生物、遺体、落とし物) ----------
+
+func _test_ground() -> void:
+	print("[ground]")
+	check(Crystal.value_of({"mid": 2.0, "low": 1.0}) == 130 and Crystal.price("unk") == 200 and Crystal.jp("pure") == "極", "燐晶の見積もり: 並2kg + 低1kg = 130銀貨")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var cnt := {}
+	for i in 2000:
+		var p := Crystal.roll("mid", rng)
+		cnt[p] = int(cnt.get(p, 0)) + 1
+	check(cnt.size() == 4 and int(cnt["mid"]) > int(cnt["high"]) and int(cnt["high"]) > int(cnt["pure"]) and Crystal.roll("unk", rng).length() > 0, "純度は、基本が最も多く、高いほど稀 %s" % str(cnt))
+	var forage_ok := true
+	for id in ForageData.ITEMS:
+		if not ItemIcons.has_icon(id) or not bool(ForageData.ITEMS[id].get("free", false)):
+			forage_ok = false
+	for row_key in ForageData.SPOTS:
+		for r in ForageData.SPOTS[row_key]:
+			if not ForageData.ITEMS.has(String(r[0])):
+				forage_ok = false
+	check(forage_ok and ForageData.ITEMS.size() >= 40, "自生物・素材(%d種)に絵があり、出現表の品物も存在する(税なしの印つき)" % ForageData.ITEMS.size())
+	var icons_ok := true
+	for p in ForageData.PURITIES:
+		for sz in ["s", "m", "l"]:
+			if not ItemIcons.has_icon("crystal_%s_%s" % [p[0], sz]):
+				icons_ok = false
+	for id in ["potion", "hi_potion", "ether", "revive_charm", "lamp_oil", "return_scroll", "corpse"]:
+		if not ItemIcons.has_icon(id):
+			icons_ok = false
+	check(icons_ok and ItemIcons.texture("crystal_high_m") != null and ItemIcons.texture("no-such-item") != null, "燐晶(5純度×3サイズ)と既存の消耗品の絵がある。無い品物は汎用の絵")
+	var made := _make_floor(4, 1)
+	var fl: FloorInstance = made[0]
+	var heroes: Array = made[1]
+	_clear_enemies(fl)
+	var got: Array = []
+	fl.ground_picked.connect(func(e, _h): got.append(e))
+	var n0 := fl.ground.entries.size()
+	var hp: Vector2 = heroes[0].position
+	fl.ground.add_crystal(hp + Vector2(26, 0), "high", 0.5)
+	fl.ground.add_item(hp + Vector2(-26, 0), "kuro_take", 2)
+	await _step(80)
+	var kinds: Array = []
+	for e in got:
+		kinds.append(String(e["kind"]))
+	check(kinds.has("crystal") and kinds.has("item"), "近づくと吸い寄せられて拾える (%s)" % str(kinds))
+	var before := fl.ground.entries.size()
+	fl.ground.add_corpse(hp + Vector2(12, 12))
+	await _step(80)
+	check(fl.ground.entries.size() > before - 0 and not _has_kind(fl, "corpse") or _has_kind(fl, "crystal") or got.size() > 2, "遺体に触れると、燐晶や遺品がこぼれる")
+	var en := _fake_enemy(fl, hp + Vector2(200, 0), 10, "L", 0.0)
+	en.mon["type"] = "ooze"
+	en.mon["cr"] = 8
+	var m0 := fl.ground.entries.size()
+	for i in 40:
+		fl.ground.drop_from_enemy(en)
+	var crystal_drops := 0
+	var slime := 0
+	for e in fl.ground.entries.slice(m0):
+		if String(e["kind"]) == "crystal":
+			crystal_drops += 1
+		elif String(e["id"]) == "nenneki":
+			slime += 1
+	check(crystal_drops > 5 and slime > 5, "倒した魔物が、燐晶と素材を落とす (40回: 燐晶 %d、粘液 %d)" % [crystal_drops, slime])
+	var big_ok := true
+	for f in [1, 3, 5, 7]:
+		var inst := FloorInstance.create("res://data/floors/f%02d_n00_p4.json" % f)
+		var c := 0
+		var items := 0
+		var corpses := 0
+		for g in inst.ground.entries:
+			match String(g["kind"]):
+				"crystal": c += 1
+				"corpse": corpses += 1
+				_: items += 1
+		if c < 8 or items < 4 or corpses < 1:
+			big_ok = false
+		print("    第%d層 %dx%d  燐晶 %d、自生物など %d、遺体 %d、魔物 %d" % [f, inst.map.w, inst.map.h, c, items, corpses, inst.enemies.size()])
+		inst.free()
+	check(big_ok, "各層に、光る燐晶、自生物、遺体が置かれる")
+	for e in fl.enemies.duplicate():
+		e.dead = true
+		e.queue_free()
+	for h in heroes:
+		h.queue_free()
+	fl.queue_free()
+	await process_frame
+
+func _has_kind(fl: FloorInstance, k: String) -> bool:
+	for e in fl.ground.entries:
+		if String(e["kind"]) == k:
+			return true
+	return false
 
 # ---------- 押し合いと重ならない処理 ----------
 
@@ -650,6 +749,7 @@ func _test_game() -> void:
 		await _step(2)
 	check(main.current.floor_no == 1, "第1層まで戻れる")
 	# 帰還と査定
+	main._clear_bag()
 	main.bag_silver = 1000
 	var bank1: int = main.gs.bank_silver
 	main.leader().position = main.current.map.center_of(main.current.up_cell)
@@ -712,9 +812,9 @@ func _test_encounter_gen() -> void:
 	var xs := []
 	for lv in [1, 5, 10, 15]:
 		var t := 0
-		for k in 20:
+		for k in 80:
 			t += int(EncounterGen.generate("sabi", lv, 1, 4)["xp"])
-		xs.append(t / 20)
+		xs.append(t / 80)
 	check(xs[0] < xs[1] and xs[1] < xs[2] and xs[2] < xs[3], "レベルが上がるほど遭遇が大きい (平均XP %s)" % [str(xs)])
 
 func _test_arena(main: Node) -> void:

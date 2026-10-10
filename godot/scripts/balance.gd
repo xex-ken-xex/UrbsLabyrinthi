@@ -32,6 +32,11 @@ static var ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当た
 static var TRAP_DMG_SCALE := 0.6            # 罠のダメージにかける
 static var ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
 
+# 燐晶と自生物(docs/dungeon-scale.md、docs/items-and-forage.md)
+const TAX_NOTE := "燐晶だけが課税"
+static var CRYSTAL_SCALE := 0.3             # 層に置く・魔物や遺体が落とす燐晶の量(kg)にかける。1.0 で、地図生成器の宝の量そのまま
+static var FORAGE_CELLS := 70.0             # 自生物は、歩ける床(部屋と通路)この数のマスにつき1つ
+
 ## 闘技場で、実行中に動かして調整できる係数。[初期値, 最小, 最大, 説明]
 const TUNABLE := {
 	"ENEMY_DMG_SCALE": [0.4, 0.05, 1.5, "敵の攻撃の係数(大きいほど痛い)"],

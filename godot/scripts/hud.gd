@@ -64,7 +64,7 @@ func _draw() -> void:
 		if h.down:
 			UI.text(self, Vector2(r.position.x + 208, r.position.y + 16), "倒", 12, Color("ff6a5a"), false)
 		y += 48.0
-	UI.text(self, Vector2(16, y + 14), "燐晶(未査定) %d銀貨相当    預け金 %d銀貨" % [game.bag_silver, game.gs.bank_silver], 13, Color("f1d98a"))
+	UI.text(self, Vector2(16, y + 14), ("燐晶 %s kg(見積 %d銀貨)" % [Crystal.bag_text(game.bag_crystal), game.bag_value()] if not game.bag_crystal.is_empty() else "燐晶 なし") + "    預け金 %d銀貨" % game.gs.bank_silver, 13, Color("f1d98a"))
 	UI.text(self, Vector2(16, y + 32), "治療薬 %d    魔力水 %d" % [game.gs.count("potion") + game.gs.count("hi_potion"), game.gs.count("ether")], 13, Color(0.8, 0.9, 0.8))
 	# ログ
 	var ly := size_v.y - 16.0 - (log_lines.size() - 1) * 20.0

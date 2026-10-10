@@ -123,9 +123,9 @@ func _refresh() -> void:
 func _fill_items() -> void:
 	for id in gs.item_ids():
 		var k := String(ItemDB.ITEMS[id]["kind"])
-		if k == "consumable" or k == "tome":
+		if k == "consumable" or k == "tome" or k == "material":
 			ids.append(id)
-			item_list.add_item("%s  ×%d" % [ItemDB.item_name(id), gs.count(id)])
+			item_list.add_item("%s  ×%d" % [ItemDB.item_name(id), gs.count(id)], ItemIcons.texture(id))
 	if ids.is_empty():
 		item_list.add_item("(使えるものがない)")
 		item_list.set_item_disabled(0, true)
@@ -233,7 +233,7 @@ func _use_sel() -> void:
 	var c := _ch()
 	var it: Dictionary = ItemDB.ITEMS[sel_id]
 	var r := ""
-	if String(it["kind"]) == "consumable" and special_handler.is_valid() and ["light", "return"].has(String(it["use"])):
+	if String(it["kind"]) == "consumable" and special_handler.is_valid() and ["light", "return", "buff"].has(String(it["use"])):
 		if special_handler.call(sel_id, c):
 			gs.remove_item(sel_id)
 			r = "%sを使った" % it["name"]

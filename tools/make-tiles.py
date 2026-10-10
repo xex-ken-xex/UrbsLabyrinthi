@@ -3,7 +3,7 @@
   python3 tools/make-tiles.py            # godot/assets/tiles/ に書き出す
   python3 tools/make-tiles.py --preview  # /tmp/claude-0/tiles-preview.png に、並べた見本も作る
 キー: floor_<舞台>(_2 _3 は、ばらつき用)、corr_<舞台>、wall_<舞台>(_2)、door_<舞台>、door_open_<舞台>、
-      icon_stairs_up、icon_stairs_down、icon_chest、icon_trap(舞台によらない)"""
+      icon_stairs_up、icon_stairs_down、icon_trap(舞台によらない)"""
 import math
 import os
 import sys
@@ -509,8 +509,7 @@ def main():
         door(name, True).save(os.path.join(OUT, f"door_open_{name}.png")); n += 2
     icon_stairs(True).save(os.path.join(OUT, "icon_stairs_up.png"))
     icon_stairs(False).save(os.path.join(OUT, "icon_stairs_down.png"))
-    icon_chest().save(os.path.join(OUT, "icon_chest.png"))
-    icon_trap().save(os.path.join(OUT, "icon_trap.png")); n += 4
+    icon_trap().save(os.path.join(OUT, "icon_trap.png")); n += 3
     print(f"{n} tiles ->", os.path.abspath(OUT))
     if "--preview" in sys.argv:
         names = list(THEMES)
@@ -527,7 +526,7 @@ def main():
                 d = Image.open(os.path.join(OUT, k + ".png")).resize((N * S, N * S), Image.NEAREST)
                 base.alpha_composite(d)
                 pv.paste(base, (x, r * (N * S + 4))); x += N * S
-            for k in ("icon_stairs_down", "icon_chest"):
+            for k in ("icon_stairs_down", "icon_trap"):
                 base = Image.open(os.path.join(OUT, "floor_%s.png" % name)).resize((N * S, N * S), Image.NEAREST)
                 d = Image.open(os.path.join(OUT, k + ".png")).resize((N * S, N * S), Image.NEAREST)
                 base.alpha_composite(d)

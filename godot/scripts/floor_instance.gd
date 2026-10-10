@@ -1,10 +1,11 @@
 class_name FloorInstance
 extends Node2D
-## 潜っている最中の1層。地図、魔物、宝箱、罠、探索の跡を持ち、床を描く。
+## 潜っている最中の1層。地図、魔物、落ちているもの、罠、探索の跡を持ち、床を描く。
 ## 層を離れても捨てずに控えておく。戻ると、扉の開き具合も倒した魔物もそのまま。
 
 signal message(text: String, kind: String)
 signal enemy_killed(enemy: Enemy)
+signal ground_picked(entry: Dictionary, hero: Hero)   # 落ちているものを拾った
 
 var map: FloorMap
 var style: Dictionary
@@ -14,7 +15,7 @@ var night_no := 0
 var heroes: Array = []        # Hero(パーティ全員。Main が持つ体への参照)
 var leader: Hero = null
 var enemies: Array = []
-var chests: Array = []        # {cell, silver, items, taken}
+var ground := GroundItems.new()   # 光る燐晶、自生物、遺体、落とし物
 var traps: Array = []         # 書き出しの罠 + st(hidden / revealed / triggered / disarmed)
 var up_cell := Vector2i.ZERO
 var down_cell := Vector2i.ZERO
@@ -38,10 +39,12 @@ func _physics_process(delta: float) -> void:
 	for h in heroes:
 		if h.is_alive():
 			bodies.append(h)
+	# 広い層では、仲間から遠い魔物(動かない)を、押し合いの計算に入れない
 	for e in enemies:
-		if not e.dead:
+		if not e.dead and _near_hero(e.position, NEAR_SIM):
 			bodies.append(e)
 	Contact.step(delta, bodies)
+	ground.update(delta)
 
 static func create_from_dict(d: Dictionary) -> FloorInstance:
 	var fi := FloorInstance.new()
@@ -107,24 +110,9 @@ func setup(m: FloorMap) -> void:
 		var tt: Dictionary = t.duplicate()
 		tt["st"] = "hidden"
 		traps.append(tt)
-	_spawn_chests()
+	ground.setup(self)
+	ground.spawn_all()
 	_spawn_enemies()
-
-func _spawn_chests() -> void:
-	var avoid: Array = [up_cell, down_cell]
-	for e in map.data["encounters"]:
-		for t in e["tokens"]:
-			avoid.append(Vector2i(int(t["x"]), int(t["y"])))
-	for r in map.rooms:
-		var tr: Variant = r.get("treasure")
-		if typeof(tr) != TYPE_DICTIONARY:
-			continue
-		var cell := map.free_cell_in_room(r, avoid)
-		if cell.x < 0:
-			continue
-		avoid.append(cell)
-		chests.append({"cell": cell, "silver": int(tr.get("silver", 0)), "gp": int(tr.get("gp", 0)),
-			"items": tr.get("items", []), "taken": false, "room": int(r["id"])})
 
 func _spawn_enemies() -> void:
 	for e in map.data["encounters"]:
@@ -182,6 +170,15 @@ func cell_of(p: Vector2) -> Vector2i:
 
 # ---------- 描画 ----------
 
+const NEAR_SIM := 520.0     # これより遠い魔物は、押し合いの計算に入れない
+
+func _near_hero(p: Vector2, r: float) -> bool:
+	var r2 := r * r
+	for h in heroes:
+		if (h.position - p).length_squared() < r2:
+			return true
+	return false
+
 func _hash(x: int, y: int) -> float:
 	var h := (x * 73856093) ^ (y * 19349663)
 	return float(h & 255) / 255.0
@@ -203,7 +200,6 @@ func _refresh_tex() -> void:
 		"door_open": Assets.first(["door_open_" + th, "door_open"]),
 		"stairs_up": Assets.texture("icon_stairs_up"),
 		"stairs_down": Assets.texture("icon_stairs_down"),
-		"chest": Assets.texture("icon_chest"),
 		"trap": Assets.texture("icon_trap"),
 	}
 
@@ -251,8 +247,15 @@ func _draw() -> void:
 	var glow: Color = col.get("glow", Color("ffffaa"))
 	var lc := Vector2(light_pos.x / C, light_pos.y / C)
 	var R := float(Balance.LIGHT_RADIUS)
-	for y in map.h:
-		for x in map.w:
+	# 広い層では、画面に入るマスだけを描く
+	var vr := (get_global_transform().affine_inverse() * get_canvas_transform().affine_inverse()) * Rect2(Vector2.ZERO, get_viewport_rect().size)
+	vr = vr.grow(C * 3.0)
+	var cx0 := clampi(int(floor(vr.position.x / C)), 0, map.w - 1)
+	var cx1 := clampi(int(ceil(vr.end.x / C)), 0, map.w - 1)
+	var cy0 := clampi(int(floor(vr.position.y / C)), 0, map.h - 1)
+	var cy1 := clampi(int(ceil(vr.end.y / C)), 0, map.h - 1)
+	for y in range(cy0, cy1 + 1):
+		for x in range(cx0, cx1 + 1):
 			var i := y * map.w + x
 			if map.explored[i] == 0:
 				continue
@@ -320,21 +323,8 @@ func _draw() -> void:
 	_draw_stairs(up_cell, true, glow)
 	if not arena:
 		_draw_stairs(down_cell, false, glow)
-	# 宝箱
-	for c in chests:
-		if c["taken"]:
-			continue
-		var cc: Vector2i = c["cell"]
-		if map.explored[map.idx(cc.x, cc.y)] == 0:
-			continue
-		var k := 1.0 if map.visible[map.idx(cc.x, cc.y)] == 1 else 0.45
-		if tex["chest"] != null:
-			draw_texture_rect(tex["chest"], Rect2(cc.x * C, cc.y * C, C, C), false, Color(k, k, k))
-			continue
-		var p := Vector2(cc.x * C + 9.0, cc.y * C + 12.0)
-		draw_rect(Rect2(p, Vector2(14, 10)), Color(0.55 * k, 0.38 * k, 0.12 * k))
-		draw_rect(Rect2(p, Vector2(14, 4)), Color(0.8 * k, 0.6 * k, 0.2 * k))
-		draw_circle(p + Vector2(7, 5), 1.6, _shade(glow, k))
+	# 落ちているもの(光る燐晶、自生物、遺体)
+	ground.draw(self, vr)
 	# 罠
 	for t in traps:
 		if t["st"] == "hidden":

@@ -139,7 +139,7 @@ tr.pick:hover td{background:color-mix(in srgb,var(--bronze) 12%,transparent)}
     <div class="grp">
       <label>種 <input id="seed" type="text" maxlength="40" autocomplete="off" spellcheck="false"></label>
       <button type="button" id="reroll">種を振り直す</button>
-      <label>広さ <select id="size"><option value="S">小</option><option value="M">中</option><option value="L">大</option></select></label>
+      <label>広さ <select id="size"><option value="S">小</option><option value="M">中</option><option value="L">大</option><option value="XL">特大</option><option value="XXL">広大</option></select></label>
     </div>
     <div class="grp">
       <label>人数 <input id="party" type="number" min="1" max="8" inputmode="numeric"></label>
@@ -380,7 +380,7 @@ const THEMES = {
       T('火を噴く像', 'room', '像の前の敷石を踏む', 'save', '敏捷力', 'fire', true, '像の口から30フィートの円錐形に炎が出る')]
   }
 };
-const SIZES = { S: [40, 28], M: [56, 38], L: [72, 50] };
+const SIZES = { S: [40, 28], M: [56, 38], L: [72, 50], XL: [96, 64], XXL: [128, 86] };
 /* 舞台ごとの層の範囲。ヴェルガでは、層の番号から舞台が決まる */
 const FLOORS = { fuyou: [1, 2], sabi: [3, 4], kagami: [5, 6], hone: [7, 9], soko: [10, 99], generic: [1, 99] };
 for (const k in FLOORS) THEMES[k].floors = FLOORS[k];
@@ -631,7 +631,7 @@ function generate(opts, mons) {
   const corrCells = () => { const a = []; for (let k = 0; k < W * H; k++) if (tiles[k] === CORR) a.push(k); return a; };
   const deadEnds = [];
   { const cc = corrCells();
-    for (let t = 0, made = 0; t < 40 && made < (o.size === 'S' ? 1 : o.size === 'M' ? 2 : 3) && cc.length; t++) {
+    for (let t = 0, made = 0; t < 40 && made < ({ S: 1, M: 2, L: 3, XL: 5, XXL: 7 }[o.size] || 2) && cc.length; t++) {
       const k = rn.pick(cc), [dx, dy] = rn.pick(N4), len = rn.int(3, 6); let ok = true; const cells = [];
       for (let s = 1; s <= len + 1 && ok; s++) {
         const x = k % W + dx * s, y = ((k / W) | 0) + dy * s;
@@ -747,7 +747,7 @@ function generate(opts, mons) {
     for (let i = 0; i < nT && cc.length; i++) addTrap(rn.pick(cc), 'corridor', -1);
     for (const k of deadEnds) if (rn.chance(.5)) addTrap(k, 'corridor', -1);
     const far = cc.filter(k => Math.abs(k % W - stairs.up.x) + Math.abs(((k / W) | 0) - stairs.up.y) > 12 && !trapAt.has(k));
-    const nW = (exhale ? 1 : 0) + (rn.chance(.6) ? 1 : 0) + (o.size === 'L' && rn.chance(.5) ? 1 : 0);
+    const nW = (exhale ? 1 : 0) + (rn.chance(.6) ? 1 : 0) + ({ L: 1, XL: 2, XXL: 4 }[o.size] > 0 && rn.chance(.5) ? ({ L: 1, XL: 2, XXL: 4 }[o.size]) : 0);
     for (let i = 0; i < nW && far.length; i++) {
       const k = rn.pick(far), near = far.filter(q => Math.abs(q % W - k % W) + Math.abs(((q / W) | 0) - ((k / W) | 0)) <= 2);
       const e = genEncounter(rn, { pool, level, party: Math.max(1, Math.ceil(party * .6)) }, 0, 12);

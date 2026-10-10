@@ -267,7 +267,8 @@ func _steer(delta: float, to: Vector2, spd: float) -> void:
 	intent = dir.normalized()
 	var sp := spd * (slow_v if slow_t > 0.0 else 1.0)
 	walk(intent * sp * delta)
-	_open_doors()
+	if (Engine.get_physics_frames() + int(get_instance_id() % 6)) % 6 == 0:     # 毎コマでなくてよい(広い層で、魔物が多いとき)
+		_open_doors()
 
 func _open_doors() -> void:
 	for d in game_floor.map.doors_near(position, 28.0):
@@ -288,9 +289,9 @@ func _chase(delta: float) -> void:
 	var map := game_floor.map
 	var mc := map.cell_of(position)
 	var tc := map.cell_of(target.position)
-	var seen := map.los(mc.x, mc.y, tc.x, tc.y)
 	var to_t := target.position - position
 	var dist := to_t.length()
+	var seen := dist < 260.0 and map.los(mc.x, mc.y, tc.x, tc.y)      # 遠くは、見えていても使わない(直進は220px、射撃は200pxまで)
 	# 近くに別の仲間がいれば、そちらへ切り替える(押し込まれている間は目標を固定しない)
 	if dist > radius + 30.0 and Engine.get_physics_frames() % 20 == int(get_instance_id() % 20):
 		var near := _nearest_hero()

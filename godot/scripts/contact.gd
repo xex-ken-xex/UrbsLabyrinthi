@@ -8,18 +8,26 @@ extends RefCounted
 ## 同じ側どうし: 重さに応じて押しのけ合い、重ならない。
 ## どちらも壁には食い込まない。壁に押しつけられると、それ以上は下がれない。
 
+## 触れ合う可能性のある、最も遠い x の差(大きい魔物の半径の和 + 余裕。並べ順の乱れも見込む)
+const MAX_TOUCH := 72.0
+
 static func step(delta: float, bodies: Array) -> void:
 	for b in bodies:
 		b.bump_cd = maxf(0.0, b.bump_cd - delta)
 		b.hit_now = b.bump_cd <= 0.0
 		b.did_hit = false
+	# 広い層で、魔物が多くても軽いように、x の順に並べて、遠い組は調べない
 	var n := bodies.size()
+	var order: Array = bodies.duplicate()
+	order.sort_custom(func(p: Body, q: Body) -> bool: return p.position.x < q.position.x)
 	for i in n:
-		var a: Body = bodies[i]
+		var a: Body = order[i]
 		if not a.is_alive():
 			continue
 		for j in range(i + 1, n):
-			var b: Body = bodies[j]
+			var b: Body = order[j]
+			if b.position.x - a.position.x > MAX_TOUCH:
+				break
 			if not b.is_alive():
 				continue
 			var d := b.position - a.position
@@ -40,11 +48,13 @@ static func step(delta: float, bodies: Array) -> void:
 	for pass_i in 16:
 		var moved := false
 		for i in n:
-			var a: Body = bodies[i]
+			var a: Body = order[i]
 			if not a.is_alive():
 				continue
 			for j in range(i + 1, n):
-				var b: Body = bodies[j]
+				var b: Body = order[j]
+				if b.position.x - a.position.x > MAX_TOUCH:
+					break
 				if not b.is_alive():
 					continue
 				var d := b.position - a.position

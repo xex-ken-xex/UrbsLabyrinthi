@@ -54,10 +54,13 @@ static func texture(key: String, builtin: bool = true) -> Texture2D:
 				tex = load(rp) as Texture2D
 				break
 	if tex == null and builtin:
-		for e in EXTS:                             # 同梱のマップチップ(床、壁、扉、記号)
-			var tp := "res://assets/tiles/%s.%s" % [key, e]
-			if ResourceLoader.exists(tp):
-				tex = load(tp) as Texture2D
+		for bd in ["res://assets/tiles", "res://assets/items"]:     # 同梱のマップチップ(床、壁、扉、記号)とアイテムのシート
+			for e in EXTS:
+				var tp := "%s/%s.%s" % [bd, key, e]
+				if ResourceLoader.exists(tp):
+					tex = load(tp) as Texture2D
+					break
+			if tex != null:
 				break
 	_cache[ck] = tex
 	return tex

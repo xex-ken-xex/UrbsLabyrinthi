@@ -45,7 +45,7 @@ func item_ids() -> Array:
 
 func _order(id: String) -> String:
 	var it: Dictionary = ItemDB.ITEMS.get(id, {})
-	var rank := {"consumable": "1", "weapon": "2", "armor": "3", "acc": "4", "tome": "5"}
+	var rank := {"consumable": "1", "weapon": "2", "armor": "3", "acc": "4", "tome": "5", "material": "6"}
 	return String(rank.get(String(it.get("kind", "")), "9")) + id
 
 # ---------- 装備 ----------
@@ -90,7 +90,7 @@ func use_item(id: String, ch: Character) -> String:
 		"heal_pct":
 			if ch.hp <= 0.0 or ch.hp >= ch.max_hp():
 				return ""
-			var n := maxf(12.0, ch.max_hp() * float(it["v"]))
+			var n := maxf(float(it.get("min", 12.0)), ch.max_hp() * float(it["v"]))
 			ch.hp = minf(ch.max_hp(), ch.hp + n)
 			remove_item(id)
 			return "%sのHPが回復した" % ch.name

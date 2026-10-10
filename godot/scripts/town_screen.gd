@@ -261,13 +261,13 @@ func _fill_shop() -> void:
 		for id in ItemDB.SHOPS[location]:
 			shop_ids.append(id)
 			var price := int(ItemDB.ITEMS[id]["price"])
-			shop_list.add_item("%s   %d銀" % [ItemDB.item_name(id), price])
+			shop_list.add_item("%s   %d銀" % [ItemDB.item_name(id), price], ItemIcons.texture(id))
 			if price > gs.bank_silver:
 				shop_list.set_item_custom_fg_color(shop_list.item_count - 1, Color(0.55, 0.45, 0.45))
 	else:
 		for id in gs.item_ids():
 			shop_ids.append(id)
-			shop_list.add_item("%s ×%d   %d銀" % [ItemDB.item_name(id), gs.count(id), ItemDB.sell_price(id)])
+			shop_list.add_item("%s ×%d   %d銀" % [ItemDB.item_name(id), gs.count(id), ItemDB.sell_price(id)], ItemIcons.texture(id))
 		if shop_ids.is_empty():
 			shop_list.add_item("(売れるものがない)")
 			shop_list.set_item_disabled(0, true)

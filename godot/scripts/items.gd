@@ -8,7 +8,7 @@ const SELL_RATE := 0.4
 ## weapon: cat(sword dagger blunt axe spear staff bow), power(体当たりの加算), spell(技の威力の加算)
 ## armor: type(none light medium heavy), ac(防御の加算。軽減率は1点につき3.5%)
 ## acc: 効果の辞書(ac, power_pct, hp_pct, mp_pct, speed_pct, mass_pct)
-const ITEMS := {
+const BASE_ITEMS := {
 	# --- 消耗品 ---
 	"potion": {"name": "治療薬", "kind": "consumable", "price": 60, "use": "heal_pct", "v": 0.5,
 		"desc": "HPを最大の50%回復する(最低12)。薬師組の標準品。"},
@@ -62,6 +62,9 @@ const ITEMS := {
 		"desc": "周囲の敵を怯ませて止める。"},
 }
 
+## 全品。自生物、魔物の素材、遺品(ForageData、tools/make-items.py が作る)を足してある。燐晶ではないので、税がかからない
+static var ITEMS: Dictionary = BASE_ITEMS.merged(ForageData.ITEMS)
+
 const SHOPS := {
 	"smith": ["dagger", "shortsword", "longsword", "greatsword", "mace", "warhammer", "handaxe", "greataxe", "spear", "shortbow", "longbow",
 		"leather", "studded", "chain_shirt", "breastplate", "chain_mail", "plate", "buckler", "power_band", "swift_boots"],
@@ -98,9 +101,23 @@ static func can_equip(id: String, cls: String) -> bool:
 		"acc": return true
 	return false
 
+## 深い層ほど、良い装備が出る
+static func roll_gear(floor_no: int, rng: RandomNumberGenerator) -> String:
+	var cap := 120 + floor_no * 130
+	var pool: Array = []
+	for id in BASE_ITEMS:
+		var it: Dictionary = BASE_ITEMS[id]
+		var k := String(it["kind"])
+		if (k == "weapon" or k == "armor" or k == "acc") and int(it["price"]) <= cap:
+			pool.append(id)
+	return "" if pool.is_empty() else String(pool[rng.randi_range(0, pool.size() - 1)])
+
 static func detail(id: String) -> String:
 	var it: Dictionary = ITEMS[id]
 	var s: String = String(it["desc"])
+	if it.get("free", false):
+		s += "
+迷宮に自生するもの・魔物の素材。燐晶ではないので、税がかからない。"
 	match String(it["kind"]):
 		"weapon":
 			s += "\n種類: %s   体当たり +%.1f" % [WEAPON_CAT_JP[it["cat"]], float(it["power"])]
