@@ -6,6 +6,11 @@ Linux(x86_64)と Windows(x86_64)向け。コードやデータを変えたら、
 エンジン本体(変わらない)と、ゲームの中身 `UrbsLabyrinthi.pck`(変わる)を分けてある。
 **`.pck` は、実行ファイルと同じフォルダに、同じ名前で置く。**
 
+## セットアップ(必要なライブラリを入れる)
+
+[`SetupScript/`](SetupScript/README.md) に、Ubuntu 用(`setup-ubuntu.sh`)と Windows 用(`setup-windows.bat`)がある。
+`--dev`(Windows は `-Dev`)を付けると、Godot とビルドの道具まで入れる。
+
 ## Windows
 
 1. `windows/UrbsLabyrinthi-engine-windows.zip` を展開して、`UrbsLabyrinthi.exe` を取り出す(約110MB。GitHub は 100MB を超えるファイルを置けないので、zip にしてある)
