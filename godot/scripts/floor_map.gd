@@ -25,12 +25,24 @@ var rooms: Array = []
 var room_by_id := {}
 var room_cells := {}                   # 部屋の id → マス番号の配列
 
-static func load_file(path: String) -> FloorMap:
+## 層のファイルを読む。.json.gz(gzip。pck を小さくするため)でも、.json でも
+static func read_json(path: String) -> Variant:
+	if path.ends_with(".gz"):
+		var raw := FileAccess.get_file_as_bytes(path)
+		if raw.is_empty():
+			return null
+		return JSON.parse_string(raw.decompress_dynamic(-1, FileAccess.COMPRESSION_GZIP).get_string_from_utf8())
 	var text := FileAccess.get_file_as_string(path)
-	if text == "":
+	return JSON.parse_string(text) if text != "" else null
+
+static func floor_path(depth: int, night: int, party: int) -> String:
+	return "res://data/floors/f%02d_n%02d_p%d.json.gz" % [depth, night, clampi(party, 1, 4)]
+
+static func load_file(path: String) -> FloorMap:
+	var parsed: Variant = read_json(path)
+	if parsed == null:
 		push_error("読めない: " + path)
 		return null
-	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_error("JSON が壊れている: " + path)
 		return null

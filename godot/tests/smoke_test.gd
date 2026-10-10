@@ -244,7 +244,7 @@ func _test_floors() -> void:
 	for party in range(1, 5):
 		for night in Balance.NIGHTS:
 			for fl in range(1, Balance.MAX_FLOOR + 1):
-				var inst := FloorInstance.create("res://data/floors/f%02d_n%02d_p%d.json" % [fl, night, party])
+				var inst := FloorInstance.create("res://data/floors/f%02d_n%02d_p%d.json.gz" % [fl, night, party])
 				if inst == null:
 					bad += 1
 					continue
@@ -269,7 +269,7 @@ func _test_floors() -> void:
 						unreachable += 1
 					ground_n += 1
 				inst.free()
-	check(bad == 0 and count == 280, "全%d層が読める (不良 %d)" % [count, bad])
+	check(bad == 0 and count == 4 * Balance.NIGHTS * Balance.MAX_FLOOR, "全%d階が読める (不良 %d)" % [count, bad])
 	check(unreachable == 0, "階段・敵・落ちている燐晶や自生物へ着ける (到達不能 %d)" % unreachable)
 	print("  落ちているもの: %d" % ground_n)
 	print("  集計: 敵 %d" % enemies)
@@ -341,7 +341,7 @@ func _test_ground() -> void:
 	check(crystal_drops > 5 and slime > 5, "倒した魔物が、燐晶と素材を落とす (40回: 燐晶 %d、粘液 %d)" % [crystal_drops, slime])
 	var big_ok := true
 	for f in [1, 3, 5, 7]:
-		var inst := FloorInstance.create("res://data/floors/f%02d_n00_p4.json" % f)
+		var inst := FloorInstance.create("res://data/floors/f%02d_n00_p4.json.gz" % f)
 		var c := 0
 		var items := 0
 		var corpses := 0
@@ -352,7 +352,7 @@ func _test_ground() -> void:
 				_: items += 1
 		if c < 8 or items < 4 or corpses < 1:
 			big_ok = false
-		print("    第%d層 %dx%d  燐晶 %d、自生物など %d、遺体 %d、魔物 %d" % [f, inst.map.w, inst.map.h, c, items, corpses, inst.enemies.size()])
+		print("    %d階 %dx%d  燐晶 %d、自生物など %d、遺体 %d、魔物 %d" % [f, inst.map.w, inst.map.h, c, items, corpses, inst.enemies.size()])
 		inst.free()
 	check(big_ok, "各層に、光る燐晶、自生物、遺体が置かれる")
 	for e in fl.enemies.duplicate():
@@ -372,7 +372,7 @@ func _has_kind(fl: FloorInstance, k: String) -> bool:
 # ---------- 押し合いと重ならない処理 ----------
 
 func _make_floor(party_n: int = 4, floor_no: int = 1) -> Array:
-	var fl := FloorInstance.create("res://data/floors/f%02d_n00_p%d.json" % [floor_no, party_n])
+	var fl := FloorInstance.create("res://data/floors/f%02d_n00_p%d.json.gz" % [floor_no, party_n])
 	root.add_child(fl)
 	var heroes: Array = []
 	var gs := GameState.new()
@@ -742,12 +742,12 @@ func _test_game() -> void:
 		main.leader().position = main.current.map.center_of(main.current.down_cell)
 		main.interact()
 		await _step(2)
-		check(main.current.floor_no == n + 1, "第%d層 → 第%d層" % [n, n + 1])
+		check(main.current.floor_no == n + 1, "%d階 → %d階" % [n, n + 1])
 	for n in range(Balance.MAX_FLOOR, 1, -1):
 		main.leader().position = main.current.map.center_of(main.current.up_cell)
 		main.interact()
 		await _step(2)
-	check(main.current.floor_no == 1, "第1層まで戻れる")
+	check(main.current.floor_no == 1, "1階まで戻れる")
 	# 帰還と査定
 	main._clear_bag()
 	main.bag_silver = 1000

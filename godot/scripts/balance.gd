@@ -5,7 +5,7 @@ extends RefCounted
 
 const CELL := 32                       # 1マス(5フィート)の画素数
 const FT_TO_PX := 4.0                  # 移動速度: 1フィート/ラウンド → 画素/秒(30フィートで120)
-const MAX_FLOOR := 10                  # 書き出してある層の数
+const MAX_FLOOR := 18                  # 書き出してある階の数(10の層が、1〜3階ずつのグループ。tools/export-floors.mjs の LAYERS)
 const NIGHTS := 7                      # 書き出してある夜の数(7夜で一巡。世界の「節」と同じ周期)
 const TAX_RATE := 0.3                  # 燐晶税(都市GM資料)
 

@@ -139,7 +139,7 @@ tr.pick:hover td{background:color-mix(in srgb,var(--bronze) 12%,transparent)}
     <div class="grp">
       <label>種 <input id="seed" type="text" maxlength="40" autocomplete="off" spellcheck="false"></label>
       <button type="button" id="reroll">種を振り直す</button>
-      <label>広さ <select id="size"><option value="S">小</option><option value="M">中</option><option value="L">大</option><option value="XL">特大</option><option value="XXL">広大</option></select></label>
+      <label>広さ <select id="size"><option value="S">小</option><option value="M">中</option><option value="L">大</option><option value="XL">特大</option><option value="XXL">広大</option><option value="XXXL">超広大</option></select></label>
     </div>
     <div class="grp">
       <label>人数 <input id="party" type="number" min="1" max="8" inputmode="numeric"></label>
@@ -380,7 +380,10 @@ const THEMES = {
       T('火を噴く像', 'room', '像の前の敷石を踏む', 'save', '敏捷力', 'fire', true, '像の口から30フィートの円錐形に炎が出る')]
   }
 };
-const SIZES = { S: [40, 28], M: [56, 38], L: [72, 50], XL: [96, 64], XXL: [128, 86] };
+/* 魔物の巣(遭遇のある部屋)どうしの最小の間隔(マス)。縄張りの目安。大きい魔物ほど広い縄張りを要る。
+   o.ecology が真のとき、これより近い部屋には、別の巣を置かない(魔物同士の争いを避ける) */
+const DEN_SEP = { T: 9, S: 10, M: 14, L: 20, H: 28, G: 36 };
+const SIZES = { S: [40, 28], M: [56, 38], L: [72, 50], XL: [96, 64], XXL: [128, 86], XXXL: [192, 128] };
 /* 舞台ごとの層の範囲。ヴェルガでは、層の番号から舞台が決まる */
 const FLOORS = { fuyou: [1, 2], sabi: [3, 4], kagami: [5, 6], hone: [7, 9], soko: [10, 99], generic: [1, 99] };
 for (const k in FLOORS) THEMES[k].floors = FLOORS[k];
@@ -488,7 +491,7 @@ function genTreasure(rng, theme, level, rich) {
 
 /* ---------- 地図の生成 ---------- */
 function generate(opts, mons) {
-  const o = Object.assign({ seed: 'vergha', theme: 'fuyou', night: 0, size: 'M', level: 1, party: 4, edition: '2014', exhale: null }, opts);
+  const o = Object.assign({ seed: 'vergha', theme: 'fuyou', night: 0, size: 'M', level: 1, party: 4, edition: '2014', exhale: null, ecology: false, density: 1 }, opts);
   const theme = THEMES[o.theme] || THEMES.generic;
   const [W, H] = SIZES[o.size] || SIZES.M;
   const level = Math.max(1, Math.min(20, o.level | 0)), party = Math.max(1, Math.min(8, o.party | 0));
@@ -631,7 +634,7 @@ function generate(opts, mons) {
   const corrCells = () => { const a = []; for (let k = 0; k < W * H; k++) if (tiles[k] === CORR) a.push(k); return a; };
   const deadEnds = [];
   { const cc = corrCells();
-    for (let t = 0, made = 0; t < 40 && made < ({ S: 1, M: 2, L: 3, XL: 5, XXL: 7 }[o.size] || 2) && cc.length; t++) {
+    for (let t = 0, made = 0; t < 40 && made < ({ S: 1, M: 2, L: 3, XL: 5, XXL: 7, XXXL: 10 }[o.size] || 2) && cc.length; t++) {
       const k = rn.pick(cc), [dx, dy] = rn.pick(N4), len = rn.int(3, 6); let ok = true; const cells = [];
       for (let s = 1; s <= len + 1 && ok; s++) {
         const x = k % W + dx * s, y = ((k / W) | 0) + dy * s;
@@ -705,6 +708,11 @@ function generate(opts, mons) {
   /* 7. 中身。夜の種から決めるので、夜が変わると入れ替わる */
   const pool = buildPool(mons || [], theme, level);
   const ctx = { pool, level, party };
+  const monSz = new Map((mons || []).map(m => [m.i, m.z]));
+  const density = o.density == null ? 1 : Math.max(0, Math.min(1, +o.density));
+  const dens = [];   // 巣の中心と、その縄張りの間隔
+  const denSep = e => { const sz = Math.max(...e.groups.map(g => Object.keys(DEN_SEP).indexOf(monSz.get(g.i) || 'M'))), n = e.groups.reduce((a, g) => a + g.n, 0);
+    return Object.values(DEN_SEP)[Math.max(0, sz)] * (1 + Math.min(.6, .12 * (n - 1))); };
   const traps = [], trapAt = new Map(), encs = [], feats = [];
   const free = r => r.cells.filter(q => !(q === I(stairs.up.x, stairs.up.y) || q === I(stairs.down.x, stairs.down.y)) && !trapAt.has(q));
   function addTrap(k, where, roomId) {
@@ -729,12 +737,17 @@ function generate(opts, mons) {
     if (r.id === upRoom.id) { r.role = 'entrance'; continue; }
     const boss = r.id === downRoom.id;
     r.role = boss ? 'exit' : 'room';
-    const p = rn.f(), pe = exhale ? .58 : .4;
-    let what = boss ? (rn.chance(.7) ? 'enc' : 'feat') : p < pe ? 'enc' : p < pe + .1 ? 'trap' : p < pe + .18 ? 'loot' : p < pe + .38 ? 'feat' : 'empty';
+    const p = rn.f(), pe0 = exhale ? .58 : .4, pe = pe0 * density;
+    let what = boss ? (rn.chance(.7) ? 'enc' : 'feat') : p < pe ? 'enc' : p < pe0 ? 'empty' : p < pe0 + .1 ? 'trap' : p < pe0 + .18 ? 'loot' : p < pe0 + .38 ? 'feat' : 'empty';
     if (what === 'enc') {
       const diff = boss ? 2 : rn.weighted([0, 1, 2], i => (exhale ? [35, 40, 25] : [50, 36, 14])[i]);
-      const e = addEnc(genEncounter(rn, ctx, diff, r.area, boss), free(r), r.id, boss);
-      if (e) { r.encId = e.id; if (rn.chance(boss ? .9 : .5)) r.treasure = genTreasure(rn, theme, level, boss); }
+      let ge = genEncounter(rn, ctx, diff, r.area, boss);
+      if (ge && o.ecology && !boss) {          // 縄張り: 近すぎる巣には、置かない。代わりに、見張りのない蓄えがあることがある
+        const sep = denSep(ge);
+        if (dens.some(d => Math.hypot(d.x - r.cx, d.y - r.cy) < Math.max(sep, d.sep))) { ge = null; if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
+      }
+      const e = addEnc(ge, free(r), r.id, boss);
+      if (e) { dens.push({ x: r.cx, y: r.cy, sep: denSep(e) }); r.encId = e.id; if (rn.chance(boss ? .9 : .5)) r.treasure = genTreasure(rn, theme, level, boss); }
     } else if (what === 'trap') { const t = addTrap(rn.pick(free(r)), 'room', r.id); if (t) r.trapIds.push(t.id); if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
     else if (what === 'loot') r.treasure = genTreasure(rn, theme, level, false);
     else if (what === 'feat') { const f = rn.pick(theme.feats); const k = rn.pick(free(r)); r.feat = { name: f[0], desc: f[1], x: k % W, y: (k / W) | 0 }; feats.push(r.feat); }
@@ -747,7 +760,7 @@ function generate(opts, mons) {
     for (let i = 0; i < nT && cc.length; i++) addTrap(rn.pick(cc), 'corridor', -1);
     for (const k of deadEnds) if (rn.chance(.5)) addTrap(k, 'corridor', -1);
     const far = cc.filter(k => Math.abs(k % W - stairs.up.x) + Math.abs(((k / W) | 0) - stairs.up.y) > 12 && !trapAt.has(k));
-    const nW = (exhale ? 1 : 0) + (rn.chance(.6) ? 1 : 0) + ({ L: 1, XL: 2, XXL: 4 }[o.size] > 0 && rn.chance(.5) ? ({ L: 1, XL: 2, XXL: 4 }[o.size]) : 0);
+    const nW = Math.round(((exhale ? 1 : 0) + (rn.chance(.6) ? 1 : 0) + ({ L: 1, XL: 2, XXL: 4, XXXL: 6 }[o.size] > 0 && rn.chance(.5) ? ({ L: 1, XL: 2, XXL: 4, XXXL: 6 }[o.size]) : 0)) * Math.max(density, .4));
     for (let i = 0; i < nW && far.length; i++) {
       const k = rn.pick(far), near = far.filter(q => Math.abs(q % W - k % W) + Math.abs(((q / W) | 0) - ((k / W) | 0)) <= 2);
       const e = genEncounter(rn, { pool, level, party: Math.max(1, Math.ceil(party * .6)) }, 0, 12);
@@ -912,7 +925,7 @@ function buildPrompt(id, D, sel, x) {
   return head.concat(body, rule).join('\n');
 }
 
-return { ROCK, ROOM, CORR, DOOR, SCHEMA, THEMES, SIZES, FLOORS, themeForFloor, floorLabel, XP_BUDGET, TYPE_JP, SIZE_JP, DMG_JP, PROMPTS, BREATH, makeRng, nightInfo, mirrorRoom, generate, computeVisible, fov, walls, exportJSON, buildPrompt, placeData, dungeonData, worldText, buildPool, famOf, tierOf };
+return { ROCK, ROOM, CORR, DOOR, SCHEMA, THEMES, SIZES, DEN_SEP, FLOORS, themeForFloor, floorLabel, XP_BUDGET, TYPE_JP, SIZE_JP, DMG_JP, PROMPTS, BREATH, makeRng, nightInfo, mirrorRoom, generate, computeVisible, fov, walls, exportJSON, buildPrompt, placeData, dungeonData, worldText, buildPool, famOf, tierOf };
 })();
 
 

@@ -10,7 +10,8 @@ signal ground_picked(entry: Dictionary, hero: Hero)   # 落ちているものを
 var map: FloorMap
 var style: Dictionary
 var col := {}
-var floor_no := 1
+var floor_no := 1             # 階の通し番号(1〜Balance.MAX_FLOOR)。階段と HUD に使う
+var layer_no := 1             # 層(第N層)。層は、1〜3階のグループ。拾えるもの、舞台、魔物の強さは、層で決まる
 var night_no := 0
 var heroes: Array = []        # Hero(パーティ全員。Main が持つ体への参照)
 var leader: Hero = null
@@ -101,7 +102,8 @@ func setup(m: FloorMap) -> void:
 	style = d.get("style", {})
 	for k in style.get("col", {}):
 		col[k] = Color.html(String(style["col"][k]))
-	floor_no = int(d["meta"]["floor"])
+	layer_no = int(d["meta"]["floor"])
+	floor_no = int(d["meta"].get("depth", layer_no))
 	night_no = int(d["meta"]["night"])
 	exhale = bool(d["meta"].get("exhale", false))
 	up_cell = Vector2i(int(d["stairs"]["up"]["x"]), int(d["stairs"]["up"]["y"]))

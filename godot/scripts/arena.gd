@@ -5,7 +5,7 @@ extends Node
 
 const W := 26
 const H := 16
-const THEME_FLOOR := {"fuyou": 1, "sabi": 3, "kagami": 5, "hone": 7, "soko": 10, "generic": 1}
+const THEME_FLOOR := {"fuyou": 1, "sabi": 7, "kagami": 11, "hone": 15, "soko": 18, "generic": 1}   # 舞台ごとの、見本にする階(通し番号)
 
 var main: Node
 var fl: FloorInstance
@@ -46,8 +46,7 @@ func setup(main_node: Node, base_party: Array) -> void:
 
 func _style_for(id: String) -> Dictionary:
 	if not _style_cache.has(id):
-		var path := "res://data/floors/f%02d_n00_p1.json" % int(THEME_FLOOR.get(id, 1))
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+		var parsed: Variant = FloorMap.read_json(FloorMap.floor_path(int(THEME_FLOOR.get(id, 1)), 0, 1))
 		_style_cache[id] = parsed["style"] if typeof(parsed) == TYPE_DICTIONARY else {}
 	return _style_cache[id]
 

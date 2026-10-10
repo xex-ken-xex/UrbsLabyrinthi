@@ -5,7 +5,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var out := OS.get_cmdline_user_args()[0] if OS.get_cmdline_user_args().size() > 0 else "/tmp"
-	var fl := FloorInstance.create("res://data/floors/f01_n00_p4.json")
+	var fl := FloorInstance.create("res://data/floors/f01_n00_p4.json.gz")
 	root.add_child(fl)
 	for e in fl.enemies.duplicate():
 		e.dead = true

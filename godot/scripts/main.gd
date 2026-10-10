@@ -294,7 +294,7 @@ func exit_arena() -> void:
 	call_deferred("go_town", ["闘技場から戻った。本編のパーティには、影響しない。"])
 
 func floor_path(n: int, night: int) -> String:
-	return "res://data/floors/f%02d_n%02d_p%d.json" % [n, night % Balance.NIGHTS, clampi(gs.party.size(), 1, 4)]
+	return FloorMap.floor_path(n, night % Balance.NIGHTS, gs.party.size())
 
 ## 夜が替わるので、通路も部屋の中身も組み直される(大部屋と階段は同じ場所)
 func start_day() -> void:

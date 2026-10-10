@@ -6,7 +6,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var fno := int(OS.get_cmdline_user_args()[0]) if OS.get_cmdline_user_args().size() > 0 else 2
-	var fl := FloorInstance.create("res://data/floors/f%02d_n00_p4.json" % fno)
+	var fl := FloorInstance.create("res://data/floors/f%02d_n00_p4.json.gz" % fno)
 	root.add_child(fl)
 	var m := fl.map
 	var spot := m.center_of(fl.up_cell)

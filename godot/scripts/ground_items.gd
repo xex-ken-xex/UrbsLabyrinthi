@@ -124,7 +124,7 @@ func _spawn_deposit(room: Dictionary, tr: Dictionary) -> int:
 			id = "relic_tools"
 		add_item(_free_pos(cen, 20.0), id)
 	if Dice.rng.randf() < 0.22:
-		var gid := ItemDB.roll_gear(fl.floor_no, Dice.rng)
+		var gid := ItemDB.roll_gear(fl.layer_no, Dice.rng)
 		if gid != "":
 			add_item(_free_pos(cen, 22.0), gid)
 	return silver
@@ -142,7 +142,7 @@ func _forage_table() -> Array:
 	var rows: Array = []
 	for key in [theme, "all"]:
 		for r in ForageData.SPOTS.get(key, []):
-			if int(r[3]) <= fl.floor_no:
+			if int(r[3]) <= fl.layer_no:
 				rows.append(r)
 	return rows
 
@@ -171,7 +171,7 @@ func _spawn_forage() -> void:
 ## 先に来て、戻らなかった者たち。上の層ほど多い
 func _spawn_corpses() -> void:
 	var cells := _room_cells.size() + _corr_cells.size()
-	var n := int(round(float(cells) / 300.0 * maxf(0.3, 1.0 - 0.07 * fl.floor_no)))
+	var n := int(round(float(cells) / 300.0 * maxf(0.3, 1.0 - 0.07 * fl.layer_no)))
 	n = maxi(n, 1)
 	for i in n:
 		var c := _pick_cell(Dice.rng.randf() < 0.5, 0.25)
@@ -258,7 +258,7 @@ func _loot_corpse(e: Dictionary) -> void:
 		if Dice.rng.randf() < float(r[1]):
 			add_item(pos, String(r[0]), 1, _burst(110.0))
 	if Dice.rng.randf() < 0.12:
-		var gid := ItemDB.roll_gear(fl.floor_no, Dice.rng)
+		var gid := ItemDB.roll_gear(fl.layer_no, Dice.rng)
 		if gid != "":
 			add_item(pos, gid, 1, _burst(110.0))
 	var rows := _forage_table()
