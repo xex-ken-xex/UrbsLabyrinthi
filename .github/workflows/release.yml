@@ -1,0 +1,47 @@
+name: Release
+
+# main にマージ(push)されるたびに、Deploy/ の最新のビルドを ZIP にして、GitHub の Release に出す。
+# ビルド自体は tools/build-deploy.sh で行い、Deploy/ にコミットしておく決まり(CI では、それを ZIP にまとめるだけ)。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ZIP にまとめる
+        run: tools/package-release.sh dist
+
+      - name: Release を作る
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ github.run_number }}"
+          SHORT="$(git rev-parse --short HEAD)"
+          TITLE="$(git log -1 --pretty=%s)"
+          {
+            echo "main の最新版($SHORT)。"
+            echo
+            echo "- \`UrbsLabyrinthi-windows.zip\` … 展開して \`UrbsLabyrinthi.exe\` を実行(Windows 10/11 x64)"
+            echo "- \`UrbsLabyrinthi-linux.zip\` … 展開して \`./UrbsLabyrinthi.x86_64\` を実行(Ubuntu 22.04/24.04 x86_64。先に \`SetupScript/setup-ubuntu.sh\`)"
+            echo "- \`SHA256SUMS.txt\` … ZIP のハッシュ"
+            echo
+            echo "ビルドの記録:"
+            echo '```'
+            cat Deploy/VERSION
+            echo '```'
+          } > notes.md
+          gh release create "$TAG" dist/UrbsLabyrinthi-windows.zip dist/UrbsLabyrinthi-linux.zip dist/SHA256SUMS.txt \
+            --title "$TAG — $TITLE" --notes-file notes.md --target "${{ github.sha }}" --latest

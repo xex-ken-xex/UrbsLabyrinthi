@@ -19,6 +19,8 @@ $BaseUrl = "https://github.com/godotengine/godot/releases/download/$GodotTag"
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Deploy = Split-Path -Parent $Here
 $WinDir = Join-Path $Deploy "windows"
+# 配布 ZIP(UrbsLabyrinthi-windows\)では、exe が、SetupScript の1つ上にある
+if (Test-Path (Join-Path $Deploy "UrbsLabyrinthi.exe")) { $WinDir = $Deploy }
 $Exe = Join-Path $WinDir "UrbsLabyrinthi.exe"
 $Zip = Join-Path $WinDir "UrbsLabyrinthi-engine-windows.zip"
 $Pck = Join-Path $WinDir "UrbsLabyrinthi.pck"
@@ -51,7 +53,7 @@ if (-not $havePck) { throw "windows\UrbsLabyrinthi.pck が無い(exe と同じ�
 
 Say "エンジン(exe)を展開する"
 $want = if (Test-Path $Marker) { (Get-Content $Marker -Raw).Trim().ToLower() } else { "" }
-$ok = (Test-Path $Exe) -and $want -ne "" -and ((Get-Sha $Exe "SHA256") -eq $want)
+$ok = (Test-Path $Exe) -and ((-not (Test-Path $Zip)) -or ($want -ne "" -and ((Get-Sha $Exe "SHA256") -eq $want)))
 if ($ok) {
     Write-Host "展開済みで、内容も合っている"
 } else {

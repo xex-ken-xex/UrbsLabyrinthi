@@ -14,6 +14,8 @@ BASE_URL="https://github.com/godotengine/godot/releases/download/${GODOT_TAG}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY="$(cd "$HERE/.." && pwd)"
 LINUX_DIR="$DEPLOY/linux"
+# 配布 ZIP(UrbsLabyrinthi-linux/)では、実行ファイルが、SetupScript の1つ上にある
+[ -f "$DEPLOY/UrbsLabyrinthi.x86_64" ] && LINUX_DIR="$DEPLOY"
 MODE="play"
 for a in "$@"; do
   case "$a" in
