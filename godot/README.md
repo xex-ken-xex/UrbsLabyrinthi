@@ -200,7 +200,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 ## ライセンス
 
 魔物データは SRD 5.1(CC-BY-4.0)から縮めたもの。帰属表示は F1 のクレジット画面にある(原文は `docs/srd-data-sources.md` §3)。
-フォントは Zen Kaku Gothic New(SIL OFL 1.1、`assets/fonts/OFL.txt`)。
+フォントは、本文が M+ 1p(Medium と Bold)、見出しとタイトルがしっぽり明朝 SemiBold。どちらも SIL OFL 1.1(`assets/fonts/OFL-MPLUS1p.txt`、`assets/fonts/OFL-ShipporiMincho.txt`)。
 
 ## マップチップ
 
