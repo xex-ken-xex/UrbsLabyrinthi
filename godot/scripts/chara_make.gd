@@ -12,7 +12,7 @@ const DEFAULT_PARTY := [["fighter", "human", "M"], ["cleric", "dwarf", "F"], ["w
 const RACE_IDS := ["human", "elf", "dwarf", "halfling"]
 const CLASS_IDS := ["fighter", "barbarian", "rogue", "wizard", "cleric", "ranger"]
 
-var slots: Array = []        # {use, name, race, cls, look, stats, picks}
+var slots: Array = []        # {use, name, race, cls, look, stats, picks, birth}
 var sel := 0
 var _updating := false
 var slot_box: VBoxContainer
@@ -26,6 +26,7 @@ var points_label: Label
 var preview: RichTextLabel
 var prof_label: Label
 var prof_checks := {}        # 技能id → CheckBox
+var birth_opts := {}         # 生まれ表の key → OptionButton
 var msg: Label
 var start_btn: Button
 var form: VBoxContainer
@@ -43,8 +44,9 @@ func _ready() -> void:
 	add_child(dim)
 	for i in Balance.MAX_PARTY:
 		var d: Array = DEFAULT_PARTY[i]
+		var b := Birth.roll()
 		slots.append({"use": true, "name": NAMES[(i * 5 + 1) % NAMES.size()], "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0]),
-			"picks": Talents.default_picks(d[0], d[1])})
+			"birth": b, "picks": Birth.apply_to_picks(b, d[0], d[1], Talents.default_picks(d[0], d[1]))})
 	_build()
 	_select(0)
 
@@ -139,6 +141,30 @@ func _build() -> void:
 	row.add_child(right)
 	var rv := UIKit.vbox(6)
 	right.add_child(rv)
+	var bh := UIKit.hbox(6)
+	var bl := UIKit.vbox(2)
+	bl.add_child(UIKit.label("生い立ち", 15, UIKit.DIM))
+	bl.add_child(UIKit.button("ふる", _on_roll_birth))
+	bh.add_child(bl)
+	var bg := GridContainer.new()
+	bg.columns = 2
+	bg.add_theme_constant_override("h_separation", 4)
+	bg.add_theme_constant_override("v_separation", 2)
+	bg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for k in Birth.KEYS:
+		var ob := OptionButton.new()
+		ob.fit_to_longest_item = false
+		ob.clip_text = true
+		ob.add_theme_font_size_override("font_size", 13)
+		ob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ob.tooltip_text = String(Birth.KEY_JP[k])
+		for e in Birth.table(k):
+			ob.add_item("%s: %s" % [Birth.KEY_JP[k], e["name"]])
+		ob.item_selected.connect(_on_birth.bind(k))
+		bg.add_child(ob)
+		birth_opts[k] = ob
+	bh.add_child(bg)
+	rv.add_child(bh)
 	var ph := UIKit.hbox(8)
 	prof_label = UIKit.label("", 15, UIKit.DIM)
 	prof_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -207,6 +233,9 @@ func _refresh_all() -> void:
 	race_opt.select(RACE_IDS.find(s["race"]))
 	class_opt.select(CLASS_IDS.find(s["cls"]))
 	look_opt.select(0 if s["look"] == "M" else 1)
+	var b: Dictionary = s["birth"]
+	for k in Birth.KEYS:
+		(birth_opts[k] as OptionButton).select(int(b.get(k, -1)))
 	_updating = false
 	_refresh_slots()
 	_refresh_form()
@@ -218,6 +247,8 @@ func _refresh_form() -> void:
 	race_opt.disabled = not on
 	class_opt.disabled = not on
 	look_opt.disabled = not on
+	for k in birth_opts:
+		(birth_opts[k] as OptionButton).disabled = not on
 	var bonus: Dictionary = Jobs.RACES[s["race"]]["bonus"]
 	var used := Jobs.points_used(s["stats"])
 	for a in Jobs.ABILS:
@@ -251,7 +282,7 @@ func _refresh_picks() -> void:
 			cb.add_theme_color_override(k, UIKit.ACCENT if in_class else UIKit.TEXT)
 	_updating = false
 	var ok := Talents.picks_valid(s["cls"], picks)
-	var t := "技能: クラスの一覧(青)から %d つ ＋ 生い立ちで好きなもの %d つ。選んだ %d / %d" % [int(cp["count"]), Talents.BACKGROUND_COUNT, picks.size(), need]
+	var t := "技能: クラスの一覧(青)から %d つ ＋ 生い立ち(前職)で %d つ。選んだ %d / %d" % [int(cp["count"]), Talents.BACKGROUND_COUNT, picks.size(), need]
 	if not fixed.is_empty():
 		t += "(%sは種族で習熟)" % "、".join(fixed.map(func(x): return Talents.skill_name(x)))
 	prof_label.text = t
@@ -267,6 +298,9 @@ func _refresh_preview() -> void:
 	var race: Dictionary = Jobs.RACES[s["race"]]
 	var t := "[b][color=#e8dcb0]%s[/color][/b]  %s・%s\n" % [c.name, race["name"], cd["name"]]
 	t += "[color=#8a90a0]%s\n%s[/color]\n\n" % [cd["desc"], race["desc"]]
+	if not (s["birth"] as Dictionary).is_empty():
+		var js: Array = Birth.job_skills(s["birth"]).map(func(x): return Talents.skill_name(x))
+		t += "[b][color=#e8dcb0]生い立ち[/color][/b](前職の技能: %s)\n%s\n\n" % ["、".join(js), Birth.text(s["birth"])]
 	t += "最大HP [b]%d[/b]   最大MP [b]%d[/b]\n体当たり [b]%.1f[/b]/秒   防御 [b]%d[/b]\n" % [c.max_hp(), c.max_mp(), c.bump_power(), c.armor_class()]
 	t += "装備: %s / %s\n\n" % [ItemDB.item_name(String(c.equip["weapon"])), ItemDB.item_name(String(c.equip["armor"]))]
 	t += "[b][color=#5bc0de]スキル[/color][/b]\n"
@@ -322,7 +356,7 @@ func _on_race(i: int) -> void:
 	# 種族で習熟する技能と重なったら、選び直す
 	for p in Talents.RACE_PROF.get(RACE_IDS[i], []):
 		if (_cur()["picks"] as Array).has(p):
-			_cur()["picks"] = Talents.default_picks(String(_cur()["cls"]), RACE_IDS[i])
+			_cur()["picks"] = _birth_picks(Talents.default_picks(String(_cur()["cls"]), RACE_IDS[i]))
 			break
 	_refresh_all()
 
@@ -343,8 +377,30 @@ func _on_pick(on: bool, id: String) -> void:
 	_refresh_form()
 
 func _on_auto_picks() -> void:
-	_cur()["picks"] = Talents.default_picks(String(_cur()["cls"]), String(_cur()["race"]))
+	_cur()["picks"] = _birth_picks(Talents.default_picks(String(_cur()["cls"]), String(_cur()["race"])))
 	_refresh_form()
+
+## いまの生い立ち(前職)の技能を、生い立ちの2つに入れる
+func _birth_picks(picks: Array) -> Array:
+	return Birth.apply_to_picks(_cur()["birth"], String(_cur()["cls"]), String(_cur()["race"]), picks)
+
+func _on_birth(i: int, key: String) -> void:
+	if _updating:
+		return
+	var b: Dictionary = _cur()["birth"]
+	if b.is_empty():
+		b = Birth.roll()
+	b[key] = i
+	_cur()["birth"] = b
+	if key == "job":
+		_cur()["picks"] = _birth_picks(_cur()["picks"])
+	_refresh_all()
+
+func _on_roll_birth() -> void:
+	_cur()["birth"] = Birth.roll()
+	_cur()["picks"] = _birth_picks(_cur()["picks"])
+	msg.text = ""
+	_refresh_all()
 
 func _on_look(i: int) -> void:
 	if _updating:
@@ -357,7 +413,7 @@ func _on_class(i: int) -> void:
 		return
 	_cur()["cls"] = CLASS_IDS[i]
 	_cur()["stats"] = Jobs.auto_stats(CLASS_IDS[i])
-	_cur()["picks"] = Talents.default_picks(CLASS_IDS[i], String(_cur()["race"]))
+	_cur()["picks"] = _birth_picks(Talents.default_picks(CLASS_IDS[i], String(_cur()["race"])))
 	_refresh_all()
 
 func _on_stat(a: String, d: int) -> void:
@@ -404,7 +460,7 @@ func _on_start() -> void:
 		if not Talents.picks_valid(s["cls"], s["picks"]):
 			msg.text = "%sの技能を選び終えていない(クラスの一覧から%dつ、ほかに%dつ)" % [s["name"], int(Talents.CLASS_PROF[s["cls"]]["count"]), Talents.BACKGROUND_COUNT]
 			return
-		chars.append(Character.create(String(s["name"]).strip_edges(), s["race"], s["cls"], s["stats"], s["look"], s["picks"]))
+		chars.append(Character.create(String(s["name"]).strip_edges(), s["race"], s["cls"], s["stats"], s["look"], s["picks"], s["birth"]))
 	if chars.is_empty():
 		msg.text = "一人は必要だ"
 		return

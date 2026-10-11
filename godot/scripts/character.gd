@@ -12,6 +12,7 @@ var xp := 0
 var stats := {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}   # 種族の補正と能力値上昇を含む最終値
 var base_stats := {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}  # 作ったときの値(種族の補正を含む)
 var profs: Array = []               # 作るときに選んだ技能(クラスと生い立ちの分。種族の分は含まない)
+var birth := {}                     # 生まれ表の結果(Birth)。{origin, job, turn, reason}。無ければ空
 var choices := {}                   # 能力値上昇・特技・熟達の選択。key(asi4 など) → {"take": "abil:str" / "abil:str+dex" / "feat:tough" / "exp:stealth"}
 var hp := 1.0
 var mp := 0.0
@@ -21,8 +22,9 @@ var slots: Array = ["", "", "", ""] # ショートカット 1〜4
 var max_hp_cache := 1
 var max_mp_cache := 0
 
-static func create(nm: String, race_id: String, cls_id: String, point_stats: Dictionary, look_id: String = "M", picks: Array = []) -> Character:
+static func create(nm: String, race_id: String, cls_id: String, point_stats: Dictionary, look_id: String = "M", picks: Array = [], birth_d: Dictionary = {}) -> Character:
 	var c := Character.new()
+	c.birth = Birth.sanitize(birth_d)
 	c.name = nm
 	c.look = look_id
 	c.race = race_id
@@ -422,7 +424,7 @@ func clamp_resources() -> void:
 
 func to_dict() -> Dictionary:
 	return {"name": name, "race": race, "cls": cls, "look": look, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
-		"equip": equip, "skills": skills, "slots": slots, "base_stats": base_stats, "profs": profs, "choices": choices}
+		"equip": equip, "skills": skills, "slots": slots, "base_stats": base_stats, "profs": profs, "choices": choices, "birth": birth}
 
 static func from_dict(d: Dictionary) -> Character:
 	var c := Character.new()
@@ -430,6 +432,7 @@ static func from_dict(d: Dictionary) -> Character:
 	c.race = String(d.get("race", "human"))
 	c.cls = String(d.get("cls", "fighter"))
 	c.look = String(d.get("look", "M"))
+	c.birth = Birth.sanitize(d.get("birth", {}))
 	c.level = int(d.get("level", 1))
 	c.xp = int(d.get("xp", 0))
 	# 古いセーブには base_stats が無い。そのときは、いまの能力値を作ったときの値とみなす
