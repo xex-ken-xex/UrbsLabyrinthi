@@ -10,19 +10,34 @@ extends Control
 ## - `--no-update` を付けると確かめない。`--update-url=<URL>` で latest.json の場所を変えられる(確認用)
 ## - エンジンの版が違う .pck は使わない。そのときはインストーラーか ZIP で入れ直すよう知らせる
 ## - 実行ファイルのフォルダに書き込めないときは、知らせるだけにする
+## - 同じ版への入れ替えは一度だけ(user://update.cfg に覚える)。起動し直しの繰り返しにならない
+## - ハッシュは裏の糸で計算し、待つあいだは 30fps・省電力で描く。各段階は [urbs] 更新: としてログに残す
 ##
 ## latest.json: {"tag": "v6", "godot": "4.7.2", "pck": {"Windows": {"url", "sha256", "size"}, "Linux": {...}}}
 
 signal finished(note: String)
 
 const LATEST_URL := "https://github.com/xex-ken-xex/UrbsLabyrinthi/releases/latest/download/latest.json"
-const TIMEOUT := 8.0
+const TIMEOUT := 6.0
+const STATE := "user://update.cfg"
+
+## 入れ替えて起動し直しても、まだ古いままなら、同じ版を何度も入れ替えない(起動し直しの繰り返しを防ぐ)
+static func tried(sha: String) -> bool:
+	var c := ConfigFile.new()
+	return c.load(STATE) == OK and String(c.get_value("update", "tried_sha", "")) == sha
+
+static func mark_tried(sha: String) -> void:
+	var c := ConfigFile.new()
+	c.set_value("update", "tried_sha", sha)
+	c.save(STATE)
 
 var http: HTTPRequest
 var label: Label
 var bar: ProgressBar
 var _latest := {}
 var _done := false
+var _low_cpu := false
+var _max_fps := 0
 
 ## 確かめるべき起動か(書き出したビルドで、実行ファイルの隣に .pck がある)
 static func should_check() -> bool:
@@ -45,6 +60,18 @@ static func engine_version() -> String:
 
 static func _sha(path: String) -> String:
 	return FileAccess.get_sha256(path) if FileAccess.file_exists(path) else ""
+
+## ハッシュを裏の糸で計算する(画面を止めない)
+func _sha_async(path: String) -> String:
+	var out := [""]
+	var id := WorkerThreadPool.add_task(func(): out[0] = _sha(path))
+	while not WorkerThreadPool.is_task_completed(id):
+		await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(id)
+	return out[0]
+
+static func _trace(msg: String) -> void:
+	print("[urbs] 更新: ", msg)
 
 ## latest.json から、この OS の .pck を取り出す。読めなければ {}
 static func parse_latest(d) -> Dictionary:
@@ -77,6 +104,11 @@ static func windows_script(pid: int, src: String, dst: String, exe: String, user
 	return ps
 
 func _ready() -> void:
+	# 待つあいだは、描き直しを控えて、PC に負担をかけない
+	_low_cpu = OS.low_processor_usage_mode
+	_max_fps = Engine.max_fps
+	OS.low_processor_usage_mode = true
+	Engine.max_fps = 30
 	theme = UIKit.theme()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
@@ -96,7 +128,7 @@ func _ready() -> void:
 	bar.show_percentage = false
 	bar.visible = false
 	v.add_child(bar)
-	var skip := UIKit.label("Esc で飛ばす", 14, UIKit.DIM)
+	var skip := UIKit.label("Esc か B で飛ばす", 14, UIKit.DIM)
 	skip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(skip)
 	http = HTTPRequest.new()
@@ -109,16 +141,19 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--update-url="):
 			url = a.substr("--update-url=".length())
+	_trace("確認 %s" % url)
 	if http.request(url) != OK:
 		_finish("更新を確かめられなかった")
 
 func _process(_d: float) -> void:
+	if bar.visible and http.get_body_size() > 0 and bar.max_value != http.get_body_size():
+		_trace("受け取り %d バイト" % http.get_body_size())
 	if bar.visible and http.get_body_size() > 0:
 		bar.max_value = http.get_body_size()
 		bar.value = http.get_downloaded_bytes()
 
 func _unhandled_input(e: InputEvent) -> void:
-	if e.is_action_pressed("ui_cancel") and not _done:
+	if (e.is_action_pressed("ui_cancel") or (e is InputEventJoypadButton and e.pressed and e.button_index == JOY_BUTTON_B)) and not _done:
 		get_viewport().set_input_as_handled()
 		http.cancel_request()
 		DirAccess.remove_absolute(new_pck())
@@ -127,6 +162,7 @@ func _unhandled_input(e: InputEvent) -> void:
 func _on_latest(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 	if _done:
 		return
+	_trace("latest.json %d / %d" % [result, code])
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		_finish("更新を確かめられなかった(%d / %d)" % [result, code])
 		return
@@ -135,15 +171,25 @@ func _on_latest(result: int, code: int, _h: PackedStringArray, body: PackedByteA
 		_finish("更新の情報が読めなかった")
 		return
 	var want: String = _latest["sha"]
-	if _sha(base_pck()) == want:
+	var have: String = await _sha_async(base_pck())
+	if _done:
+		return
+	_trace("いまの版 %s / 最新 %s %s" % [have.left(12), _latest["tag"], want.left(12)])
+	if have == want:
 		DirAccess.remove_absolute(new_pck())
 		_finish("")
 		return
 	if _latest["godot"] != "" and _latest["godot"] != engine_version():
 		_finish("新しい版 %s は、入れ直しが要る(インストーラーか ZIP で入れ直す)" % _latest["tag"])
 		return
-	if _sha(new_pck()) == want:
+	if tried(want):
+		DirAccess.remove_absolute(new_pck())
+		_finish("新しい版 %s に入れ替えられなかった。インストーラーか ZIP で入れ直す" % _latest["tag"])
+		return
+	if await _sha_async(new_pck()) == want:
 		_apply()
+		return
+	if _done:
 		return
 	var probe := FileAccess.open(new_pck(), FileAccess.WRITE)
 	if probe == null:
@@ -167,7 +213,9 @@ func _on_pck(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray)
 		DirAccess.remove_absolute(new_pck())
 		_finish("新しい版を受け取れなかった(%d / %d)" % [result, code])
 		return
-	if _sha(new_pck()) != String(_latest["sha"]):
+	_trace("受け取った %d / %d" % [result, code])
+	label.text = "受け取った版を確かめている…"
+	if await _sha_async(new_pck()) != String(_latest["sha"]):
 		DirAccess.remove_absolute(new_pck())
 		_finish("受け取った版が壊れていたので、使わなかった")
 		return
@@ -176,6 +224,8 @@ func _on_pck(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray)
 ## .pck.new を .pck に入れ替えて、起動し直す
 func _apply() -> void:
 	_done = true
+	mark_tried(String(_latest["sha"]))
+	_trace("入れ替え %s" % _latest.get("tag", ""))
 	label.text = "新しい版 %s に入れ替えて、起動し直す…" % _latest.get("tag", "")
 	var exe := OS.get_executable_path()
 	var user := OS.get_cmdline_user_args()
@@ -205,4 +255,7 @@ func _apply() -> void:
 
 func _finish(note: String) -> void:
 	_done = true
+	_trace("終わり %s" % note)
+	OS.low_processor_usage_mode = _low_cpu
+	Engine.max_fps = _max_fps
 	finished.emit(note)
