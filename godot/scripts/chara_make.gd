@@ -12,7 +12,7 @@ const DEFAULT_PARTY := [["fighter", "human", "M"], ["cleric", "dwarf", "F"], ["w
 const RACE_IDS := ["human", "elf", "dwarf", "halfling"]
 const CLASS_IDS := ["fighter", "barbarian", "rogue", "wizard", "cleric", "ranger"]
 
-var slots: Array = []        # {use, name, race, cls, stats}
+var slots: Array = []        # {use, name, race, cls, look, stats, picks}
 var sel := 0
 var _updating := false
 var slot_box: VBoxContainer
@@ -24,6 +24,8 @@ var use_check: CheckBox
 var stat_rows := {}          # abil → {val, bonus, minus, plus}
 var points_label: Label
 var preview: RichTextLabel
+var prof_label: Label
+var prof_checks := {}        # 技能id → CheckBox
 var msg: Label
 var start_btn: Button
 var form: VBoxContainer
@@ -41,7 +43,8 @@ func _ready() -> void:
 	add_child(dim)
 	for i in Balance.MAX_PARTY:
 		var d: Array = DEFAULT_PARTY[i]
-		slots.append({"use": true, "name": NAMES[(i * 5 + 1) % NAMES.size()], "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0])})
+		slots.append({"use": true, "name": NAMES[(i * 5 + 1) % NAMES.size()], "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0]),
+			"picks": Talents.default_picks(d[0], d[1])})
 	_build()
 	_select(0)
 
@@ -130,17 +133,40 @@ func _build() -> void:
 	br.add_child(UIKit.button("おまかせ(クラスに合わせる)", _on_auto))
 	br.add_child(UIKit.button("ランダム配分", _on_random_stats))
 	form.add_child(br)
-	# 右: プレビュー
+	# 右: 技能の習熟と、プレビュー
 	var right := UIKit.panel()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(right)
+	var rv := UIKit.vbox(6)
+	right.add_child(rv)
+	var ph := UIKit.hbox(8)
+	prof_label = UIKit.label("", 15, UIKit.DIM)
+	prof_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prof_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ph.add_child(prof_label)
+	ph.add_child(UIKit.button("おまかせ", _on_auto_picks))
+	rv.add_child(ph)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 0)
+	for id in Talents.SKILL_ORDER:
+		var cb := CheckBox.new()
+		cb.text = "%s【%s】" % [Talents.SKILLS[id]["name"], String(Jobs.ABIL_JP[Talents.SKILLS[id]["abil"]]).substr(0, 1)]
+		cb.add_theme_font_size_override("font_size", 13)
+		cb.tooltip_text = String(Talents.SKILLS[id]["desc"])
+		cb.toggled.connect(_on_pick.bind(id))
+		grid.add_child(cb)
+		prof_checks[id] = cb
+	rv.add_child(grid)
 	preview = RichTextLabel.new()
+	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview.bbcode_enabled = true
 	preview.fit_content = false
 	preview.scroll_active = true
 	preview.add_theme_font_size_override("normal_font_size", 15)
 	preview.add_theme_font_size_override("bold_font_size", 15)
-	right.add_child(preview)
+	rv.add_child(preview)
 	# 下
 	msg = UIKit.label("", 15, UIKit.BAD)
 	root.add_child(msg)
@@ -205,14 +231,38 @@ func _refresh_form() -> void:
 		(row["plus"] as Button).disabled = not on or v >= 15 or used + cost_up > 27
 	points_label.text = "残りポイント: %d / 27" % (27 - used)
 	points_label.add_theme_color_override("font_color", UIKit.GOOD if used <= 27 else UIKit.BAD)
+	_refresh_picks()
 	_refresh_preview()
+
+## 技能の習熟の欄。クラスの一覧にある技能を太字の色で、種族の分は固定で示す
+func _refresh_picks() -> void:
+	var s := _cur()
+	var cp: Dictionary = Talents.CLASS_PROF[s["cls"]]
+	var fixed: Array = Talents.RACE_PROF.get(s["race"], [])
+	var picks: Array = s["picks"]
+	var need := int(cp["count"]) + Talents.BACKGROUND_COUNT
+	_updating = true
+	for id in prof_checks:
+		var cb: CheckBox = prof_checks[id]
+		var in_class := (cp["from"] as Array).has(id)
+		cb.button_pressed = picks.has(id) or fixed.has(id)
+		cb.disabled = not s["use"] or fixed.has(id)
+		for k in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color"]:
+			cb.add_theme_color_override(k, UIKit.ACCENT if in_class else UIKit.TEXT)
+	_updating = false
+	var ok := Talents.picks_valid(s["cls"], picks)
+	var t := "技能: クラスの一覧(青)から %d つ ＋ 生い立ちで好きなもの %d つ。選んだ %d / %d" % [int(cp["count"]), Talents.BACKGROUND_COUNT, picks.size(), need]
+	if not fixed.is_empty():
+		t += "(%sは種族で習熟)" % "、".join(fixed.map(func(x): return Talents.skill_name(x)))
+	prof_label.text = t
+	prof_label.add_theme_color_override("font_color", UIKit.GOOD if ok else UIKit.DIM)
 
 func _refresh_preview() -> void:
 	var s := _cur()
 	if not s["use"]:
 		preview.text = "[color=#8a90a0]この枠は使わない。[/color]"
 		return
-	var c := Character.create(s["name"], s["race"], s["cls"], s["stats"], s["look"])
+	var c := Character.create(s["name"], s["race"], s["cls"], s["stats"], s["look"], s["picks"])
 	var cd := c.class_data()
 	var race: Dictionary = Jobs.RACES[s["race"]]
 	var t := "[b][color=#e8dcb0]%s[/color][/b]  %s・%s\n" % [c.name, race["name"], cd["name"]]
@@ -229,7 +279,17 @@ func _refresh_preview() -> void:
 	var armors: Array = []
 	for a in cd["armor"]:
 		armors.append(ItemDB.ARMOR_TYPE_JP[a])
-	t += "\n使える武器: %s\n着られる鎧: %s" % ["、".join(weapons), "、".join(armors)]
+	t += "\n使える武器: %s\n着られる鎧: %s\n" % ["、".join(weapons), "、".join(armors)]
+	var saves: Array = []
+	for a in Talents.CLASS_PROF[c.cls]["saves"]:
+		saves.append(Jobs.ABIL_JP[a])
+	t += "セーヴの習熟: %s\n" % "、".join(saves)
+	var tools: Array = []
+	for tl in Talents.CLASS_PROF[c.cls]["tools"]:
+		tools.append(Talents.skill_name(tl))
+	if not tools.is_empty():
+		t += "道具の習熟: %s(解錠 %+d)\n" % ["、".join(tools), c.lock_bonus()]
+	t += "受動〈知覚〉 [b]%d[/b]   探る %+d\n" % [c.passive_perception(), c.search_bonus()]
 	preview.text = t
 
 # ---------- 入力 ----------
@@ -259,7 +319,32 @@ func _on_race(i: int) -> void:
 	if _updating:
 		return
 	_cur()["race"] = RACE_IDS[i]
+	# 種族で習熟する技能と重なったら、選び直す
+	for p in Talents.RACE_PROF.get(RACE_IDS[i], []):
+		if (_cur()["picks"] as Array).has(p):
+			_cur()["picks"] = Talents.default_picks(String(_cur()["cls"]), RACE_IDS[i])
+			break
 	_refresh_all()
+
+func _on_pick(on: bool, id: String) -> void:
+	if _updating:
+		return
+	msg.text = ""
+	var picks: Array = _cur()["picks"]
+	var cls := String(_cur()["cls"])
+	if on and not picks.has(id):
+		if picks.size() >= int(Talents.CLASS_PROF[cls]["count"]) + Talents.BACKGROUND_COUNT:
+			msg.text = "技能は選び終えている。替えるなら、先に一つ外す"
+			_refresh_form()
+			return
+		picks.append(id)
+	elif not on:
+		picks.erase(id)
+	_refresh_form()
+
+func _on_auto_picks() -> void:
+	_cur()["picks"] = Talents.default_picks(String(_cur()["cls"]), String(_cur()["race"]))
+	_refresh_form()
 
 func _on_look(i: int) -> void:
 	if _updating:
@@ -272,6 +357,7 @@ func _on_class(i: int) -> void:
 		return
 	_cur()["cls"] = CLASS_IDS[i]
 	_cur()["stats"] = Jobs.auto_stats(CLASS_IDS[i])
+	_cur()["picks"] = Talents.default_picks(CLASS_IDS[i], String(_cur()["race"]))
 	_refresh_all()
 
 func _on_stat(a: String, d: int) -> void:
@@ -315,7 +401,10 @@ func _on_start() -> void:
 		if String(s["name"]).strip_edges() == "":
 			msg.text = "名前のない仲間がいる"
 			return
-		chars.append(Character.create(String(s["name"]).strip_edges(), s["race"], s["cls"], s["stats"], s["look"]))
+		if not Talents.picks_valid(s["cls"], s["picks"]):
+			msg.text = "%sの技能を選び終えていない(クラスの一覧から%dつ、ほかに%dつ)" % [s["name"], int(Talents.CLASS_PROF[s["cls"]]["count"]), Talents.BACKGROUND_COUNT]
+			return
+		chars.append(Character.create(String(s["name"]).strip_edges(), s["race"], s["cls"], s["stats"], s["look"], s["picks"]))
 	if chars.is_empty():
 		msg.text = "一人は必要だ"
 		return

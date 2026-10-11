@@ -85,11 +85,4 @@ static func level_for_xp(xp: int) -> int:
 			lv = i + 1
 	return mini(lv, 20)
 
-# 受動〈知覚〉、判定の加値
-static func passive_perception(lv: int) -> int:
-	return 12 + (lv - 1) / 4
-
-static func skill_bonus(lv: int) -> int:
-	return 2 + lv / 2
-
 const SIZE_MASS := {"T": 0.4, "S": 0.7, "M": 1.0, "L": 1.8, "H": 2.8, "G": 4.0}

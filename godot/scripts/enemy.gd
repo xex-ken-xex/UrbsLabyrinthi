@@ -114,6 +114,9 @@ func _pick_attack() -> void:
 func is_alive() -> bool:
 	return not dead
 
+func mon_type() -> String:
+	return String(mon.get("type", ""))
+
 func hp_frac() -> float:
 	return clampf(hp / float(max_hp), 0.0, 1.0)
 
@@ -140,6 +143,8 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	if dead:
 		return
 	var red := clampf((ac - 10) * 0.03, 0.0, 0.45)
+	if src is Hero and is_instance_valid(src):
+		amount *= (src as Hero).ch.dealt_mult(mon_type())
 	var final := maxf(0.05, amount * (1.0 - red))
 	hp -= final
 	if src is Hero and is_instance_valid(src):
@@ -154,7 +159,7 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 		game_floor.alert_encounter(enc_id)
 	if src is Hero:
 		target = src
-	_check_flee()
+	_check_flee(src as Hero if src is Hero and is_instance_valid(src) else null)
 
 func apply_slow(secs: float, v: float = 0.45) -> void:
 	slow_t = maxf(slow_t, secs)
@@ -169,14 +174,16 @@ func _die() -> void:
 	died.emit(self)
 	queue_free()
 
-func _check_flee() -> void:
+func _check_flee(by: Hero = null) -> void:
 	if fled or state == "flee" or kind == "mindless":
 		return
+	# 〈威圧〉: 傷つけた相手が怖いほど、早く逃げ出す
+	var scare := by.ch.skill_fx("intimidation") if by != null else 0.0
 	var go := false
 	if kind == "beast":
-		go = hp_frac() <= 0.5 and game_floor.group_dead_fraction(enc_id) >= 0.5
+		go = hp_frac() <= 0.5 + scare and game_floor.group_dead_fraction(enc_id) >= 0.5
 	else:
-		go = hp_frac() <= 0.25
+		go = hp_frac() <= 0.25 + scare
 	if go:
 		state = "flee"
 		timer = 4.0
@@ -213,6 +220,7 @@ func _can_sense(h: Hero) -> bool:
 		cells = 3.5
 	if attitude == "警戒":
 		cells = minf(cells, 4.5)
+	cells *= 1.0 - h.ch.skill_fx("stealth")    # 〈隠密〉
 	if position.distance_to(h.position) > cells * Balance.CELL:
 		return false
 	var a := game_floor.map.cell_of(position)
@@ -324,7 +332,7 @@ func _flee(delta: float) -> void:
 func _shoot(h: Hero) -> void:
 	atk_cd = Balance.ENEMY_ATTACK_INTERVAL * 1.4
 	var p := Projectile.new()
-	p.setup_enemy(game_floor, position, (h.position - position).normalized(), maxf(1.0, dmg * randf_range(0.85, 1.15)), color)
+	p.setup_enemy(game_floor, position, (h.position - position).normalized(), maxf(1.0, dmg * randf_range(0.85, 1.15)), color, mon_type())
 	game_floor.add_child(p)
 
 # ---------- 描画 ----------

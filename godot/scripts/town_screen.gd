@@ -260,14 +260,14 @@ func _fill_shop() -> void:
 	if shop_mode == "buy":
 		for id in ItemDB.SHOPS[location]:
 			shop_ids.append(id)
-			var price := int(ItemDB.ITEMS[id]["price"])
+			var price := gs.buy_price(id)
 			shop_list.add_item("%s   %d銀" % [ItemDB.item_name(id), price])
 			if price > gs.bank_silver:
 				shop_list.set_item_custom_fg_color(shop_list.item_count - 1, Color(0.55, 0.45, 0.45))
 	else:
 		for id in gs.item_ids():
 			shop_ids.append(id)
-			shop_list.add_item("%s ×%d   %d銀" % [ItemDB.item_name(id), gs.count(id), ItemDB.sell_price(id)])
+			shop_list.add_item("%s ×%d   %d銀" % [ItemDB.item_name(id), gs.count(id), gs.sell_price(id)])
 		if shop_ids.is_empty():
 			shop_list.add_item("(売れるものがない)")
 			shop_list.set_item_disabled(0, true)
@@ -289,7 +289,7 @@ func _show_shop_detail() -> void:
 	var t := "[b][color=#e8dcb0]%s[/color][/b]\n%s\n" % [it["name"], ItemDB.detail(sel_id)]
 	var kind := String(it["kind"])
 	if shop_mode == "buy":
-		t += "\n値段 [b]%d銀貨[/b]    所持 %d" % [int(it["price"]), gs.count(sel_id)]
+		t += "\n値段 [b]%d銀貨[/b]    所持 %d" % [gs.buy_price(sel_id), gs.count(sel_id)]
 		if kind == "weapon" or kind == "armor" or kind == "acc":
 			t += "\n"
 			for c in gs.party:
@@ -298,24 +298,24 @@ func _show_shop_detail() -> void:
 				else:
 					t += "\n[color=#8a90a0]%s  (装備できない)[/color]" % c.name
 		var b := UIKit.button("購入する", _buy.bind(-1))
-		b.disabled = int(it["price"]) > gs.bank_silver
+		b.disabled = gs.buy_price(sel_id) > gs.bank_silver
 		shop_actions.add_child(b)
 		if kind == "weapon" or kind == "armor" or kind == "acc":
 			for i in gs.party.size():
 				var c: Character = gs.party[i]
 				if ItemDB.can_equip(sel_id, c.cls):
 					var b2 := UIKit.button("買って %s に装備" % c.name, _buy.bind(i))
-					b2.disabled = int(it["price"]) > gs.bank_silver
+					b2.disabled = gs.buy_price(sel_id) > gs.bank_silver
 					shop_actions.add_child(b2)
 		elif kind == "tome":
 			for i in gs.party.size():
 				var c2: Character = gs.party[i]
 				if (it["classes"] as Array).has(c2.cls) and not c2.skills.has(String(it["teaches"])):
 					var b3 := UIKit.button("買って %s が覚える" % c2.name, _buy.bind(i))
-					b3.disabled = int(it["price"]) > gs.bank_silver
+					b3.disabled = gs.buy_price(sel_id) > gs.bank_silver
 					shop_actions.add_child(b3)
 	else:
-		t += "\n買い取り [b]%d銀貨[/b]    所持 %d" % [ItemDB.sell_price(sel_id), gs.count(sel_id)]
+		t += "\n買い取り [b]%d銀貨[/b]    所持 %d" % [gs.sell_price(sel_id), gs.count(sel_id)]
 		shop_actions.add_child(UIKit.button("売る", _sell))
 	shop_detail.text = t
 
@@ -342,7 +342,7 @@ func _sell() -> void:
 	if r != "":
 		_say(r, UIKit.BAD)
 		return
-	_say("%sを売った(+%d銀貨)" % [name, ItemDB.sell_price(sel_id)], UIKit.GOOD)
+	_say("%sを売った(+%d銀貨)" % [name, gs.sell_price(sel_id)], UIKit.GOOD)
 	if gs.count(sel_id) <= 0:
 		sel_id = ""
 	_refresh_top()
