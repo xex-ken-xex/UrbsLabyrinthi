@@ -123,9 +123,9 @@ func hp_frac() -> float:
 func body_mass() -> float:
 	return Balance.SIZE_MASS.get(size_key, 1.0)
 
-## 歩く速さ(Balance.ENEMY_SPEED_SCALE をかけたもの)
+## 歩く速さ(Balance.ENEMY_SPEED_SCALE と、設定の「魔物の速さ」をかけたもの)
 func move_speed() -> float:
-	return speed * Balance.ENEMY_SPEED_SCALE
+	return speed * Balance.ENEMY_SPEED_SCALE * GameSettings.enemy_speed()
 
 func body_speed() -> float:
 	if stun_t > 0.0:

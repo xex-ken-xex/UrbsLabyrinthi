@@ -524,6 +524,11 @@ func _fake_enemy(fl: FloorInstance, pos: Vector2, hp: int, size: String = "M", d
 
 # ---------- 戦闘のテンポと移動(オープンプレーの意見 A) ----------
 
+func _fake_enemy_speed_probe() -> Enemy:
+	var e := Enemy.new()
+	e.speed = 100.0
+	return e
+
 func _test_tempo() -> void:
 	print("[tempo]")
 	# 速さの設定
@@ -533,6 +538,13 @@ func _test_tempo() -> void:
 	check(GameSettings.speed_index == 0 and is_equal_approx(GameSettings.speed(), 0.7) and GameSettings.speed_name() == "遅い", "ゲームの速さを保存して読み直せる")
 	GameSettings.set_speed(keep)
 	check(GameSettings.SPEEDS.map(func(x): return x[0]) == ["遅い", "普通", "早い", "超早い"] and GameSettings.DEFAULT_SPEED == 1, "速さは 遅い/普通/早い/超早い、初期値は普通")
+	var ek := GameSettings.enemy_speed_index
+	var en0 := _fake_enemy_speed_probe()
+	GameSettings.set_enemy_speed(3)
+	GameSettings.load_settings()
+	check(GameSettings.enemy_speed_index == 3 and is_equal_approx(en0.move_speed(), en0.speed * Balance.ENEMY_SPEED_SCALE * 1.3), "魔物の速さの設定を保存して読み直せ、魔物に効く")
+	GameSettings.set_enemy_speed(ek)
+	en0.free()
 	# 版1の操作の割り当ては、Esc を持ち物から外し、コントローラーのスキルを並べ替える
 	var saved := Controls.binds.duplicate(true)
 	Controls.binds["inventory"]["keys"] = [Controls._k(KEY_TAB), Controls._k(KEY_ESCAPE)]
