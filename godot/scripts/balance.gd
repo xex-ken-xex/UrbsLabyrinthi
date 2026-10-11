@@ -18,7 +18,7 @@ const ROLL_COOLDOWN := 0.8
 const LIGHT_RADIUS := 7                # 灯りの半径(マス)
 const MAX_PARTY := 4
 
-# 体当たり(ハイドライド式)。触れて押し込んでいる間、一定間隔でダメージが入る
+# 体当たり(ハイドライド式)の押し合い。魔物は触れている間、一定間隔でダメージを与える(仲間は通常攻撃で殴る)
 static var BUMP_TICK := 0.25                # ダメージが入る間隔(秒)
 static var BUMP_SCALE := 0.55               # クラスの体当たり火力にかける係数
 static var PUSH_SCALE := 2.2                # 押し合いの速さにかける係数
@@ -26,6 +26,17 @@ static var HP_FLOOR := 0.35                 # HPが0に近いときの押す力�
 static var HP_SCALE := 1.5                  # キャラクターの最大HPにかける係数
 static var AC_REDUCTION := 0.035            # 防御1点あたりの軽減率
 const GUARD_MASS := 2.0                # 構え(Space)の間、押されにくくなる倍率
+
+# 通常攻撃(ボタンで正面へ一撃)。体当たりの自動攻撃の代わり
+static var ATTACK_SCALE := 1.3              # 一撃のダメージ = 体当たり火力 × 待ち時間 × これ
+static var ATTACK_CD := 0.7                 # 次に振れるまでの待ち時間(秒)
+const ATTACK_REACH := 22.0             # 体の縁から届く距離(画素)
+const ATTACK_ARC := 70.0               # 正面から左右に届く角度(度)
+const ATTACK_KNOCK := 140.0            # 当たった相手を押し返す強さ
+
+# 魔物
+static var ENEMY_SPEED_SCALE := 0.85        # 魔物の移動の速さにかける
+static var ENEMY_HP_SCALE := 1.5            # 魔物の最大HPにかける(SRD の hp × これ)
 
 # SRD の「1ラウンド6秒」を、アクションの手数に直す係数
 static var ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当たりでは、これを攻撃間隔で割った毎秒のダメージにする)
@@ -36,7 +47,11 @@ static var ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
 const TUNABLE := {
 	"ENEMY_DMG_SCALE": [0.4, 0.05, 1.5, "敵の攻撃の係数(大きいほど痛い)"],
 	"ENEMY_ATTACK_INTERVAL": [1.6, 0.4, 4.0, "敵の攻撃の間隔・秒(大きいほど痛くない)"],
-	"BUMP_SCALE": [0.55, 0.15, 1.5, "仲間の体当たり火力の係数"],
+	"BUMP_SCALE": [0.55, 0.15, 1.5, "仲間の火力の係数(通常攻撃の元)"],
+	"ATTACK_SCALE": [1.3, 0.3, 3.0, "通常攻撃の一撃の係数"],
+	"ATTACK_CD": [0.7, 0.2, 2.0, "通常攻撃の待ち時間・秒"],
+	"ENEMY_SPEED_SCALE": [0.85, 0.4, 1.5, "魔物の移動の速さの係数"],
+	"ENEMY_HP_SCALE": [1.5, 0.5, 4.0, "魔物の最大HPの係数(次に出る魔物から)"],
 	"PUSH_SCALE": [2.2, 0.5, 5.0, "押し合いの強さの係数"],
 	"HP_SCALE": [1.5, 0.5, 3.0, "仲間の最大HPの係数"],
 	"HP_FLOOR": [0.35, 0.0, 0.9, "HPが減っても残る押す力の下限"],
@@ -54,6 +69,10 @@ static func tune_get(key: String) -> float:
 		"HP_FLOOR": return HP_FLOOR
 		"AC_REDUCTION": return AC_REDUCTION
 		"TRAP_DMG_SCALE": return TRAP_DMG_SCALE
+		"ENEMY_HP_SCALE": return ENEMY_HP_SCALE
+		"ENEMY_SPEED_SCALE": return ENEMY_SPEED_SCALE
+		"ATTACK_CD": return ATTACK_CD
+		"ATTACK_SCALE": return ATTACK_SCALE
 	return 0.0
 
 static func tune_set(key: String, v: float) -> void:
@@ -66,6 +85,10 @@ static func tune_set(key: String, v: float) -> void:
 		"HP_FLOOR": HP_FLOOR = v
 		"AC_REDUCTION": AC_REDUCTION = v
 		"TRAP_DMG_SCALE": TRAP_DMG_SCALE = v
+		"ENEMY_HP_SCALE": ENEMY_HP_SCALE = v
+		"ENEMY_SPEED_SCALE": ENEMY_SPEED_SCALE = v
+		"ATTACK_CD": ATTACK_CD = v
+		"ATTACK_SCALE": ATTACK_SCALE = v
 
 static func tune_reset() -> void:
 	for k in TUNABLE:

@@ -68,7 +68,7 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	var act := String(e.get("activity", ""))
 	asleep = act.contains("休んで") or act.contains("眠")
 	display_name = String(m.get("world_name", m.get("name_ja", m.get("name", "?"))))
-	max_hp = maxi(1, int(m.get("hp", 5)))
+	max_hp = maxi(1, int(round(float(m.get("hp", 5)) * Balance.ENEMY_HP_SCALE)))
 	hp = float(max_hp)
 	ac = int(m.get("ac", 10))
 	xp = int(m.get("xp", 0))
@@ -123,10 +123,14 @@ func hp_frac() -> float:
 func body_mass() -> float:
 	return Balance.SIZE_MASS.get(size_key, 1.0)
 
+## 歩く速さ(Balance.ENEMY_SPEED_SCALE をかけたもの)
+func move_speed() -> float:
+	return speed * Balance.ENEMY_SPEED_SCALE
+
 func body_speed() -> float:
 	if stun_t > 0.0:
 		return 0.0
-	return speed * (slow_v if slow_t > 0.0 else 1.0)
+	return move_speed() * (slow_v if slow_t > 0.0 else 1.0)
 
 func contact_dps() -> float:
 	if stun_t > 0.0 or state == "neutral":
@@ -306,7 +310,7 @@ func _chase(delta: float) -> void:
 			target = near
 	if ranged:
 		if seen and dist < 110.0:
-			_steer(delta, position - to_t, speed * 0.8)
+			_steer(delta, position - to_t, move_speed() * 0.8)
 		elif seen and dist <= 200.0:
 			if atk_cd <= 0.0:
 				_shoot(target)
@@ -317,17 +321,17 @@ func _chase(delta: float) -> void:
 
 func _approach(delta: float, seen: bool, mc: Vector2i) -> void:
 	if seen and position.distance_to(target.position) < 220.0:
-		_steer(delta, target.position, speed)
+		_steer(delta, target.position, move_speed())
 		return
 	var nxt := game_floor.map.flow_step(game_floor.flow, mc, true)
 	if nxt.x >= 0:
-		_steer(delta, game_floor.map.center_of(nxt), speed)
+		_steer(delta, game_floor.map.center_of(nxt), move_speed())
 
 func _flee(delta: float) -> void:
 	var mc := game_floor.map.cell_of(position)
 	var nxt := game_floor.map.flow_step(game_floor.flow, mc, false)
 	if nxt.x >= 0:
-		_steer(delta, game_floor.map.center_of(nxt), speed * 1.1)
+		_steer(delta, game_floor.map.center_of(nxt), move_speed() * 1.1)
 
 func _shoot(h: Hero) -> void:
 	atk_cd = Balance.ENEMY_ATTACK_INTERVAL * 1.4

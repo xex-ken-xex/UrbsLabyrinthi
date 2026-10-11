@@ -25,6 +25,7 @@ func _run() -> void:
 	await _test_assets()
 	await _test_floors()
 	await _test_contact()
+	await _test_tempo()
 	await _test_game()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
@@ -114,8 +115,13 @@ func _test_controls() -> void:
 	st.axis_value = -1.0
 	check(InputMap.event_is_action(st, "move_left"), "左スティックで移動")
 	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
 	esc.physical_keycode = KEY_ESCAPE
-	check(InputMap.event_is_action(esc, "inventory"), "Esc でも持ち物を開閉する")
+	check(not InputMap.event_is_action(esc, "inventory") and InputMap.event_is_action(esc, "ui_cancel"), "Esc は戻る・閉じる専用(持ち物は開かない)")
+	var tabk := InputEventKey.new()
+	tabk.keycode = KEY_TAB
+	tabk.physical_keycode = KEY_TAB
+	check(InputMap.event_is_action(tabk, "inventory") and not InputMap.event_is_action(tabk, "ui_focus_next"), "Tab は持ち物だけ(ボタンの焦点送りに取られない)")
 	# 割り当てを変えて、保存して、読み直す
 	var rt := InputEventJoypadMotion.new()
 	rt.axis = JOY_AXIS_TRIGGER_RIGHT
@@ -474,6 +480,8 @@ func _max_overlap(fl: FloorInstance) -> float:
 	var mx := 0.0
 	for i in bodies.size():
 		for j in range(i + 1, bodies.size()):
+			if Contact._passes(bodies[i], bodies[j]):
+				continue   # 仲間どうし、仲間と中立の魔物は、すり抜ける
 			var o: float = bodies[i].radius + bodies[j].radius - bodies[i].position.distance_to(bodies[j].position)
 			mx = maxf(mx, o)
 	return mx
@@ -505,12 +513,122 @@ func _fake_enemy(fl: FloorInstance, pos: Vector2, hp: int, size: String = "M", d
 		"speed": {"walk": 30}, "attacks": [{"n": "Bite", "b": 4, "d": "2d6+2 piercing"}]}
 	e.setup(fl, mon, {"id": 999, "kind": "mindless", "attitude": "敵対", "activity": ""}, pos)
 	e.dmg *= dps_scale
+	e.max_hp = hp          # 試験では、魔物HPの係数をかけない
+	e.hp = float(hp)
 	e.state = "chase"
 	fl.add_child(e)
 	fl.enemies.append(e)
 	e.died.connect(fl._on_enemy_died)
 	fl.enc_total[999] = fl.enc_total.get(999, 0) + 1
 	return e
+
+# ---------- 戦闘のテンポと移動(オープンプレーの意見 A) ----------
+
+func _test_tempo() -> void:
+	print("[tempo]")
+	# 速さの設定
+	var keep := GameSettings.speed_index
+	GameSettings.set_speed(0)
+	GameSettings.load_settings()
+	check(GameSettings.speed_index == 0 and is_equal_approx(GameSettings.speed(), 0.7) and GameSettings.speed_name() == "遅い", "ゲームの速さを保存して読み直せる")
+	GameSettings.set_speed(keep)
+	check(GameSettings.SPEEDS.map(func(x): return x[0]) == ["遅い", "普通", "早い", "超早い"] and GameSettings.DEFAULT_SPEED == 1, "速さは 遅い/普通/早い/超早い、初期値は普通")
+	# 版1の操作の割り当ては、Esc を持ち物から外し、コントローラーのスキルを並べ替える
+	var saved := Controls.binds.duplicate(true)
+	Controls.binds["inventory"]["keys"] = [Controls._k(KEY_TAB), Controls._k(KEY_ESCAPE)]
+	Controls.binds["skill1"]["pad"] = Controls._b(JOY_BUTTON_X)
+	Controls._migrate_v1()
+	check(Controls.binds["inventory"]["keys"][1].get("c", 0) != KEY_ESCAPE and Controls.binds["skill1"]["pad"] == Controls._b(JOY_BUTTON_Y), "古い割り当てを読み替える")
+	Controls.binds = saved
+	Controls.apply()
+	var made := _make_floor(4, 1)
+	var fl: FloorInstance = made[0]
+	var heroes: Array = made[1]
+	_clear_enemies(fl)
+	var m := fl.map
+	# 壁の角: 幅1マスの縦の通路へ、中心から横にずれたまま下へ進んでも入れる
+	var entry := Vector2i(-1, -1)
+	for y in range(1, m.h - 3):
+		for x in range(1, m.w - 1):
+			if m.opaque(x, y) or m.opaque(x - 1, y) or m.opaque(x + 1, y):
+				continue   # 上は3マス続きの床
+			var ok := true
+			for k in range(1, 4):
+				if m.opaque(x, y + k) or not m.opaque(x - 1, y + k) or not m.opaque(x + 1, y + k):
+					ok = false
+			if ok:
+				entry = Vector2i(x, y)
+				break
+		if entry.x >= 0:
+			break
+	check(entry.x >= 0, "幅1マスの縦の通路が見つかる")
+	if entry.x >= 0:
+		var hero: Hero = heroes[0]
+		for h in heroes:
+			h.down = h != hero
+		fl.heroes = [hero]
+		fl.leader = hero
+		hero.down = false
+		hero.controlled = true
+		hero.ch.hp = float(hero.ch.max_hp())
+		var worst_y := 1e9
+		for off in [-11.0, 11.0]:
+			hero.position = m.center_of(entry) + Vector2(off, 0)
+			hero.cmd = {"move": Vector2.DOWN, "guard": false, "dodge": false}
+			var y0 := hero.position.y
+			await _step(40)
+			worst_y = minf(worst_y, hero.position.y - y0)
+		hero.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+		check(worst_y > 40.0, "壁の角に掛かっても、滑って通路へ入れる (下へ %.1f px)" % worst_y)
+	# 仲間どうしは、動いている間すり抜ける
+	var spot := _open_spot(fl)
+	var a: Hero = heroes[0]
+	var b: Hero = heroes[1]
+	for h in heroes:
+		h.down = not (h == a or h == b)
+		h.ch.hp = float(h.ch.max_hp())
+	fl.heroes = [a, b]
+	fl.leader = a
+	a.controlled = true
+	b.controlled = true      # 自分では動かない
+	a.position = spot
+	b.position = spot + Vector2(40, 0)
+	a.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
+	b.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	await _step(40)
+	check(a.position.x > b.position.x + 5.0, "動いている仲間は、止まっている仲間をすり抜ける (%.1f / %.1f)" % [a.position.x, b.position.x])
+	# 止まると、重ならないように離れる
+	a.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	a.position = b.position + Vector2(3, 0)
+	await _step(60)
+	check(a.position.distance_to(b.position) > a.radius + b.radius - 2.0, "止まっている仲間どうしは、重ならないように離れる (%.1f)" % a.position.distance_to(b.position))
+	# 話し合える魔物(中立)は、すり抜ける
+	_clear_enemies(fl)
+	fl.heroes = [a]
+	a.position = spot
+	var nu := _fake_enemy(fl, spot + Vector2(40, 0), 50)
+	nu.state = "neutral"
+	var nx := nu.position.x
+	a.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
+	await _step(40)
+	check(a.position.x > nu.position.x + 5.0 and is_equal_approx(nu.hp, 50.0), "中立の魔物はすり抜け、殴らない (%.1f / %.1f)" % [a.position.x, nu.position.x])
+	a.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	b.controlled = false
+	_clear_enemies(fl)
+	# 魔物の速さと HP の係数
+	var sp0 := Balance.ENEMY_SPEED_SCALE
+	var en := _fake_enemy(fl, spot, 10)
+	var base := en.speed
+	Balance.ENEMY_SPEED_SCALE = 0.5
+	check(is_equal_approx(en.body_speed(), base * 0.5), "魔物の速さに係数がかかる")
+	Balance.ENEMY_SPEED_SCALE = sp0
+	var mon := {"name": "T", "hp": 20, "ac": 10, "size": "M", "type": "beast", "xp": 1, "cr": 0, "speed": {"walk": 30}, "attacks": []}
+	var e2 := Enemy.new()
+	e2.setup(fl, mon, {"id": 998, "kind": "beast", "attitude": "敵対", "activity": ""}, spot)
+	check(e2.max_hp == int(round(20 * Balance.ENEMY_HP_SCALE)), "魔物の最大HPに係数がかかる (%d)" % e2.max_hp)
+	e2.free()
+	_clear_enemies(fl)
+	fl.queue_free()
 
 func _test_contact() -> void:
 	print("[contact]")
@@ -549,7 +667,7 @@ func _test_contact() -> void:
 	print("  0.6秒の押し込み: 敵満タン %.1f / 敵HP10%% %.1f / 自分HP12%% %.1f px" % [results["enemy_full"], results["enemy_low"], results["hero_low"]])
 	check(results["enemy_low"] > results["enemy_full"] + 15.0, "敵のHPが削れると、押し込める距離が伸びる")
 	check(results["hero_low"] < results["enemy_full"] - 8.0, "こちらのHPが削られると、押される")
-	# 2. 体当たりでダメージが入る(双方向)
+	# 2. 仲間は押し込むだけでは削れない。通常攻撃で削る。魔物は触れると殴ってくる
 	_clear_enemies(fl)
 	var h0: Hero = heroes[0]
 	h0.down = false
@@ -560,7 +678,13 @@ func _test_contact() -> void:
 	h0.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
 	var hp0 := h0.ch.hp
 	await _step(60)
-	check(en2.hp < 60.0, "押し込むと敵のHPが削れる (60 → %.1f)" % en2.hp)
+	check(is_equal_approx(en2.hp, 60.0), "押し込むだけでは敵のHPは削れない (60 → %.1f)" % en2.hp)
+	h0.atk_cd = 0.0
+	check(h0.attack(), "攻撃のボタンで正面へ一撃")
+	check(en2.hp < 60.0, "通常攻撃で敵のHPが削れる (60 → %.1f)" % en2.hp)
+	check(not h0.attack() and h0.attack_ready_frac() < 0.1, "振ったあとは待ち時間がある")
+	await _step(int(Balance.ATTACK_CD * 60.0) + 4)
+	check(h0.attack_ready_frac() >= 1.0, "待ち時間が過ぎると、また振れる")
 	check(h0.ch.hp < hp0, "敵に押し込まれるとこちらも削れる (%.1f → %.1f)" % [hp0, h0.ch.hp])
 	# 3. 構え(Space)で、押されにくく、受けるダメージが減る
 	_clear_enemies(fl)
@@ -572,7 +696,8 @@ func _test_contact() -> void:
 	await _step(60)
 	var pushed_open := pos0 - h0.position.x
 	var dmg_open := h0.ch.max_hp() - h0.ch.hp
-	check(en3.hp < 300.0, "触れているだけで自動的に攻撃する(入力なし。敵HP 300 → %.1f)" % en3.hp)
+	check(is_equal_approx(en3.hp, 300.0), "仲間は触れているだけでは攻撃しない(体当たりの自動攻撃はなし。敵HP 300 → %.1f)" % en3.hp)
+	check(dmg_open > 0.0, "魔物は触れていると殴ってくる (%.1f)" % dmg_open)
 	_clear_enemies(fl)
 	h0.ch.hp = float(h0.ch.max_hp())
 	h0.position = spot

@@ -174,6 +174,31 @@ func move_circle(p: Vector2, delta: Vector2, r: float) -> Vector2:
 		np2 = np
 	return np2
 
+## 自分の足で歩くとき。壁の角に少しだけ掛かって進めないなら、通れる側へ横に滑らせる
+## (幅1マスの通路の入口で、中心から少しずれていても入れるように)
+func slide_circle(p: Vector2, delta: Vector2, r: float) -> Vector2:
+	var np := move_circle(p, delta, r)
+	var want := delta.length()
+	if want < 0.001 or (np - p).length() >= want * 0.5:
+		return np
+	# 主に進みたい向き(縦か横)と、それに直交する向き
+	var main := Vector2(signf(delta.x), 0.0) if absf(delta.x) >= absf(delta.y) else Vector2(0.0, signf(delta.y))
+	var perp := Vector2(absf(main.y), absf(main.x))
+	var ahead := main * maxf(want, 1.0)
+	var limit := r + 8.0
+	for side in [1.0, -1.0]:
+		var k := 1.0
+		while k <= limit:
+			var off: Vector2 = perp * side * k
+			if circle_blocked(p + off, r):
+				break   # 横へもずれられない
+			if not circle_blocked(p + off + ahead, r):
+				# この側に抜け道がある。横へずらしつつ、通れるぶんだけ進む
+				var lat: Vector2 = perp * side * minf(want, k)
+				return move_circle(np, lat, r)
+			k += 1.0
+	return np
+
 func cell_of(p: Vector2) -> Vector2i:
 	return Vector2i(int(floor(p.x / Balance.CELL)), int(floor(p.y / Balance.CELL)))
 

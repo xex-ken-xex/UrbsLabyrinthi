@@ -5,12 +5,13 @@ extends RefCounted
 ## 移動は、左スティックでもいつでもできる(割り当ての外)。
 
 const PATH := "user://controls.cfg"
+const VERSION := 2      # 2: 攻撃を足し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
 const MOVE := ["move_up", "move_down", "move_left", "move_right"]
 
 ## [id, 名前]。この順に設定画面へ並ぶ
 const ACTIONS := [
 	["move_up", "上へ"], ["move_down", "下へ"], ["move_left", "左へ"], ["move_right", "右へ"],
-	["guard", "構え(押している間)"], ["dodge", "転がり"],
+	["attack", "攻撃(正面へ一撃)"], ["guard", "構え(押している間)"], ["dodge", "転がり"],
 	["skill1", "スキル1"], ["skill2", "スキル2"], ["skill3", "スキル3"], ["skill4", "スキル4"],
 	["switch", "操作する仲間を替える"], ["interact", "調べる・開ける・拾う"], ["search", "探る(罠と隠し扉)"],
 	["quick_heal", "治療薬を使う"], ["inventory", "持ち物(メニュー)"], ["confirm", "決定(報告を閉じる)"],
@@ -33,17 +34,18 @@ static func defaults() -> Dictionary:
 		"move_down": {"keys": [_k(KEY_S), _k(KEY_DOWN)], "pad": _b(JOY_BUTTON_DPAD_DOWN)},
 		"move_left": {"keys": [_k(KEY_A), _k(KEY_LEFT)], "pad": _b(JOY_BUTTON_DPAD_LEFT)},
 		"move_right": {"keys": [_k(KEY_D), _k(KEY_RIGHT)], "pad": _b(JOY_BUTTON_DPAD_RIGHT)},
+		"attack": {"keys": [_k(KEY_J), _k(KEY_CTRL)], "pad": _b(JOY_BUTTON_X)},
 		"guard": {"keys": [_k(KEY_SPACE), {}], "pad": _b(JOY_BUTTON_LEFT_SHOULDER)},
 		"dodge": {"keys": [_k(KEY_SHIFT), {}], "pad": _b(JOY_BUTTON_B)},
-		"skill1": {"keys": [_k(KEY_1), {}], "pad": _b(JOY_BUTTON_X)},
-		"skill2": {"keys": [_k(KEY_2), {}], "pad": _b(JOY_BUTTON_Y)},
-		"skill3": {"keys": [_k(KEY_3), {}], "pad": _ax(JOY_AXIS_TRIGGER_RIGHT, 1)},
-		"skill4": {"keys": [_k(KEY_4), {}], "pad": _ax(JOY_AXIS_TRIGGER_LEFT, 1)},
+		"skill1": {"keys": [_k(KEY_1), {}], "pad": _b(JOY_BUTTON_Y)},
+		"skill2": {"keys": [_k(KEY_2), {}], "pad": _ax(JOY_AXIS_TRIGGER_RIGHT, 1)},
+		"skill3": {"keys": [_k(KEY_3), {}], "pad": _ax(JOY_AXIS_TRIGGER_LEFT, 1)},
+		"skill4": {"keys": [_k(KEY_4), {}], "pad": _b(JOY_BUTTON_RIGHT_STICK)},
 		"switch": {"keys": [_k(KEY_Q), {}], "pad": _b(JOY_BUTTON_RIGHT_SHOULDER)},
 		"interact": {"keys": [_k(KEY_E), {}], "pad": _b(JOY_BUTTON_A)},
-		"search": {"keys": [_k(KEY_F), {}], "pad": _b(JOY_BUTTON_RIGHT_STICK)},
+		"search": {"keys": [_k(KEY_F), {}], "pad": _b(JOY_BUTTON_LEFT_STICK)},
 		"quick_heal": {"keys": [_k(KEY_R), {}], "pad": _b(JOY_BUTTON_BACK)},
-		"inventory": {"keys": [_k(KEY_TAB), _k(KEY_ESCAPE)], "pad": _b(JOY_BUTTON_START)},
+		"inventory": {"keys": [_k(KEY_TAB), _k(KEY_I)], "pad": _b(JOY_BUTTON_START)},
 		"confirm": {"keys": [_k(KEY_ENTER), _k(KEY_KP_ENTER)], "pad": _b(JOY_BUTTON_A)},
 	}
 
@@ -66,6 +68,8 @@ static func setup() -> void:
 				var v = cf.get_value("binds", id)
 				if v is Dictionary:
 					binds[id] = _sanitize(v, binds[id])
+		if int(cf.get_value("meta", "version", 1)) < 2:
+			_migrate_v1()
 	for id in FIXED:
 		if not InputMap.has_action(id):
 			InputMap.add_action(id)
@@ -111,6 +115,12 @@ static func apply() -> void:
 		m.axis = stick[id][0]
 		m.axis_value = stick[id][1]
 		InputMap.action_add_event(id, m)
+	# Tab は持ち物を開け閉めするキー。Godot の初期設定では、ボタンの焦点送り(ui_focus_next)が Tab を先に取ってしまい、
+	# 持ち物が閉じないことがあった。焦点送りは十字キーで行うので、Tab と Shift+Tab を外す
+	for fa in ["ui_focus_next", "ui_focus_prev"]:
+		for ev in InputMap.action_get_events(fa):
+			if ev is InputEventKey and ((ev as InputEventKey).keycode == KEY_TAB or (ev as InputEventKey).physical_keycode == KEY_TAB):
+				InputMap.action_erase_event(fa, ev)
 	# 画面のボタン操作(決定・戻る)。Godot の初期設定にはコントローラーが無いので、A で決定、B で戻る を足す
 	for ui in [["ui_accept", JOY_BUTTON_A], ["ui_cancel", JOY_BUTTON_B]]:
 		for ev in InputMap.action_get_events(ui[0]):
@@ -120,8 +130,19 @@ static func apply() -> void:
 		jb.button_index = ui[1]
 		InputMap.action_add_event(ui[0], jb)
 
+## 版1で保存した割り当てを、版2の決まりに合わせる(コントローラーのスキルと探るは新しい初期値、Esc は戻る専用)
+static func _migrate_v1() -> void:
+	var d := defaults()
+	for id in ["attack", "skill1", "skill2", "skill3", "skill4", "search"]:
+		binds[id]["pad"] = d[id]["pad"]
+	var keys: Array = binds["inventory"]["keys"]
+	for i in keys.size():
+		if (keys[i] as Dictionary).get("c", -1) == KEY_ESCAPE:
+			keys[i] = d["inventory"]["keys"][i]
+
 static func save() -> void:
 	var cf := ConfigFile.new()
+	cf.set_value("meta", "version", VERSION)
 	for a in ACTIONS:
 		cf.set_value("binds", a[0], binds[a[0]])
 	cf.save(PATH)

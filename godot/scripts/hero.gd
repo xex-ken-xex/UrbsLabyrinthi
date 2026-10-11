@@ -1,7 +1,8 @@
 class_name Hero
 extends Body
 ## パーティの一人の体。操作中の一人は Main が cmd に入力を入れ、それ以外は自分で考えて動く。
-## 攻撃は体当たり(Contact が押し合いとダメージを決める)。スキルはショートカット 1〜4。
+## 攻撃はボタンで正面へ一撃(待ち時間あり)。触れると押し合う(Contact)が、仲間の体当たりではダメージは入らない。
+## スキルはショートカット 1〜4。
 
 signal downed(hero: Hero)
 
@@ -12,6 +13,10 @@ var controlled := false
 var cmd := {"move": Vector2.ZERO, "guard": false, "dodge": false}
 var facing := Vector2.DOWN
 var roll_t := 0.0
+var atk_cd := 0.0             # 通常攻撃の残りの待ち時間
+var atk_cd_max := 0.0
+var swing_t := 0.0            # 振りの描画
+var swing_dir := Vector2.RIGHT
 var roll_cd := 0.0
 var roll_dir := Vector2.ZERO
 var rush_t := 0.0
@@ -76,13 +81,11 @@ func _speed_now() -> float:
 		s *= 0.55
 	return s
 
+## 仲間は体当たりではダメージを与えない(通常攻撃で殴る)。盾構えの特技だけ、構えの間に触れている敵へ反撃する
 func contact_dps() -> float:
-	if down:
+	if down or not guarding:
 		return 0.0
-	if guarding:
-		# 盾構え: 構えの間も、触れている敵へ体当たりの 40% で反撃する
-		return ch.bump_power() * buff("power") * 0.4 if ch.has_feat("shield_master") else 0.0
-	return ch.bump_power() * buff("power")
+	return ch.bump_power() * buff("power") * 0.4 if ch.has_feat("shield_master") else 0.0
 
 func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
 	damage(amount, from_pos, false, (src as Enemy).mon_type() if src is Enemy else "")
@@ -155,6 +158,8 @@ func _tick(delta: float) -> void:
 	flash = maxf(0.0, flash - delta)
 	iframes = maxf(0.0, iframes - delta)
 	roll_cd = maxf(0.0, roll_cd - delta)
+	atk_cd = maxf(0.0, atk_cd - delta)
+	swing_t = maxf(0.0, swing_t - delta)
 	for k in cds.keys():
 		cds[k] = maxf(0.0, float(cds[k]) - delta)
 	for k in buffs.keys():
@@ -202,6 +207,45 @@ func _rush_hits() -> void:
 			en.take_damage(rush_dmg, rush_dir, self)
 			en.knock = rush_dir * rush_knock / maxf(0.5, en.body_mass() * 0.7)
 			game_floor.add_child(Spark.make(en.position, 22.0, Color("ffd080"), 0.2, true))
+
+# ---------- 通常攻撃 ----------
+
+func can_attack() -> bool:
+	return not down and atk_cd <= 0.0 and rush_t <= 0.0 and roll_t <= 0.0
+
+## 正面へ一撃。届く範囲の魔物すべてに当たる。待ち時間のあいだは振れない
+func attack() -> bool:
+	if not can_attack():
+		return false
+	var aim := _aim()
+	facing = aim
+	swing_dir = aim
+	swing_t = 0.18
+	atk_cd_max = Balance.ATTACK_CD
+	atk_cd = atk_cd_max
+	lunge = aim * 6.0
+	var dmg := ch.bump_power() * buff("power") * Balance.ATTACK_CD * Balance.ATTACK_SCALE
+	var arc := deg_to_rad(Balance.ATTACK_ARC)
+	for en in game_floor.enemies.duplicate():
+		if en.dead:
+			continue
+		var to: Vector2 = en.position - position
+		if to.length() > radius + en.radius + Balance.ATTACK_REACH:
+			continue
+		if to.length() > 4.0 and absf(aim.angle_to(to)) > arc:
+			continue
+		var dir := to.normalized() if to.length() > 0.5 else aim
+		en.take_damage(dmg, dir, self)
+		if not en.dead:
+			en.knock = dir * Balance.ATTACK_KNOCK / maxf(0.5, en.body_mass())
+		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0, Color("ffe0a0"), 0.14))
+	return true
+
+## 待ち時間の進み具合(0 = 振ったばかり、1 = 振れる)
+func attack_ready_frac() -> float:
+	if atk_cd_max <= 0.0:
+		return 1.0
+	return clampf(1.0 - atk_cd / atk_cd_max, 0.0, 1.0)
 
 # ---------- スキル ----------
 
@@ -473,6 +517,10 @@ func _ai_skills() -> void:
 				ok = ai_target != null and tdist > 50.0 and tdist < float(sk["dist"]) * 0.85
 		if ok and use_skill(id):
 			return
+	# 届く敵がいれば、通常攻撃で殴る
+	if ai_target != null and is_instance_valid(ai_target) and not ai_target.dead and can_attack():
+		if position.distance_to(ai_target.position) <= radius + ai_target.radius + Balance.ATTACK_REACH - 2.0:
+			attack()
 
 # ---------- 描画 ----------
 
@@ -498,6 +546,20 @@ func _draw_sprite(tex: Texture2D, tint: Color, face_x: float) -> void:
 	draw_texture_rect(tex, r, false, tint)
 	draw_set_transform(lunge)
 
+## 振りの弧と、通常攻撃の待ち時間(操作中の一人だけ、足もとに細い棒で出す)
+func _draw_attack() -> void:
+	draw_set_transform(Vector2.ZERO)
+	if swing_t > 0.0:
+		var a := swing_dir.angle()
+		var arc := deg_to_rad(Balance.ATTACK_ARC)
+		var rr := radius + Balance.ATTACK_REACH * 0.7
+		draw_arc(Vector2.ZERO, rr, a - arc, a + arc, 16, Color(1.0, 0.92, 0.7, swing_t / 0.18), 3.0)
+	if controlled and atk_cd > 0.0:
+		var w := 26.0
+		var y := radius + 20.0
+		draw_rect(Rect2(-w / 2.0, y, w, 4.0), Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(-w / 2.0, y, w * attack_ready_frac(), 4.0), Color("ffe9a8"))
+
 func _draw() -> void:
 	draw_set_transform(lunge)
 	var col := Jobs.class_color(ch.cls)
@@ -522,6 +584,7 @@ func _draw() -> void:
 			var my := -radius - (30.0 if _is_sheet else 14.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
 		UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.85))
+		_draw_attack()
 		return
 	if down:
 		draw_circle(Vector2.ZERO, radius, Color(0.35, 0.35, 0.38, 0.8))
@@ -544,3 +607,4 @@ func _draw() -> void:
 	if controlled:
 		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 12), Vector2(5, -radius - 20), Vector2(-5, -radius - 20)]), Color("ffe9a8"))
 	UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.85))
+	_draw_attack()

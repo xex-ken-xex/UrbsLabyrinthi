@@ -104,6 +104,7 @@ func _run() -> void:
 	await shot("fight")
 	for i in 70:
 		lead.cmd = {"move": (best.position - lead.position).normalized() if is_instance_valid(best) and not best.dead else Vector2.ZERO, "guard": false, "dodge": false}
+		lead.attack()
 		await physics_frame
 	await shot("fight2")
 	main.open_inventory()

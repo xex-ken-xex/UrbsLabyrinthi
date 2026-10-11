@@ -136,6 +136,7 @@ func _autotest_town() -> void:
 
 func _setup_input() -> void:
 	Controls.setup()
+	GameSettings.load_settings()
 
 ## 操作の設定(タイトルと街から開く)
 func open_key_config() -> void:
@@ -408,6 +409,8 @@ func log_msg(text: String, color: Color = Color.WHITE) -> void:
 # ---------- 毎フレーム ----------
 
 func _physics_process(delta: float) -> void:
+	# ゲームの速さは迷宮の中だけ(街、メニュー、報告は等速)
+	Engine.time_scale = GameSettings.speed() if phase == "dungeon" else 1.0
 	if Input.is_action_just_pressed("credits"):
 		hud.show_credits = not hud.show_credits
 	if Input.is_action_just_pressed("reload_assets"):
@@ -464,6 +467,8 @@ func _read_input() -> void:
 	lead.cmd["guard"] = Input.is_action_pressed("guard")
 	if Input.is_action_just_pressed("dodge"):
 		lead.cmd["dodge"] = true
+	if Input.is_action_pressed("attack"):
+		lead.attack()      # 押し続けると、待ち時間ごとに振る
 	for i in 4:
 		if Input.is_action_just_pressed("skill%d" % (i + 1)):
 			lead.cast_slot(i)
@@ -509,7 +514,8 @@ func _update_trail(lead: Hero) -> void:
 			continue
 		j += 1
 		var idx := trail.size() - 1 - j * 4
-		heroes[i].follow_pos = trail[maxi(0, idx)] if idx >= 0 else lead.position
+		# 跡が足りないときは、先頭の向きの後ろへ並ぶ(仲間同士はすり抜けるので、重ならないように)
+		heroes[i].follow_pos = trail[idx] if idx >= 0 else lead.position - lead.facing * 26.0 * j
 
 func _check_wipe() -> void:
 	for h in heroes:
