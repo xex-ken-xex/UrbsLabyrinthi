@@ -22,7 +22,7 @@ window/stretch/aspect="expand"
 
 [gui]
 
-theme/custom_font="res://assets/fonts/ZenKakuGothicNew-Regular.ttf"
+theme/custom_font="res://assets/fonts/MPLUS1p-Medium.ttf"
 
 [rendering]
 

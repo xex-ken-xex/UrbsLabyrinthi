@@ -32,6 +32,7 @@ static func theme() -> Theme:
 	var t := Theme.new()
 	t.default_font = UI.font()
 	t.default_font_size = 16
+	t.set_font("bold_font", "RichTextLabel", UI.bold_font())
 	t.set_color("font_color", "Label", TEXT)
 	for cls in ["Button", "OptionButton", "CheckBox"]:
 		t.set_stylebox("normal", cls, box(Color(0.12, 0.13, 0.18, 0.95)))
@@ -63,9 +64,14 @@ static func theme() -> Theme:
 	_theme = t
 	return t
 
+## 見出しの大きさ以上は、見出しのフォント(明朝)で書く
+const TITLE_SIZE := 24
+
 static func label(text: String, size: int = 16, color: Color = TEXT) -> Label:
 	var l := Label.new()
 	l.text = text
+	if size >= TITLE_SIZE:
+		l.add_theme_font_override("font", UI.title_font())
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", color)
 	return l

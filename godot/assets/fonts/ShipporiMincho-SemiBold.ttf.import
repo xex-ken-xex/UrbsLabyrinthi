@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://ciumw6fjndf81"
-path="res://.godot/imported/ZenKakuGothicNew-Regular.ttf-42294b3be356f0841d983c408f42800b.fontdata"
+uid="uid://cb2v2w3qp070l"
+path="res://.godot/imported/ShipporiMincho-SemiBold.ttf-3405d9267418a8c428f9204dbb674bc4.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/ZenKakuGothicNew-Regular.ttf"
-dest_files=["res://.godot/imported/ZenKakuGothicNew-Regular.ttf-42294b3be356f0841d983c408f42800b.fontdata"]
+source_file="res://assets/fonts/ShipporiMincho-SemiBold.ttf"
+dest_files=["res://.godot/imported/ShipporiMincho-SemiBold.ttf-3405d9267418a8c428f9204dbb674bc4.fontdata"]
 
 [params]
 
