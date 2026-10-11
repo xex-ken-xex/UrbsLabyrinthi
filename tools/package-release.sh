@@ -33,6 +33,16 @@ cp "$D/windows/UrbsLabyrinthi.pck" "$D/windows/UrbsLabyrinthi.console.exe" "$D/w
 cp "$D/windows/assets/README.txt" "$W/assets/README.txt"
 common "$W"
 (cd "$WORK" && rm -f "$OUT/UrbsLabyrinthi-windows.zip" && zip -qr -9 "$OUT/UrbsLabyrinthi-windows.zip" UrbsLabyrinthi-windows)
+# インストーラー(makensis があれば。Ubuntu は apt install nsis)
+SUMS="UrbsLabyrinthi-windows.zip UrbsLabyrinthi-linux.zip"
+if command -v makensis >/dev/null 2>&1; then
+  VER="${INSTALLER_VERSION:-$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo dev)}"
+  rm -f "$OUT/UrbsLabyrinthi-setup.exe"
+  makensis -V2 -INPUTCHARSET UTF8 "-DSRC=$W" "-DVERSION=$VER" "-DOUTFILE=$OUT/UrbsLabyrinthi-setup.exe" "$ROOT/installer/UrbsLabyrinthi.nsi"
+  SUMS="$SUMS UrbsLabyrinthi-setup.exe"
+else
+  echo "makensis が無いので、インストーラーは作らない" >&2
+fi
 
 # --- Linux ---
 L="$WORK/UrbsLabyrinthi-linux"
@@ -43,5 +53,5 @@ cp "$D/linux/assets/README.txt" "$L/assets/README.txt"
 common "$L"
 (cd "$WORK" && rm -f "$OUT/UrbsLabyrinthi-linux.zip" && zip -qr -9 -y "$OUT/UrbsLabyrinthi-linux.zip" UrbsLabyrinthi-linux)
 
-(cd "$OUT" && sha256sum UrbsLabyrinthi-windows.zip UrbsLabyrinthi-linux.zip > SHA256SUMS.txt)
+(cd "$OUT" && sha256sum $SUMS > SHA256SUMS.txt)
 ls -la "$OUT"

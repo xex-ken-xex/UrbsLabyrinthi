@@ -11,6 +11,13 @@ Linux(x86_64)と Windows(x86_64)向け。コードやデータを変えたら、
 `main` にマージされるたびに、GitHub Actions(`.github/workflows/release.yml`)が、この `Deploy/` から `UrbsLabyrinthi-windows.zip` と `UrbsLabyrinthi-linux.zip` を作り、Releases に出す(タグは `v<実行番号>`、最新版の印が付く)。
 手元で作るなら `tools/package-release.sh`(`dist/` に出る)。ZIP の中身は `Deploy/` のコミット済みのビルドなので、コードを変えたら先に `tools/build-deploy.sh` を実行してコミットする。
 
+## Windows のインストーラー
+
+Release の `UrbsLabyrinthi-setup.exe` を実行すると、`%LOCALAPPDATA%\Programs\UrbsLabyrinthi` に入る(管理者の権限は要らない。場所は変えられる)。
+スタートメニューに、起動、ログを取って起動、差し替え画像のフォルダ、アンインストールが並ぶ。デスクトップのショートカットは選べる。
+新しい版は、上から入れ直せばよい。アンインストールしても、セーブ(`%APPDATA%\Godot\app_userdata\Urbs Labyrinthi\`)と、`assets\` に自分で置いた画像は残る。
+作り方は `installer/UrbsLabyrinthi.nsi`。`tools/package-release.sh` が、`makensis`(Ubuntu は `apt install nsis`)があればいっしょに作る。
+
 ## セットアップ(必要なライブラリを入れる)
 
 [`SetupScript/`](SetupScript/README.md) に、Ubuntu 用(`setup-ubuntu.sh`)と Windows 用(`setup-windows.bat`)がある。
