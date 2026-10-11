@@ -48,7 +48,7 @@ func drive_toward(n: Vector2) -> float:
 
 ## 自分の足で歩く。記録され、相手に触れていれば押し合いの計算で取り消される
 func walk(step: Vector2) -> void:
-	var np := game_floor.map.move_circle(position, step, col_radius)
+	var np := game_floor.map.slide_circle(position, step, col_radius)
 	self_move += np - position
 	position = np
 

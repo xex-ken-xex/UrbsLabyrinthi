@@ -13,6 +13,7 @@ var ui_layer: CanvasLayer
 var hud_layer: CanvasLayer
 var screen: Control                # 開いている画面(タイトル、作成、街)
 var inventory: InventoryScreen
+var key_config: KeyConfig
 var current: FloorInstance
 var floors := {}                   # 層の番号 → FloorInstance(この日の控え)
 var bag_silver := 0                # 燐晶以外で、査定が要るもの(いまは使わない。テストと将来の拡張用)
@@ -49,7 +50,16 @@ func _ready() -> void:
 	hud = Hud.new()
 	hud.game = self
 	hud_layer.add_child(hud)
-	show_title()
+	_trace("起動: %s" % " ".join(OS.get_cmdline_args()))
+	if Updater.should_check() and not OS.get_cmdline_user_args().has("--autotest-town"):
+		var up := Updater.new()
+		up.finished.connect(func(note: String):
+			show_title()
+			if note != "":
+				_title_note(note))
+		_set_screen(up)
+	else:
+		show_title()
 	if OS.get_cmdline_user_args().has("--autotest-town"):
 		call_deferred("_autotest_town")
 
@@ -126,21 +136,25 @@ func _autotest_town() -> void:
 	get_tree().quit()
 
 func _setup_input() -> void:
-	var defs := {
-		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
-		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
-		"guard": [KEY_SPACE], "dodge": [KEY_SHIFT],
-		"skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3], "skill4": [KEY_4],
-		"switch": [KEY_Q], "interact": [KEY_E], "search": [KEY_F], "quick_heal": [KEY_R],
-		"reload_assets": [KEY_F6], "inventory": [KEY_TAB], "confirm": [KEY_ENTER, KEY_KP_ENTER], "credits": [KEY_F1],
-	}
-	for a in defs:
-		if not InputMap.has_action(a):
-			InputMap.add_action(a)
-		for k in defs[a]:
-			var ev := InputEventKey.new()
-			ev.physical_keycode = k
-			InputMap.action_add_event(a, ev)
+	Controls.setup()
+	GameSettings.load_settings()
+
+## 操作の設定(タイトルと街から開く)
+func open_key_config() -> void:
+	if key_config != null:
+		return
+	key_config = KeyConfig.new()
+	key_config.closed.connect(close_key_config)
+	ui_layer.add_child(key_config)
+
+func close_key_config() -> void:
+	if key_config == null:
+		return
+	key_config.queue_free()
+	key_config = null
+	_menu_cd = 0.3
+	if screen != null and screen.has_method("focus_default"):
+		screen.call("focus_default")
 
 func leader() -> Hero:
 	if heroes.is_empty() or active < 0 or active >= heroes.size() or not is_instance_valid(heroes[active]):
@@ -164,7 +178,13 @@ func show_title() -> void:
 	t.new_game.connect(show_make)
 	t.continue_game.connect(_on_continue)
 	t.show_credits.connect(func(): hud.show_credits = true)
+	t.key_config.connect(open_key_config)
 	_set_screen(t)
+
+## タイトルの下に、更新の結果を出す
+func _title_note(text: String) -> void:
+	if screen is TitleScreen:
+		(screen as TitleScreen).set_note(text)
 
 func show_make() -> void:
 	phase = "make"
@@ -205,6 +225,7 @@ func go_town(report: Array) -> void:
 	t.open_inventory.connect(open_inventory)
 	t.arena_requested.connect(start_arena)
 	t.to_title.connect(show_title)
+	t.key_config.connect(open_key_config)
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)
@@ -391,6 +412,8 @@ func log_msg(text: String, color: Color = Color.WHITE) -> void:
 # ---------- 毎フレーム ----------
 
 func _physics_process(delta: float) -> void:
+	# ゲームの速さは迷宮の中だけ(街、メニュー、報告は等速)
+	Engine.time_scale = GameSettings.speed() if phase == "dungeon" else 1.0
 	if Input.is_action_just_pressed("credits"):
 		hud.show_credits = not hud.show_credits
 	if Input.is_action_just_pressed("reload_assets"):
@@ -447,6 +470,8 @@ func _read_input() -> void:
 	lead.cmd["guard"] = Input.is_action_pressed("guard")
 	if Input.is_action_just_pressed("dodge"):
 		lead.cmd["dodge"] = true
+	if Input.is_action_pressed("attack"):
+		lead.attack()      # 押し続けると、待ち時間ごとに振る
 	for i in 4:
 		if Input.is_action_just_pressed("skill%d" % (i + 1)):
 			lead.cast_slot(i)
@@ -492,7 +517,8 @@ func _update_trail(lead: Hero) -> void:
 			continue
 		j += 1
 		var idx := trail.size() - 1 - j * 4
-		heroes[i].follow_pos = trail[maxi(0, idx)] if idx >= 0 else lead.position
+		# 跡が足りないときは、先頭の向きの後ろへ並ぶ(仲間同士はすり抜けるので、重ならないように)
+		heroes[i].follow_pos = trail[idx] if idx >= 0 else lead.position - lead.facing * 26.0 * j
 
 func _check_wipe() -> void:
 	for h in heroes:
@@ -513,7 +539,7 @@ func _check_wipe() -> void:
 		{"text": "未査定の燐晶 %d銀貨相当 を失った" % lost, "size": 16},
 		{"text": "灯手隊が、倒れた仲間を担ぎ出してくれた。", "size": 16, "color": Color("f1d98a")},
 		{"text": "", "size": 8},
-		{"text": "Enter: 街へ", "size": 18, "color": Color("9ad8ff")},
+		{"text": "%s: 街へ" % Controls.hint("confirm"), "size": 18, "color": Color("9ad8ff")},
 	]
 
 func _after_overlay() -> void:
@@ -562,15 +588,32 @@ func party_passive() -> int:
 	var best := 0
 	for h in heroes:
 		if not h.down:
-			best = maxi(best, Balance.passive_perception(h.ch.level) + int(h.ch.class_data()["search"]) / 2)
+			best = maxi(best, h.ch.passive_perception())
 	return best
 
 func party_best(kind: String) -> int:
-	var best := -99
+	var c := party_best_char(kind)
+	return -99 if c == null else (c.search_bonus() if kind == "search" else c.lock_bonus())
+
+## その判定をいちばん得意な仲間(倒れていない人)
+func party_best_char(kind: String) -> Character:
+	var best: Character = null
+	var bv := -999
 	for h in heroes:
 		if h.down:
 			continue
-		best = maxi(best, h.ch.search_bonus() if kind == "search" else h.ch.lock_bonus())
+		var v: int = h.ch.search_bonus() if kind == "search" else h.ch.lock_bonus()
+		if v > bv:
+			bv = v
+			best = h.ch
+	return best
+
+## 倒れていない仲間のうち、その技能の効き目がいちばん大きい値
+func party_skill_fx(id: String) -> float:
+	var best := 0.0
+	for h in heroes:
+		if not h.down:
+			best = maxf(best, h.ch.skill_fx(id))
 	return best
 
 func _passive_detect(pc: Vector2i) -> void:
@@ -625,8 +668,9 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 	var kind := String(t["kind"])
 	if kind == "save":
 		var sv: Dictionary = t["save"]
-		var bonus := victim.ch.level / 2 + victim.ch.mod("dex" if String(sv["ability"]) == "敏捷力" else "con")
-		var roll := Dice.d20()
+		var abil := String(Talents.SAVE_ABIL_JP.get(String(sv["ability"]), "dex"))
+		var bonus := victim.ch.save_bonus(abil)
+		var roll := victim.ch.roll_d20()
 		var ok := roll + bonus >= int(sv["dc"])
 		log_msg("%sセーヴ %d%+d=%d / 難易度%d → %s" % [sv["ability"], roll, bonus, roll + bonus, int(sv["dc"]), "成功" if ok else "失敗"],
 			Color("9be29b") if ok else Color("ff8a7a"))
@@ -644,7 +688,7 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 		log_msg("音が響いた。近くの魔物がこちらへ向かう", Color("ffb070"))
 	if t.has("damage") and scale > 0.0:
 		var n := Dice.roll(String(t["damage"]))
-		var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale)
+		var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * (1.0 - victim.ch.skill_fx("survival")))
 		log_msg("%sダメージ %d" % [t.get("damage_type", ""), int(round(dealt))], Color("ff6a5a"))
 		victim.damage(dealt, victim.position + Vector2(0, 1), true)
 
@@ -715,7 +759,7 @@ func interact() -> void:
 func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 	if String(e["kind"]) == "crystal":
 		var pid := String(e["purity"])
-		var kg := float(e["kg"])
+		var kg := float(e["kg"]) * (1.0 + party_skill_fx("sleight"))     # 盗賊の「手際」は、拾える燐晶を増やす
 		bag_crystal[pid] = float(bag_crystal.get(pid, 0.0)) + kg
 		h.game_floor.spawn_text(e["pos"] + Vector2(0, -14), "%s %.2fkg" % [Crystal.jp(pid), kg], Crystal.COLORS.get(pid, Color.WHITE))
 		return
@@ -740,16 +784,18 @@ func _pick_lock(d: Dictionary) -> void:
 	if _pick_cd > 0.0:
 		return
 	_pick_cd = 0.6
-	var roll := Dice.d20()
-	var bonus := party_best("lock")
+	var who := party_best_char("lock")
+	var roll := who.roll_d20()
+	var bonus := who.lock_bonus()
 	var ok := roll == 20 or roll + bonus >= int(d["lock_dc"])
 	log_msg("解錠 %d%+d / 難易度%d → %s" % [roll, bonus, int(d["lock_dc"]), "成功" if ok else "失敗"], Color("9be29b") if ok else Color("ff8a7a"))
 	if ok:
 		d["unlocked"] = true
 
 func _disarm(t: Dictionary) -> void:
-	var roll := Dice.d20()
-	var bonus := party_best("lock")
+	var who := party_best_char("lock")
+	var roll := who.roll_d20()
+	var bonus := who.lock_bonus()
 	var dc := int(t["disarm_dc"])
 	if roll == 20 or roll + bonus >= dc:
 		t["st"] = "disarmed"
@@ -768,14 +814,15 @@ func search() -> void:
 	var m := current.map
 	var lp := leader().position
 	var pc := m.cell_of(lp)
-	var bonus := party_best("search")
+	var who := party_best_char("search")
+	var bonus := who.search_bonus()
 	var found := false
 	for t in current.traps:
 		if t["st"] != "hidden":
 			continue
 		var tc := Vector2i(int(t["x"]), int(t["y"]))
 		if lp.distance_to(m.center_of(tc)) <= 4.5 * Balance.CELL and m.los(pc.x, pc.y, tc.x, tc.y):
-			if Dice.d20() + bonus >= int(t["detect_dc"]):
+			if who.roll_d20() + bonus >= int(t["detect_dc"]):
 				_reveal_trap(t)
 				found = true
 	for d in m.doors:
@@ -783,7 +830,7 @@ func search() -> void:
 			continue
 		var dc := Vector2i(d["x"], d["y"])
 		if lp.distance_to(m.center_of(dc)) <= 4.5 * Balance.CELL and m.los(pc.x, pc.y, dc.x, dc.y):
-			if Dice.d20() + bonus >= int(d["find_dc"]):
+			if who.roll_d20() + bonus >= int(d["find_dc"]):
 				_reveal_door(d)
 				found = true
 	if not found:
@@ -840,6 +887,9 @@ func close_inventory() -> void:
 	inventory.queue_free()
 	inventory = null
 	_menu_cd = 0.3
+	if phase == "town" and screen is TownScreen:
+		(screen as TownScreen).refresh_top()
+		screen.call_deferred("focus_default")   # 持ち物を閉じたら、コントローラーの焦点を街へ戻す
 	if _prev_phase == "dungeon":
 		phase = "dungeon"
 		for h in heroes:
@@ -895,8 +945,11 @@ func _on_enemy_killed(en: Enemy) -> void:
 		return
 	var share := gs.party_xp_share(en.xp, alive.size())
 	for h in alive:
-		if h.ch.gain_xp(share) > 0:
+		var before: int = h.ch.pending().size()
+		if h.ch.gain_xp(int(round(share * (1.0 + h.ch.skill_fx("history"))))) > 0:
 			log_msg("%sのレベルが上がった! Lv%d" % [h.ch.name, h.ch.level], Color("9ad8ff"))
+			if h.ch.pending().size() > before:
+				log_msg("%sは、能力値上昇か特技を選べる(%s →「技能・特技」)" % [h.ch.name, Controls.hint("inventory")], Color("ffe9a8"))
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
 
 func return_to_surface() -> void:
@@ -926,4 +979,14 @@ func return_to_surface() -> void:
 			downed.append(c.name)
 	if not downed.is_empty():
 		lines.append("倒れた仲間: %s(神殿で蘇らせよう)" % "、".join(downed))
+	# 〈芸能〉: 宿で芸を見せて稼ぐ(倒れていない仲間のうち、いちばん高い人)
+	var perf := 0.0
+	var performer := ""
+	for c in gs.party:
+		if c.hp > 0.0 and c.skill_fx("performance") > perf:
+			perf = c.skill_fx("performance")
+			performer = c.name
+	if perf > 0.0:
+		gs.bank_silver += int(perf)
+		lines.append("%sが宿で芸を見せた  +%d銀貨(〈芸能〉)" % [performer, int(perf)])
 	go_town(lines)

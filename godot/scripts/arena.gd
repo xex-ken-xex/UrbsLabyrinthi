@@ -124,6 +124,9 @@ func set_level(i: int, lv: int) -> void:
 	lv = clampi(lv, 1, 20)
 	c.level = lv
 	c.xp = int(Balance.XP_LEVELS[lv - 1])
+	# 能力値上昇と特技: 選んである分はそのレベルまで効かせ、まだの分はクラスに合わせて埋める
+	c.recalc_stats()
+	c.auto_fill_choices()
 	c.learn_class_skills()
 	c.hp = float(c.max_hp())
 	c.mp = float(c.max_mp())

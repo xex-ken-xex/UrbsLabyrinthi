@@ -90,7 +90,7 @@ func use_item(id: String, ch: Character) -> String:
 		"heal_pct":
 			if ch.hp <= 0.0 or ch.hp >= ch.max_hp():
 				return ""
-			var n := maxf(float(it.get("min", 12.0)), ch.max_hp() * float(it["v"]))
+			var n := maxf(float(it.get("min", 12.0)), ch.max_hp() * float(it["v"])) * best_heal_mult()
 			ch.hp = minf(ch.max_hp(), ch.hp + n)
 			remove_item(id)
 			return "%sのHPが回復した" % ch.name
@@ -120,8 +120,32 @@ func learn_tome(id: String, ch: Character) -> String:
 
 # ---------- 売り買い ----------
 
+## パーティ(倒れていない人)で、その技能の効き目がいちばん大きい値
+func party_skill_fx(id: String) -> float:
+	var best := 0.0
+	for c in party:
+		if c.hp > 0.0:
+			best = maxf(best, c.skill_fx(id))
+	return best
+
+## 治療薬の回復の倍率(〈医術〉、癒し手のいちばん高い人)
+func best_heal_mult() -> float:
+	var best := 1.0
+	for c in party:
+		if c.hp > 0.0:
+			best = maxf(best, c.heal_mult())
+	return best
+
+## 店の値段(〈説得〉で安くなる)
+func buy_price(id: String) -> int:
+	return maxi(1, int(round(int(ItemDB.ITEMS[id]["price"]) * (1.0 - party_skill_fx("persuasion")))))
+
+## 買い取り(〈ペテン〉で高くなる)。買値を超えないようにする
+func sell_price(id: String) -> int:
+	return mini(int(round(ItemDB.sell_price(id) * (1.0 + party_skill_fx("deception")))), buy_price(id))
+
 func buy(id: String) -> String:
-	var price := int(ItemDB.ITEMS[id]["price"])
+	var price := buy_price(id)
 	if bank_silver < price:
 		return "銀貨が足りない"
 	bank_silver -= price
@@ -132,7 +156,7 @@ func sell(id: String) -> String:
 	if count(id) <= 0:
 		return "持っていない"
 	remove_item(id)
-	bank_silver += ItemDB.sell_price(id)
+	bank_silver += sell_price(id)
 	return ""
 
 # ---------- 休息など ----------

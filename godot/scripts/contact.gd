@@ -5,7 +5,9 @@ extends RefCounted
 ## 敵と味方: 互いに押し込む力(速さ × HP割合 × 重さ)の差で、境目が動く。
 ##   敵のHPが削れると、こちらが少しずつ押していける。こちらのHPが削られると、押される。
 ##   押し込んでいる間は、一定間隔でダメージが入る。
-## 同じ側どうし: 重さに応じて押しのけ合い、重ならない。
+## 仲間どうし: 動いている間はすり抜ける。どちらも止まっていれば、ゆっくり離れて重ならない。
+## 魔物どうし: 重さに応じて押しのけ合い、重ならない。
+## 話し合える魔物(中立)と仲間: すり抜ける(通路で引っかからない)。
 ## どちらも壁には食い込まない。壁に押しつけられると、それ以上は下がれない。
 
 ## 触れ合う可能性のある、最も遠い x の差(大きい魔物の半径の和 + 余裕。並べ順の乱れも見込む)
@@ -37,6 +39,10 @@ static func step(delta: float, bodies: Array) -> void:
 				continue
 			var dist := d.length()
 			var nrm := d / dist if dist > 0.01 else Vector2.from_angle(randf() * TAU)
+			if _passes(a, b):
+				if a.is_hero and b.is_hero and _still(a) and _still(b):
+					_separate(a, b, nrm, (touch - dist) * minf(1.0, 6.0 * delta))
+				continue
 			if a.is_hero == b.is_hero:
 				_separate(a, b, nrm, touch - dist)
 			else:
@@ -55,7 +61,7 @@ static func step(delta: float, bodies: Array) -> void:
 				var b: Body = order[j]
 				if b.position.x - a.position.x > MAX_TOUCH:
 					break
-				if not b.is_alive():
+				if not b.is_alive() or _passes(a, b):
 					continue
 				var d := b.position - a.position
 				var touch := a.radius + b.radius
@@ -67,6 +73,18 @@ static func step(delta: float, bodies: Array) -> void:
 				moved = true
 		if not moved:
 			break
+
+## すり抜ける組か(仲間どうし、仲間と中立の魔物)
+static func _passes(a: Body, b: Body) -> bool:
+	if a.is_hero and b.is_hero:
+		return true
+	if a.is_hero != b.is_hero:
+		var en: Body = b if a.is_hero else a
+		return en is Enemy and (en as Enemy).state == "neutral"
+	return false
+
+static func _still(b: Body) -> bool:
+	return b.self_move.length() < 0.2
 
 ## att が tgt を、触れているだけで攻撃してよいか。toward は、相手へ向かう動きの成分(−1〜1)
 static func _auto_attacks(att: Body, tgt: Body, toward: float) -> bool:

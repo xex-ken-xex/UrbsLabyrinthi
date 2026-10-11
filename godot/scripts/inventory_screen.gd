@@ -1,6 +1,7 @@
 class_name InventoryScreen
 extends Control
 ## 持ち物(Tab)。アイテムを使う、装備を替える、スキルをショートカットに割り当てる、能力値を見る。
+## 技能・特技: 技能の習熟を見る。レベルが上がったときの、能力値上昇・特技・熟達を選ぶ。
 
 signal closed
 
@@ -17,6 +18,9 @@ var item_list: ItemList
 var detail: RichTextLabel
 var action_box: HBoxContainer
 var msg: Label
+var pick_key := ""            # 選んでいる最中の、能力値上昇・特技・熟達(asi4 など)
+var half_mode := false        # 能力値 +1 を二つに分けている途中
+var half_abil := ""           # +1 の一つ目
 
 func open(state: GameState, special: Callable = Callable()) -> void:
 	gs = state
@@ -40,7 +44,7 @@ func _ready() -> void:
 	margin.add_child(root)
 	var head := UIKit.hbox(16)
 	head.add_child(UIKit.label("持ち物", 28, UIKit.GOLD))
-	head.add_child(UIKit.label("Tab / Esc で閉じる", 14, UIKit.DIM))
+	head.add_child(UIKit.label("%s か Esc で閉じる" % Controls.hint("inventory"), 14, UIKit.DIM))
 	root.add_child(head)
 	member_box = UIKit.hbox(8)
 	root.add_child(member_box)
@@ -48,10 +52,12 @@ func _ready() -> void:
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(row)
 	var tabs := UIKit.vbox(6)
-	for t in [["item", "アイテム"], ["equip", "装備"], ["skill", "スキル"], ["status", "ステータス"]]:
+	for t in [["item", "アイテム"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"]]:
 		var b := UIKit.button(t[1], _set_tab.bind(t[0]), 150)
 		tab_btns[t[0]] = b
 		tabs.add_child(b)
+		if t[0] == "item":
+			b.call_deferred("grab_focus")
 	row.add_child(tabs)
 	var mid := UIKit.vbox(6)
 	mid.custom_minimum_size = Vector2(380, 0)
@@ -77,14 +83,19 @@ func _ready() -> void:
 	msg = UIKit.label("", 15, UIKit.GOOD)
 	root.add_child(msg)
 
-func _unhandled_key_input(e: InputEvent) -> void:
-	if not visible:
+func _unhandled_input(e: InputEvent) -> void:
+	if not visible or e.is_echo():
 		return
-	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_TAB or e.keycode == KEY_ESCAPE):
+	if e.is_action_pressed("inventory") or e.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		closed.emit()
-	elif e is InputEventKey and e.pressed and not e.echo and tab == "skill" and e.keycode >= KEY_1 and e.keycode <= KEY_4:
-		_assign(e.keycode - KEY_1)
+		return
+	if tab == "skill":
+		for i in 4:
+			if e.is_action_pressed("skill%d" % (i + 1)):
+				get_viewport().set_input_as_handled()
+				_assign(i)
+				return
 
 func _ch() -> Character:
 	return gs.party[member]
@@ -92,7 +103,13 @@ func _ch() -> Character:
 func _set_tab(t: String) -> void:
 	tab = t
 	sel_id = ""
+	_end_pick()
 	_refresh()
+
+func _end_pick() -> void:
+	pick_key = ""
+	half_mode = false
+	half_abil = ""
 
 func _refresh() -> void:
 	if gs == null:
@@ -100,7 +117,8 @@ func _refresh() -> void:
 	UIKit.clear(member_box)
 	for i in gs.party.size():
 		var c: Character = gs.party[i]
-		var b := UIKit.button("%s  Lv%d %s\nHP %d/%d  MP %d/%d" % [c.name, c.level, Jobs.CLASSES[c.cls]["name"], int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp()], func(): member = i; sel_id = ""; _refresh(), 210)
+		var star := "★" if not c.pending().is_empty() else ""
+		var b := UIKit.button("%s%s  Lv%d %s\nHP %d/%d  MP %d/%d" % [star, c.name, c.level, Jobs.CLASSES[c.cls]["name"], int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp()], func(): member = i; sel_id = ""; _end_pick(); _refresh(), 210)
 		b.custom_minimum_size = Vector2(210, 54)
 		if i == member:
 			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
@@ -117,6 +135,7 @@ func _refresh() -> void:
 		"item": _fill_items()
 		"equip": _fill_equip()
 		"skill": _fill_skills()
+		"talent": _fill_talent()
 		"status": _fill_status()
 	_show_detail()
 
@@ -176,14 +195,93 @@ func _fill_skills() -> void:
 	if sel_id != "" and ids.has(sel_id):
 		item_list.select(ids.find(sel_id))
 
+func _talent_add(id: String, txt: String, col: Color = Color(0, 0, 0, 0)) -> void:
+	ids.append(id)
+	item_list.add_item(txt)
+	if col.a > 0.0:
+		item_list.set_item_custom_fg_color(item_list.item_count - 1, col)
+
+func _fill_talent() -> void:
+	var c := _ch()
+	if pick_key != "":
+		_fill_pick(c)
+	else:
+		for e in c.pending():
+			var what := "能力値上昇か特技を選ぶ" if e["kind"] == "asi" else "熟達する技能を選ぶ"
+			_talent_add("pend:" + String(e["key"]), "★ Lv%d  %s" % [int(e["lv"]), what], UIKit.GOLD)
+		var all: Array = Talents.SKILL_ORDER.duplicate()
+		all.append("thieves_tools")
+		for id in all:
+			if id == "thieves_tools" and not c.proficient(id):
+				continue
+			var mark := "◎" if c.expert(id) else ("●" if c.proficient(id) else "・")
+			_talent_add("skill:" + String(id), "%s %s  %+d" % [mark, Talents.skill_name(id), c.skill_bonus(id)],
+				UIKit.TEXT if c.proficient(id) else UIKit.DIM)
+		for f in c.feats():
+			_talent_add("feat:" + String(f), "特技: %s" % Talents.FEATS[f]["name"], UIKit.ACCENT)
+	if sel_id != "" and ids.has(sel_id):
+		item_list.select(ids.find(sel_id))
+
+## 能力値上昇・特技・熟達の候補
+func _fill_pick(c: Character) -> void:
+	var kind := ""
+	for e in c.pending():
+		if e["key"] == pick_key:
+			kind = String(e["kind"])
+	if kind == "":
+		_end_pick()
+		_fill_talent()
+		return
+	if kind == "expertise":
+		var cand: Array = ["thieves_tools"]
+		cand.append_array(Talents.SKILL_ORDER)
+		for id in cand:
+			if c.choice_error(pick_key, "exp:" + String(id)) == "":
+				_talent_add("take:exp:" + String(id), "熟達: %s  %+d → %+d" % [Talents.skill_name(id), c.skill_bonus(id), c.skill_bonus(id) + c.prof_bonus()])
+		return
+	if half_mode and half_abil == "":
+		for a in Jobs.ABILS:
+			if int(c.stats[a]) < 20:
+				_talent_add("half1:" + String(a), "+1(一つ目): %s %d → %d" % [Jobs.ABIL_JP[a], int(c.stats[a]), int(c.stats[a]) + 1])
+		return
+	if half_mode:
+		for a in Jobs.ABILS:
+			if a != half_abil and int(c.stats[a]) < 20:
+				_talent_add("take:abil:%s+%s" % [half_abil, a], "+1(二つ目): %s %d → %d" % [Jobs.ABIL_JP[a], int(c.stats[a]), int(c.stats[a]) + 1])
+		return
+	for a in Jobs.ABILS:
+		if int(c.stats[a]) <= 18:
+			_talent_add("take:abil:" + String(a), "能力値 +2: %s %d → %d" % [Jobs.ABIL_JP[a], int(c.stats[a]), int(c.stats[a]) + 2])
+	_talent_add("half", "能力値 +1 を二つに分ける…")
+	for f in Talents.FEAT_ORDER:
+		if not c.has_feat(f):
+			_talent_add("take:feat:" + String(f), "特技: %s" % Talents.FEATS[f]["name"], UIKit.ACCENT)
+
 func _fill_status() -> void:
 	item_list.add_item("(下の欄に表示)")
 	item_list.set_item_disabled(0, true)
 
 func _on_pick(i: int) -> void:
-	if i < ids.size():
-		sel_id = String(ids[i])
-		_show_detail()
+	if i >= ids.size():
+		return
+	sel_id = String(ids[i])
+	if tab == "talent":
+		if sel_id.begins_with("pend:"):
+			pick_key = sel_id.substr(5)
+			sel_id = ""
+			_refresh()
+			return
+		if sel_id == "half":
+			half_mode = true
+			sel_id = ""
+			_refresh()
+			return
+		if sel_id.begins_with("half1:"):
+			half_abil = sel_id.substr(6)
+			sel_id = ""
+			_refresh()
+			return
+	_show_detail()
 
 func _show_detail() -> void:
 	UIKit.clear(action_box)
@@ -192,6 +290,8 @@ func _show_detail() -> void:
 	match tab:
 		"status":
 			t = _status_text(c)
+		"talent":
+			t = _talent_detail(c)
 		"skill":
 			if sel_id != "" and Jobs.SKILLS.has(sel_id):
 				var sk: Dictionary = Jobs.SKILLS[sel_id]
@@ -216,6 +316,78 @@ func _show_detail() -> void:
 				t = "[color=#8a90a0]左の一覧から選ぶ。[/color]"
 	detail.text = t
 
+func _talent_detail(c: Character) -> String:
+	var t := ""
+	if pick_key != "":
+		var e_lv := int(pick_key.lstrip("asiexp").rstrip("ab"))
+		if pick_key.begins_with("exp"):
+			t = "[b][color=#e8dcb0]Lv%d 熟達[/color][/b]\n習熟している技能か盗賊道具を一つ選ぶ。その判定の習熟ボーナスが2倍になる。\n\n" % e_lv
+		else:
+			t = "[b][color=#e8dcb0]Lv%d 能力値上昇か特技[/color][/b]\n能力値を一つ +2 するか、二つを +1 ずつするか(20まで)、特技を一つ選ぶ。\n\n" % e_lv
+			if half_mode:
+				t += "[color=#5bc0de]+1 を二つ: %s[/color]\n\n" % ("一つ目を選ぶ" if half_abil == "" else "一つ目は%s。二つ目を選ぶ" % Jobs.ABIL_JP[half_abil])
+		if sel_id.begins_with("take:"):
+			var take := sel_id.substr(5)
+			if take.begins_with("feat:"):
+				var f: Dictionary = Talents.FEATS[take.substr(5)]
+				t += "[b]%s[/b]\n%s\n" % [f["name"], f["desc"]]
+			elif take.begins_with("exp:"):
+				var id := take.substr(4)
+				t += "[b]%s[/b]\n%s\n" % [Talents.skill_name(id), (Talents.SKILLS[id]["desc"] if Talents.SKILLS.has(id) else Talents.TOOLS[id]["desc"])]
+			else:
+				t += "[b]%s[/b]\n" % "、".join(Array(take.substr(5).split("+")).map(func(a): return Jobs.ABIL_JP[a]))
+			var err := c.choice_error(pick_key, take)
+			if err == "":
+				action_box.add_child(UIKit.button("これにする", _take_sel))
+			else:
+				t += "\n[color=#ff8a7a]%s[/color]" % err
+		else:
+			t += "[color=#8a90a0]左の一覧から選ぶ。[/color]"
+		action_box.add_child(UIKit.button("やめる", func(): _end_pick(); sel_id = ""; _refresh()))
+		return t
+	if sel_id.begins_with("skill:"):
+		var id := sel_id.substr(6)
+		var abil := String(Talents.SKILLS[id]["abil"]) if Talents.SKILLS.has(id) else String(Talents.TOOLS[id]["abil"])
+		t = "[b][color=#e8dcb0]%s[/color][/b]  【%s】\n" % [Talents.skill_name(id), Jobs.ABIL_JP[abil]]
+		t += "判定 %+d = 補正 %+d%s%s\n\n" % [c.skill_bonus(id), c.mod(abil),
+			(" + 習熟 %d" % c.prof_bonus()) if c.proficient(id) else "(習熟していない)",
+			(" + 熟達 %d" % c.prof_bonus()) if c.expert(id) else ""]
+		t += String(Talents.SKILLS[id]["desc"]) if Talents.SKILLS.has(id) else String(Talents.TOOLS[id]["desc"])
+		if Talents.SKILLS.has(id) and float(Talents.SKILLS[id]["fx"]) < 1.0:
+			t += "\n[color=#5bc0de]いまの効き目: %d%%[/color]" % int(round(c.skill_fx(id) * 100))
+		elif id == "performance":
+			t += "\n[color=#5bc0de]いまの効き目: %d銀貨[/color]" % int(c.skill_fx(id))
+		return t
+	if sel_id.begins_with("feat:"):
+		var f2: Dictionary = Talents.FEATS[sel_id.substr(5)]
+		return "[b][color=#e8dcb0]特技: %s[/color][/b]\n%s" % [f2["name"], f2["desc"]]
+	t = "[b]技能・特技[/b]  習熟ボーナス +%d\n● 習熟  ◎ 熟達(習熟ボーナス2倍)\n\n" % c.prof_bonus()
+	if not c.pending().is_empty():
+		t += "[color=#e8dcb0]★ の行を選ぶと、能力値上昇・特技・熟達を選べる。[/color]\n\n"
+	t += "[color=#8a90a0]技能を選ぶと、迷宮での効き目が出る。[/color]"
+	return t
+
+func _take_sel() -> void:
+	var c := _ch()
+	var take := sel_id.substr(5)
+	var err := c.choose(pick_key, take)
+	msg.text = err if err != "" else "%sが選んだ: %s" % [c.name, _take_label(take)]
+	msg.add_theme_color_override("font_color", UIKit.GOOD if err == "" else UIKit.BAD)
+	if err == "":
+		_end_pick()
+		sel_id = ""
+	_refresh()
+
+func _take_label(take: String) -> String:
+	if take.begins_with("feat:"):
+		return "特技「%s」" % Talents.FEATS[take.substr(5)]["name"]
+	if take.begins_with("exp:"):
+		return "%sに熟達" % Talents.skill_name(take.substr(4))
+	var parts := take.substr(5).split("+")
+	if parts.size() == 1:
+		return "%s +2" % Jobs.ABIL_JP[parts[0]]
+	return "%s +1、%s +1" % [Jobs.ABIL_JP[parts[0]], Jobs.ABIL_JP[parts[1]]]
+
 func _status_text(c: Character) -> String:
 	var t := "[b][color=#e8dcb0]%s[/color][/b]  %s・%s  Lv%d\n" % [c.name, Jobs.RACES[c.race]["name"], Jobs.CLASSES[c.cls]["name"], c.level]
 	t += "経験点 %d / %d\n\n" % [c.xp, c.xp_for_next()]
@@ -224,7 +396,17 @@ func _status_text(c: Character) -> String:
 	t += "足の速さ [b]%d[/b]    重さ [b]%.2f[/b]\n\n" % [int(c.speed()), c.mass()]
 	for a in Jobs.ABILS:
 		t += "%s [b]%d[/b](%+d)   " % [Jobs.ABIL_JP[a], c.stats[a], c.mod(a)]
-	t += "\n\n罠・隠し扉の探知 +%d    解錠 +%d" % [c.search_bonus(), c.lock_bonus()]
+	t += "\n\n習熟ボーナス +%d    受動〈知覚〉 %d    探る %+d    解錠 %+d\n" % [c.prof_bonus(), c.passive_perception(), c.search_bonus(), c.lock_bonus()]
+	var sv: Array = []
+	for a in Jobs.ABILS:
+		sv.append("%s%s %+d" % ["●" if c.save_proficient(a) else "", Jobs.ABIL_JP[a], c.save_bonus(a)])
+	t += "セーヴ: %s\n" % "  ".join(sv)
+	var fs: Array = c.feats().map(func(f): return Talents.FEATS[f]["name"])
+	t += "特技: %s" % ("、".join(fs) if not fs.is_empty() else "なし")
+	if not c.pending().is_empty():
+		t += "\n[color=#e8dcb0]★ 選んでいない能力値上昇・特技・熟達がある(「技能・特技」で選ぶ)[/color]"
+	if not c.birth.is_empty():
+		t += "\n\n[color=#8a90a0]生い立ち: %s[/color]" % Birth.text(c.birth)
 	return t
 
 # ---------- 操作 ----------
