@@ -81,12 +81,12 @@ func _draw() -> void:
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var H := func(id: String) -> String: return Controls.hint(id)
-		var lines := ["移動: %s%s%s%s   触れれば自動で攻撃(押し込むと有利)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
-				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("guard"), H.call("dodge"),
+		var lines := ["移動: %s%s%s%s   攻撃: %s(正面へ一撃)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
+				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("guard"), H.call("dodge"),
 				H.call("skill1"), H.call("skill4"), H.call("switch")],
 			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
 				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal")],
-			"敵のHPを削るほど押し込める。こちらのHPが減ると押される。"]
+			"魔物は触れると殴ってくる。敵のHPを削るほど押し込め、こちらのHPが減ると押される。戻る・閉じる: Esc"]
 		for i in lines.size():
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))
 	if not overlay.is_empty():
@@ -98,8 +98,17 @@ func _draw_skillbar(size_v: Vector2) -> void:
 		return
 	var h: Hero = heroes[game.active]
 	var w := 138.0
-	var x0 := size_v.x / 2.0 - (w * 4.0 + 18.0) / 2.0
+	var aw := 104.0
+	var x0 := size_v.x / 2.0 - (w * 4.0 + 18.0 + aw + 6.0) / 2.0 + aw + 6.0
 	var y0 := size_v.y - 58.0
+	# 通常攻撃: 待ち時間の進み具合を、左から満ちる棒で示す
+	var ar := Rect2(x0 - aw - 6.0, y0, aw, 44)
+	draw_rect(ar, Color(0, 0, 0, 0.6))
+	var af := h.attack_ready_frac()
+	draw_rect(Rect2(ar.position, Vector2(ar.size.x * af, ar.size.y)), Color(0.55, 0.42, 0.2, 0.55) if af < 1.0 else Color(0.55, 0.42, 0.2, 0.25))
+	UI.text(self, ar.position + Vector2(8, 18), "[%s] 攻撃" % Controls.hint("attack"), 14, Color("e8dcb0") if af >= 1.0 else Color(0.7, 0.7, 0.72), false)
+	UI.text(self, ar.position + Vector2(8, 36), "待ち %.1f秒" % Balance.ATTACK_CD, 12, Color(0.7, 0.7, 0.75), false)
+	draw_rect(ar, Color("e8dcb0") if af >= 1.0 else Color(1, 1, 1, 0.18), false, 1.5 if af >= 1.0 else 1.0)
 	for i in 4:
 		var id := String(h.ch.slots[i])
 		var r := Rect2(x0 + i * (w + 6.0), y0, w, 44)

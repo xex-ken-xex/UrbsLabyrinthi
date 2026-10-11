@@ -10,6 +10,8 @@ var msg: Label
 var _capture := ""         # 待っている枠("id:slot")。空なら待っていない
 var _arm_t := 0.0          # 枠を選んだ入力そのものを拾わないための待ち
 var first: Button
+var speed_btns: Array = []
+var enemy_btns: Array = []
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -34,6 +36,23 @@ func _ready() -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	head.add_child(note)
 	root.add_child(head)
+	# ゲームの速さ(迷宮の中だけ)。戦闘が速すぎるときは、遅くする
+	var sp := UIKit.hbox(8)
+	sp.add_child(UIKit.label("ゲームの速さ(迷宮の中)", 16))
+	for i in GameSettings.SPEEDS.size():
+		var sb := UIKit.button("%s ×%.1f" % [GameSettings.SPEEDS[i][0], GameSettings.SPEEDS[i][1]], _on_speed.bind(i), 130)
+		sp.add_child(sb)
+		speed_btns.append(sb)
+	root.add_child(sp)
+	var es := UIKit.hbox(8)
+	var el := UIKit.label("魔物の速さ", 16)
+	el.custom_minimum_size = Vector2(sp.get_child(0).get_minimum_size().x, 0)
+	es.add_child(el)
+	for i in GameSettings.ENEMY_SPEEDS.size():
+		var eb := UIKit.button("%s ×%.2f" % [GameSettings.ENEMY_SPEEDS[i][0], GameSettings.ENEMY_SPEEDS[i][1]], _on_enemy_speed.bind(i), 130)
+		es.add_child(eb)
+		enemy_btns.append(eb)
+	root.add_child(es)
 	var panel := UIKit.panel()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(panel)
@@ -68,7 +87,32 @@ func _ready() -> void:
 	bot.add_child(UIKit.button("閉じる", _close, 180))
 	root.add_child(bot)
 	_refresh()
-	first.call_deferred("grab_focus")
+	_refresh_speed()
+	(speed_btns[GameSettings.speed_index] as Button).call_deferred("grab_focus")
+
+func _on_speed(i: int) -> void:
+	GameSettings.set_speed(i)
+	_refresh_speed()
+	msg.text = "ゲームの速さを「%s」にした" % GameSettings.speed_name()
+
+func _on_enemy_speed(i: int) -> void:
+	GameSettings.set_enemy_speed(i)
+	_refresh_speed()
+	msg.text = "魔物の速さを「%s」にした" % GameSettings.enemy_speed_name()
+
+func _refresh_speed() -> void:
+	for i in enemy_btns.size():
+		var e: Button = enemy_btns[i]
+		if i == GameSettings.enemy_speed_index:
+			e.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
+		else:
+			e.remove_theme_stylebox_override("normal")
+	for i in speed_btns.size():
+		var b: Button = speed_btns[i]
+		if i == GameSettings.speed_index:
+			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
+		else:
+			b.remove_theme_stylebox_override("normal")
 
 func _refresh() -> void:
 	for a in Controls.ACTIONS:

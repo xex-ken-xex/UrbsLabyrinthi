@@ -44,7 +44,7 @@ func _ready() -> void:
 	margin.add_child(root)
 	var head := UIKit.hbox(16)
 	head.add_child(UIKit.label("持ち物", 28, UIKit.GOLD))
-	head.add_child(UIKit.label("%s で閉じる" % Controls.hint("inventory"), 14, UIKit.DIM))
+	head.add_child(UIKit.label("%s か Esc で閉じる" % Controls.hint("inventory"), 14, UIKit.DIM))
 	root.add_child(head)
 	member_box = UIKit.hbox(8)
 	root.add_child(member_box)
