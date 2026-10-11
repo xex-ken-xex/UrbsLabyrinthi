@@ -5,7 +5,7 @@ extends RefCounted
 ## 移動は、左スティックでもいつでもできる(割り当ての外)。
 
 const PATH := "user://controls.cfg"
-const VERSION := 2      # 2: 攻撃を足し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
+const VERSION := 2      # 2: 攻撃を足し(Space)、構えを Ctrl に移し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
 const MOVE := ["move_up", "move_down", "move_left", "move_right"]
 
 ## [id, 名前]。この順に設定画面へ並ぶ
@@ -34,8 +34,8 @@ static func defaults() -> Dictionary:
 		"move_down": {"keys": [_k(KEY_S), _k(KEY_DOWN)], "pad": _b(JOY_BUTTON_DPAD_DOWN)},
 		"move_left": {"keys": [_k(KEY_A), _k(KEY_LEFT)], "pad": _b(JOY_BUTTON_DPAD_LEFT)},
 		"move_right": {"keys": [_k(KEY_D), _k(KEY_RIGHT)], "pad": _b(JOY_BUTTON_DPAD_RIGHT)},
-		"attack": {"keys": [_k(KEY_J), _k(KEY_CTRL)], "pad": _b(JOY_BUTTON_X)},
-		"guard": {"keys": [_k(KEY_SPACE), {}], "pad": _b(JOY_BUTTON_LEFT_SHOULDER)},
+		"attack": {"keys": [_k(KEY_SPACE), _k(KEY_J)], "pad": _b(JOY_BUTTON_X)},
+		"guard": {"keys": [_k(KEY_CTRL), {}], "pad": _b(JOY_BUTTON_LEFT_SHOULDER)},
 		"dodge": {"keys": [_k(KEY_SHIFT), {}], "pad": _b(JOY_BUTTON_B)},
 		"skill1": {"keys": [_k(KEY_1), {}], "pad": _b(JOY_BUTTON_Y)},
 		"skill2": {"keys": [_k(KEY_2), {}], "pad": _ax(JOY_AXIS_TRIGGER_RIGHT, 1)},
@@ -135,6 +135,11 @@ static func _migrate_v1() -> void:
 	var d := defaults()
 	for id in ["attack", "skill1", "skill2", "skill3", "skill4", "search"]:
 		binds[id]["pad"] = d[id]["pad"]
+	# 攻撃は Space、構えは Ctrl に移した
+	binds["attack"]["keys"] = d["attack"]["keys"].duplicate(true)
+	for i in (binds["guard"]["keys"] as Array).size():
+		if (binds["guard"]["keys"][i] as Dictionary).get("c", -1) == KEY_SPACE:
+			binds["guard"]["keys"][i] = d["guard"]["keys"][i] if i == 0 else {}
 	var keys: Array = binds["inventory"]["keys"]
 	for i in keys.size():
 		if (keys[i] as Dictionary).get("c", -1) == KEY_ESCAPE:

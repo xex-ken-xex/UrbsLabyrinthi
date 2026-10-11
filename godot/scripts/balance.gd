@@ -25,7 +25,7 @@ static var PUSH_SCALE := 2.2                # 押し合いの速さにかける�
 static var HP_FLOOR := 0.35                 # HPが0に近いときの押す力の下限(これに 0.65×HP割合 を足す)
 static var HP_SCALE := 1.5                  # キャラクターの最大HPにかける係数
 static var AC_REDUCTION := 0.035            # 防御1点あたりの軽減率
-const GUARD_MASS := 2.0                # 構え(Space)の間、押されにくくなる倍率
+const GUARD_MASS := 2.0                # 構え(Ctrl)の間、押されにくくなる倍率
 
 # 通常攻撃(ボタンで正面へ一撃)。体当たりの自動攻撃の代わり
 static var ATTACK_SCALE := 1.3              # 一撃のダメージ = 体当たり火力 × 待ち時間 × これ

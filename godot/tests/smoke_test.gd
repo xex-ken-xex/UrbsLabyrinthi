@@ -537,7 +537,10 @@ func _test_tempo() -> void:
 	var saved := Controls.binds.duplicate(true)
 	Controls.binds["inventory"]["keys"] = [Controls._k(KEY_TAB), Controls._k(KEY_ESCAPE)]
 	Controls.binds["skill1"]["pad"] = Controls._b(JOY_BUTTON_X)
+	Controls.binds["guard"]["keys"] = [Controls._k(KEY_SPACE), {}]
+	Controls.binds["attack"]["keys"] = [Controls._k(KEY_J), {}]
 	Controls._migrate_v1()
+	check(Controls.binds["attack"]["keys"][0].get("c", 0) == KEY_SPACE and Controls.binds["guard"]["keys"][0].get("c", 0) == KEY_CTRL, "古い割り当ての Space は攻撃へ、構えは Ctrl へ")
 	check(Controls.binds["inventory"]["keys"][1].get("c", 0) != KEY_ESCAPE and Controls.binds["skill1"]["pad"] == Controls._b(JOY_BUTTON_Y), "古い割り当てを読み替える")
 	Controls.binds = saved
 	Controls.apply()
