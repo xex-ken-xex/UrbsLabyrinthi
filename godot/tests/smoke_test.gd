@@ -105,6 +105,10 @@ func _test_controls() -> void:
 	var pad := InputEventJoypadButton.new()
 	pad.button_index = JOY_BUTTON_A
 	check(InputMap.event_is_action(pad, "interact"), "コントローラーの A で調べる")
+	check(InputMap.event_is_action(pad, "ui_accept"), "コントローラーの A で画面のボタンを押せる")
+	var pb := InputEventJoypadButton.new()
+	pb.button_index = JOY_BUTTON_B
+	check(InputMap.event_is_action(pb, "ui_cancel"), "コントローラーの B で戻る")
 	var st := InputEventJoypadMotion.new()
 	st.axis = JOY_AXIS_LEFT_X
 	st.axis_value = -1.0

@@ -53,6 +53,7 @@ static func theme() -> Theme:
 	t.set_stylebox("panel", "ItemList", box(Color(0.03, 0.03, 0.05, 0.8)))
 	t.set_stylebox("selected", "ItemList", box(Color(0.3, 0.25, 0.14, 1.0), GOLD))
 	t.set_stylebox("selected_focus", "ItemList", box(Color(0.3, 0.25, 0.14, 1.0), GOLD))
+	t.set_stylebox("focus", "ItemList", box(Color(0, 0, 0, 0), ACCENT, 2))   # コントローラーで、いまの一覧が分かるように
 	t.set_stylebox("hovered", "ItemList", box(Color(0.16, 0.16, 0.22, 1.0), BRONZE))
 	t.set_color("font_color", "ItemList", TEXT)
 	t.set_color("font_selected_color", "ItemList", GOLD)

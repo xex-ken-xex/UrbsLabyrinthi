@@ -111,6 +111,14 @@ static func apply() -> void:
 		m.axis = stick[id][0]
 		m.axis_value = stick[id][1]
 		InputMap.action_add_event(id, m)
+	# 画面のボタン操作(決定・戻る)。Godot の初期設定にはコントローラーが無いので、A で決定、B で戻る を足す
+	for ui in [["ui_accept", JOY_BUTTON_A], ["ui_cancel", JOY_BUTTON_B]]:
+		for ev in InputMap.action_get_events(ui[0]):
+			if ev is InputEventJoypadButton:
+				InputMap.action_erase_event(ui[0], ev)
+		var jb := InputEventJoypadButton.new()
+		jb.button_index = ui[1]
+		InputMap.action_add_event(ui[0], jb)
 
 static func save() -> void:
 	var cf := ConfigFile.new()

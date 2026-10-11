@@ -26,6 +26,8 @@ Release の `UrbsLabyrinthi-setup.exe` を実行すると、`%LOCALAPPDATA%\Prog
 - 受け取りは、いったん `UrbsLabyrinthi.pck.new` に置き、SHA-256 を確かめてから入れ替える。Windows では、ゲームが終わるのを PowerShell が待って入れ替え、起動し直す
 - 通信できないとき、フォルダに書き込めないときは、そのまま今の版で起動する(タイトルの下に理由が出る)
 - 確かめている間に Esc(コントローラーは B)で飛ばせる。`-- --no-update` を付けて起動すると、確かめない
+- 同じ版への入れ替えは一度だけ試す(覚えておく場所は `user://update.cfg`)。入れ替えに失敗しても、起動し直しを繰り返さない
+- 確かめている間は 30fps・省電力で描き、ハッシュの計算は裏で行う。各段階はログに `[urbs] 更新:` として残る
 - Release には `UrbsLabyrinthi-windows.pck`、`UrbsLabyrinthi-linux.pck`、`latest.json` を `tools/package-release.sh` が作って載せる
 
 ## セットアップ(必要なライブラリを入れる)
