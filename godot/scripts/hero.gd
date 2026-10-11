@@ -29,6 +29,7 @@ var ai_target: Enemy = null
 var ai_move := Vector2.ZERO
 var ai_catchup := false
 var guarding := false
+var last_stand := true         # 不屈の特技を、この潜入でまだ使っていない
 var stat_dealt := 0.0         # 闘技場の記録: 与えたダメージ、受けたダメージ
 var stat_taken := 0.0
 var _tex: Texture2D = null
@@ -76,28 +77,38 @@ func _speed_now() -> float:
 	return s
 
 func contact_dps() -> float:
-	if guarding or down:
+	if down:
 		return 0.0
+	if guarding:
+		# 盾構え: 構えの間も、触れている敵へ体当たりの 40% で反撃する
+		return ch.bump_power() * buff("power") * 0.4 if ch.has_feat("shield_master") else 0.0
 	return ch.bump_power() * buff("power")
 
-func receive_contact(amount: float, from_pos: Vector2, _src: Body) -> void:
-	damage(amount, from_pos)
+func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
+	damage(amount, from_pos, false, (src as Enemy).mon_type() if src is Enemy else "")
 
 ## 魔物の体当たり、飛び道具、罠から受けるダメージ。防具の軽減、鉄壁や構えがここで効く
-func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false) -> void:
+## src_type は、ダメージを与えた魔物の種別(〈動物使い〉〈看破〉が見る。罠などは空)
+func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_type: String = "") -> void:
 	if down or iframes > 0.0 or roll_t > 0.0 or rush_t > 0.0:
 		return
-	var n := amount * buff("guard")
+	var n := amount * buff("guard") * ch.taken_mult(src_type)
 	if not ignore_armor:
 		n *= 1.0 - ch.damage_reduction()
 	if guarding:
-		n *= 0.5
+		n *= 0.25 if ch.has_feat("shield_master") else 0.5
 	n = maxf(0.05, n)
 	stat_taken += n
 	ch.hp -= n
 	flash = 0.12
 	queue_popup(n, Color("ff7a6a"))
 	game_floor.add_child(Spark.make(position + (from_pos - position).normalized() * radius * 0.6, 9.0, Color("ff9a8a"), 0.14))
+	if ch.hp <= 0.0 and last_stand and ch.has_feat("resilient") and amount < 99999.0:
+		# 不屈: 一度の潜入で一度だけ、HP1 で踏みとどまる
+		last_stand = false
+		ch.hp = 1.0
+		iframes = 0.8
+		game_floor.spawn_text(position + Vector2(0, -radius - 18), "踏みとどまった", Color("ffe9a8"))
 	if ch.hp <= 0.0:
 		ch.hp = 0.0
 		down = true
@@ -178,7 +189,7 @@ func _move(delta: float) -> void:
 	if bool(cmd.get("dodge", false)) and roll_cd <= 0.0 and not guarding:
 		roll_dir = facing if mv.length() <= 0.1 else mv.normalized()
 		roll_t = Balance.ROLL_TIME
-		roll_cd = Balance.ROLL_COOLDOWN
+		roll_cd = ch.roll_cooldown()
 		iframes = Balance.ROLL_TIME + 0.08
 	cmd["dodge"] = false
 
@@ -266,7 +277,7 @@ func _sk_projectile(sk: Dictionary, aim: Vector2) -> bool:
 		var ang := (i - (count - 1) / 2.0) * spread
 		var p := Projectile.new()
 		p.setup_hero(game_floor, self, aim.rotated(ang), d, Jobs.class_color(ch.cls).lightened(0.2),
-			float(sk["range"]), float(sk["speed"]), bool(sk.get("pierce", false)), float(sk.get("slow", 0.0)), float(sk.get("stun", 0.0)))
+			float(sk["range"]) * (1.25 if ch.has_feat("sharpshooter") else 1.0), float(sk["speed"]), bool(sk.get("pierce", false)), float(sk.get("slow", 0.0)), float(sk.get("stun", 0.0)))
 		game_floor.add_child(p)
 	facing = aim
 	return true

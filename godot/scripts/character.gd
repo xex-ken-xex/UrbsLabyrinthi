@@ -9,7 +9,10 @@ var cls := "fighter"
 var look := "M"                     # 見た目(スプライトシート): M 男性 / F 女性
 var level := 1
 var xp := 0
-var stats := {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}   # 種族の補正を含む最終値
+var stats := {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}   # 種族の補正と能力値上昇を含む最終値
+var base_stats := {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}  # 作ったときの値(種族の補正を含む)
+var profs: Array = []               # 作るときに選んだ技能(クラスと生い立ちの分。種族の分は含まない)
+var choices := {}                   # 能力値上昇・特技・熟達の選択。key(asi4 など) → {"take": "abil:str" / "abil:str+dex" / "feat:tough" / "exp:stealth"}
 var hp := 1.0
 var mp := 0.0
 var equip := {"weapon": "", "armor": "", "acc": ""}
@@ -18,7 +21,7 @@ var slots: Array = ["", "", "", ""] # ショートカット 1〜4
 var max_hp_cache := 1
 var max_mp_cache := 0
 
-static func create(nm: String, race_id: String, cls_id: String, base_stats: Dictionary, look_id: String = "M") -> Character:
+static func create(nm: String, race_id: String, cls_id: String, point_stats: Dictionary, look_id: String = "M", picks: Array = []) -> Character:
 	var c := Character.new()
 	c.name = nm
 	c.look = look_id
@@ -26,7 +29,9 @@ static func create(nm: String, race_id: String, cls_id: String, base_stats: Dict
 	c.cls = cls_id
 	var bonus: Dictionary = Jobs.RACES[race_id]["bonus"]
 	for a in Jobs.ABILS:
-		c.stats[a] = int(base_stats[a]) + int(bonus.get(a, 0))
+		c.base_stats[a] = int(point_stats[a]) + int(bonus.get(a, 0))
+	c.profs = picks.duplicate() if Talents.picks_valid(cls_id, picks) else Talents.default_picks(cls_id, race_id)
+	c.recalc_stats()
 	c.give_starting_kit()
 	c.learn_class_skills()
 	c.hp = c.max_hp()
@@ -67,6 +72,8 @@ func max_hp() -> int:
 	var base := hit + con + (level - 1) * (hit / 2 + 1 + con)
 	base += int(float(Jobs.RACES[race]["hp_lv"]) * level)
 	base = maxi(base, level * 4)
+	if has_feat("tough"):
+		base += level * 2
 	var v := float(base) * Balance.HP_SCALE * (1.0 + equip_fx("hp_pct"))
 	max_hp_cache = int(round(v))
 	return max_hp_cache
@@ -75,6 +82,8 @@ func max_mp() -> int:
 	var cd := class_data()
 	var cm := maxi(0, mod(String(cd["cast"])))
 	var v := (float(cd["mp0"]) + float(cd["mp_lv"]) * level + cm * level * 0.4) * (1.0 + equip_fx("mp_pct"))
+	if has_feat("mana_well"):
+		v *= 1.3
 	max_mp_cache = int(round(v))
 	return max_mp_cache
 
@@ -85,6 +94,8 @@ func bump_power() -> float:
 	var w := equip_item("weapon")
 	if not w.is_empty():
 		p += float(w["power"])
+	if has_feat("heavy_hitter"):
+		p *= 1.25
 	return p * Balance.BUMP_SCALE * (1.0 + equip_fx("power_pct"))
 
 func armor_class() -> int:
@@ -106,6 +117,8 @@ func damage_reduction() -> float:
 
 func speed() -> float:
 	var s := Balance.HERO_SPEED * (1.0 + equip_fx("speed_pct"))
+	if has_feat("mobile"):
+		s *= 1.1
 	var a := equip_item("armor")
 	if not a.is_empty() and String(a["type"]) == "heavy":
 		s *= 0.92
@@ -118,19 +131,203 @@ func mass() -> float:
 		match String(a["type"]):
 			"heavy": m += 0.25
 			"medium": m += 0.1
+	m *= 1.0 + skill_fx("athletics")
+	if has_feat("grappler"):
+		m *= 1.25
 	return maxf(0.6, m) * (1.0 + equip_fx("mass_pct"))
 
 func light_bonus() -> int:
 	return int(Jobs.RACES[race]["light"]) + int(equip_fx("light"))
 
+## 探る(F): 〈知覚〉と〈捜査〉の高いほう
 func search_bonus() -> int:
-	return Balance.skill_bonus(level) + int(class_data()["search"])
+	return maxi(skill_bonus("perception"), skill_bonus("investigation")) + (5 if has_feat("alert") else 0)
 
+## 解錠と罠の解除: 【敏捷】+ 盗賊道具の習熟
 func lock_bonus() -> int:
-	return Balance.skill_bonus(level) + int(class_data()["lock"])
+	return skill_bonus("thieves_tools")
+
+## 受動〈知覚〉: 10 + 〈知覚〉
+func passive_perception() -> int:
+	return 10 + skill_bonus("perception") + (5 if has_feat("alert") else 0)
+
+func roll_cooldown() -> float:
+	var r := 1.0 - skill_fx("acrobatics")
+	if has_feat("mobile"):
+		r *= 0.75
+	return Balance.ROLL_COOLDOWN * r
 
 func regen_mp() -> float:
-	return maxf(0.25, max_mp() * 0.012)
+	return maxf(0.25, max_mp() * 0.012) * (1.5 if has_feat("mana_well") else 1.0)
+
+## d20 を振る。幸運の特技があれば、5 以下を一度だけ振り直す
+func roll_d20() -> int:
+	var r := Dice.d20()
+	if r <= 5 and has_feat("lucky"):
+		r = Dice.d20()
+	return r
+
+## 魔物の種別ごとの、与えるダメージの倍率(〈自然〉〈宗教〉)
+func dealt_mult(mon_type: String) -> float:
+	var t := mon_type.to_lower()
+	if t in ["beast", "plant", "ooze"] or t.begins_with("swarm"):
+		return 1.0 + skill_fx("nature")
+	if t in ["undead", "fiend", "celestial"]:
+		return 1.0 + skill_fx("religion")
+	return 1.0
+
+## 魔物の種別ごとの、受けるダメージの倍率(〈動物使い〉〈看破〉、渾身)
+func taken_mult(mon_type: String) -> float:
+	var m := 1.1 if has_feat("heavy_hitter") else 1.0
+	var t := mon_type.to_lower()
+	if t == "beast" or t.begins_with("swarm"):
+		m *= 1.0 - skill_fx("animal")
+	elif t == "humanoid":
+		m *= 1.0 - skill_fx("insight")
+	return m
+
+# ---------- 技能、セーヴ、能力値上昇、特技 ----------
+
+func prof_bonus() -> int:
+	return Talents.prof_bonus(level)
+
+func proficient(id: String) -> bool:
+	if profs.has(id) or (Talents.RACE_PROF.get(race, []) as Array).has(id):
+		return true
+	return (Talents.CLASS_PROF[cls]["tools"] as Array).has(id)
+
+func expert(id: String) -> bool:
+	for k in choices:
+		if String(choices[k].get("take", "")) == "exp:" + id and _choice_level(String(k)) <= level:
+			return true
+	return false
+
+## 判定の加値(能力値の補正 + 習熟 + 熟達)
+func skill_bonus(id: String) -> int:
+	var abil := String(Talents.SKILLS[id]["abil"]) if Talents.SKILLS.has(id) else String(Talents.TOOLS[id]["abil"])
+	var b := mod(abil)
+	if proficient(id):
+		b += prof_bonus()
+		if expert(id):
+			b += prof_bonus()
+	return b
+
+## 技能のハクスラでの効き目(点 × 1点あたり、上限つき)
+func skill_fx(id: String) -> float:
+	var sk: Dictionary = Talents.SKILLS[id]
+	return clampf(maxi(0, skill_bonus(id)) * float(sk["fx"]), 0.0, float(sk["cap"]))
+
+func save_proficient(abil: String) -> bool:
+	return (Talents.CLASS_PROF[cls]["saves"] as Array).has(abil)
+
+func save_bonus(abil: String) -> int:
+	return mod(abil) + (prof_bonus() if save_proficient(abil) else 0)
+
+func feats() -> Array:
+	var out: Array = []
+	for k in choices:
+		var t := String(choices[k].get("take", ""))
+		if t.begins_with("feat:") and _choice_level(String(k)) <= level:
+			out.append(t.substr(5))
+	return out
+
+func has_feat(id: String) -> bool:
+	return feats().has(id)
+
+func _choice_level(key: String) -> int:
+	return int(key.lstrip("asiexp").rstrip("ab"))
+
+## まだ選んでいない、能力値上昇・特技・熟達。[{key, lv, kind}]
+func pending() -> Array:
+	var out: Array = []
+	for e in Talents.schedule(cls, level):
+		if not choices.has(e["key"]):
+			out.append(e)
+	return out
+
+## 選べるものか。選べないときは理由を返す(空なら選べる)
+func choice_error(key: String, take: String) -> String:
+	var entry: Dictionary = {}
+	for e in pending():
+		if e["key"] == key:
+			entry = e
+	if entry.is_empty():
+		return "いまは選べない"
+	var kind := String(entry["kind"])
+	if kind == "asi":
+		if take.begins_with("feat:"):
+			var f := take.substr(5)
+			if not Talents.FEATS.has(f):
+				return "その特技は無い"
+			if has_feat(f):
+				return "もう持っている"
+			return ""
+		if take.begins_with("abil:"):
+			var parts := take.substr(5).split("+")
+			if parts.size() == 2 and parts[0] == parts[1]:
+				return "+1 は別の能力値へ"
+			for a in parts:
+				if not Jobs.ABILS.has(a):
+					return "その能力値は無い"
+				if int(stats[a]) + (2 if parts.size() == 1 else 1) > 20:
+					return "能力値は20までしか上がらない"
+			return "" if parts.size() <= 2 else "選び方が違う"
+		return "能力値上昇か特技を選ぶ"
+	if kind == "expertise":
+		if not take.begins_with("exp:"):
+			return "熟達する技能を選ぶ"
+		var id := take.substr(4)
+		if not proficient(id):
+			return "習熟している技能だけ"
+		if expert(id):
+			return "もう熟達している"
+		return ""
+	return "選べない"
+
+func choose(key: String, take: String) -> String:
+	var err := choice_error(key, take)
+	if err != "":
+		return err
+	choices[key] = {"take": take}
+	recalc_stats()
+	clamp_resources()
+	return ""
+
+## 選んでいない分を、クラスに合わせて自動で埋める(闘技場や自動プレイ用)
+func auto_fill_choices() -> void:
+	for e in pending():
+		if e["kind"] == "asi":
+			var done := false
+			for a in class_data()["prime"]:
+				if int(stats[a]) <= 18:
+					choose(String(e["key"]), "abil:" + String(a))
+					done = true
+					break
+			if not done:
+				for f in Talents.FEAT_ORDER:
+					if choose(String(e["key"]), "feat:" + String(f)) == "":
+						break
+		else:
+			var cand: Array = ["thieves_tools"]
+			cand.append_array(Talents.SKILL_ORDER)
+			for id in cand:
+				if choose(String(e["key"]), "exp:" + String(id)) == "":
+					break
+
+## 作ったときの値に、いまのレベルまでの能力値上昇を足して、最終値を出す
+func recalc_stats() -> void:
+	for a in Jobs.ABILS:
+		stats[a] = int(base_stats[a])
+	for k in choices:
+		if _choice_level(String(k)) > level:
+			continue
+		var t := String(choices[k].get("take", ""))
+		if not t.begins_with("abil:"):
+			continue
+		var parts := t.substr(5).split("+")
+		for a in parts:
+			if Jobs.ABILS.has(a):
+				stats[a] = mini(20, int(stats[a]) + (2 if parts.size() == 1 else 1))
 
 ## その装備に替えたときの変化(体当たり、防御、HP、MP)を文にする
 func compare_equip(id: String) -> String:
@@ -164,11 +361,22 @@ func skill_damage(sk: Dictionary) -> float:
 		var w := equip_item("weapon")
 		if not w.is_empty():
 			d += float(w.get("spell", 0.0))
+	if sk.get("spell", false):
+		d *= 1.0 + skill_fx("arcana")
+		if has_feat("war_caster"):
+			d *= 1.2
+	if sk.get("kind", "") == "projectile" and has_feat("sharpshooter"):
+		d *= 1.2
 	return d
 
 func skill_amount(sk: Dictionary) -> float:
 	var stat_mod := maxi(0, mod(String(class_data()["cast"])))
-	return float(sk.get("amount", 0.0)) + stat_mod * float(sk.get("stat", 0.0)) + level * float(sk.get("lv", 0.0))
+	var n := float(sk.get("amount", 0.0)) + stat_mod * float(sk.get("stat", 0.0)) + level * float(sk.get("lv", 0.0))
+	return n * heal_mult()
+
+## 回復の倍率(〈医術〉、癒し手)
+func heal_mult() -> float:
+	return (1.0 + skill_fx("medicine")) * (1.3 if has_feat("healer") else 1.0)
 
 func learn(id: String) -> bool:
 	if skills.has(id) or not Jobs.SKILLS.has(id):
@@ -200,6 +408,7 @@ func gain_xp(n: int) -> int:
 		level += 1
 		gained += 1
 	if gained > 0:
+		recalc_stats()
 		learn_class_skills()
 		hp = max_hp()
 		mp = max_mp()
@@ -213,7 +422,7 @@ func clamp_resources() -> void:
 
 func to_dict() -> Dictionary:
 	return {"name": name, "race": race, "cls": cls, "look": look, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
-		"equip": equip, "skills": skills, "slots": slots}
+		"equip": equip, "skills": skills, "slots": slots, "base_stats": base_stats, "profs": profs, "choices": choices}
 
 static func from_dict(d: Dictionary) -> Character:
 	var c := Character.new()
@@ -223,9 +432,18 @@ static func from_dict(d: Dictionary) -> Character:
 	c.look = String(d.get("look", "M"))
 	c.level = int(d.get("level", 1))
 	c.xp = int(d.get("xp", 0))
-	var st: Dictionary = d.get("stats", {})
+	# 古いセーブには base_stats が無い。そのときは、いまの能力値を作ったときの値とみなす
+	var st: Dictionary = d.get("base_stats", d.get("stats", {}))
 	for a in Jobs.ABILS:
-		c.stats[a] = int(st.get(a, 10))
+		c.base_stats[a] = int(st.get(a, 10))
+	var pk: Array = []
+	for p in d.get("profs", []):
+		pk.append(String(p))
+	c.profs = pk if Talents.picks_valid(c.cls, pk) else Talents.default_picks(c.cls, c.race)
+	var ch_d: Dictionary = d.get("choices", {})
+	for k in ch_d:
+		c.choices[String(k)] = {"take": String((ch_d[k] as Dictionary).get("take", ""))}
+	c.recalc_stats()
 	var eq: Dictionary = d.get("equip", {})
 	for k in ["weapon", "armor", "acc"]:
 		c.equip[k] = String(eq.get(k, ""))

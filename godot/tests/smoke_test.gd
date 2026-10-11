@@ -18,6 +18,7 @@ func _initialize() -> void:
 func _run() -> void:
 	await _test_dice()
 	_test_data()
+	_test_talents()
 	_test_state()
 	await _test_assets()
 	await _test_floors()
@@ -89,6 +90,97 @@ func _test_data() -> void:
 	check(f.armor_class() > ac0 and f.damage_reduction() > 0.2, "重い鎧で防御が上がる (AC %d → %d)" % [ac0, f.armor_class()])
 	check(not ItemDB.can_equip("plate", "wizard") and not ItemDB.can_equip("greataxe", "cleric"), "クラスの制限が効く")
 
+# ---------- 技能、セーヴ、能力値上昇、特技 ----------
+
+func _test_talents() -> void:
+	print("[talents]")
+	var pb := [[1, 2], [4, 2], [5, 3], [8, 3], [9, 4], [13, 5], [17, 6], [20, 6]]
+	var pb_ok := true
+	for e in pb:
+		pb_ok = pb_ok and Talents.prof_bonus(e[0]) == e[1]
+	check(pb_ok, "習熟ボーナスは 5e と同じ(Lv1 +2、Lv5 +3、Lv9 +4、Lv13 +5、Lv17 +6)")
+	var bad := 0
+	for cls in Jobs.CLASSES:
+		for race in Jobs.RACES:
+			var picks := Talents.default_picks(cls, race)
+			var c := Character.create("t", race, cls, Jobs.auto_stats(cls))
+			if not Talents.picks_valid(cls, picks) or c.profs != picks:
+				bad += 1
+	check(bad == 0, "おまかせの技能が、6クラス×4種族で正しい (%d件の誤り)" % bad)
+	check(not Talents.picks_valid("fighter", ["arcana", "religion", "history", "medicine"]), "クラスの一覧から足りない選び方は通らない")
+	check(not Talents.picks_valid("fighter", ["athletics", "athletics", "perception", "survival"]), "同じ技能の重複は通らない")
+	check(Talents.picks_valid("fighter", ["athletics", "perception", "arcana", "stealth"]), "クラスから2つ + 自由に2つは通る")
+	var elf := Character.create("e", "elf", "wizard", Jobs.auto_stats("wizard"))
+	check(elf.proficient("perception") and not elf.profs.has("perception"), "エルフは〈知覚〉に習熟(選ぶ数に入らない)")
+	var fi := Character.create("f", "human", "fighter", Jobs.auto_stats("fighter"), "M", ["athletics", "perception", "arcana", "stealth"])
+	check(fi.skill_bonus("athletics") == fi.mod("str") + 2 and fi.skill_bonus("religion") == fi.mod("int"), "技能の判定 = 補正 + 習熟 (〈運動〉%+d)" % fi.skill_bonus("athletics"))
+	check(fi.save_bonus("str") == fi.mod("str") + 2 and fi.save_bonus("dex") == fi.mod("dex"), "戦士のセーヴは【筋力】【耐久力】に習熟")
+	check(fi.lock_bonus() == fi.mod("dex"), "盗賊道具に習熟していないと、解錠は【敏捷】だけ")
+	check(fi.passive_perception() == 10 + fi.skill_bonus("perception"), "受動〈知覚〉 = 10 + 〈知覚〉 (%d)" % fi.passive_perception())
+	# 盗賊: 盗賊道具と熟達
+	var ro := Character.create("r", "halfling", "rogue", Jobs.auto_stats("rogue"))
+	check(ro.lock_bonus() == ro.mod("dex") + 2, "盗賊は盗賊道具に習熟 (解錠 %+d)" % ro.lock_bonus())
+	var pend := ro.pending()
+	check(pend.size() == 2 and pend[0]["kind"] == "expertise", "盗賊は Lv1 で熟達を2つ選べる")
+	check(ro.choose("exp1a", "exp:arcana") != "", "習熟していない技能には熟達できない")
+	check(ro.choose("exp1a", "exp:thieves_tools") == "" and ro.lock_bonus() == ro.mod("dex") + 4, "盗賊道具に熟達すると解錠 %+d" % ro.lock_bonus())
+	check(ro.choose("exp1b", "exp:thieves_tools") != "", "同じものに二度は熟達できない")
+	var st0 := ro.skill_bonus("stealth")
+	check(ro.choose("exp1b", "exp:stealth") == "" and ro.skill_bonus("stealth") == st0 + 2 and ro.pending().is_empty(), "〈隠密〉に熟達 (%+d → %+d)" % [st0, ro.skill_bonus("stealth")])
+	# 能力値上昇と特技
+	var f2 := Character.create("f2", "human", "fighter", Jobs.auto_stats("fighter"))
+	check(f2.pending().is_empty(), "Lv1 の戦士は、まだ選ぶものが無い")
+	f2.gain_xp(int(Balance.XP_LEVELS[3]))
+	check(f2.level == 4 and f2.pending().size() == 1 and f2.pending()[0]["key"] == "asi4", "Lv4 で能力値上昇か特技を選べる")
+	var str0 := int(f2.stats["str"])
+	check(f2.choose("asi4", "abil:str") == "" and int(f2.stats["str"]) == str0 + 2 and int(f2.base_stats["str"]) == str0, "【筋力】+2 (%d → %d)" % [str0, int(f2.stats["str"])])
+	f2.gain_xp(int(Balance.XP_LEVELS[5]) - f2.xp)
+	check(f2.level == 6 and f2.pending().size() == 1 and f2.pending()[0]["key"] == "asi6", "戦士は Lv6 にも選べる")
+	var hp0 := f2.max_hp()
+	check(f2.choose("asi6", "feat:tough") == "" and f2.has_feat("tough") and f2.max_hp() == hp0 + int(round(12 * Balance.HP_SCALE)), "特技「頑健」で最大HP +2×Lv (%d → %d)" % [hp0, f2.max_hp()])
+	f2.gain_xp(int(Balance.XP_LEVELS[7]) - f2.xp)
+	check(f2.choose("asi8", "feat:tough") != "", "同じ特技は二度取れない")
+	check(f2.choose("asi8", "abil:dex+dex") != "", "+1 を同じ能力値に二つは置けない")
+	var dx := int(f2.stats["dex"])
+	var cn := int(f2.stats["con"])
+	check(f2.choose("asi8", "abil:dex+con") == "" and int(f2.stats["dex"]) == dx + 1 and int(f2.stats["con"]) == cn + 1, "+1 を二つに分けられる")
+	var hi := Character.create("h", "human", "wizard", Jobs.auto_stats("wizard"))
+	hi.base_stats["int"] = 19
+	hi.recalc_stats()
+	hi.gain_xp(int(Balance.XP_LEVELS[3]))
+	check(hi.choose("asi4", "abil:int") != "" and hi.choose("asi4", "abil:int+con") == "" and int(hi.stats["int"]) == 20, "能力値は20まで")
+	# レベルを下げると、そのレベルより上の選択は効かない(闘技場)
+	f2.level = 5
+	f2.recalc_stats()
+	check(int(f2.stats["str"]) == str0 + 2 and not f2.has_feat("tough") and int(f2.stats["dex"]) == dx, "レベルを下げると、上のレベルの選択は効かない")
+	f2.level = 8
+	f2.recalc_stats()
+	check(f2.has_feat("tough") and int(f2.stats["dex"]) == dx + 1, "レベルを戻すと、また効く")
+	var au := Character.create("a", "dwarf", "cleric", Jobs.auto_stats("cleric"))
+	au.level = 19
+	au.auto_fill_choices()
+	au.recalc_stats()
+	check(au.pending().is_empty() and int(au.stats["wis"]) <= 20, "自動で全部埋められる (【判断力】%d、特技 %s)" % [int(au.stats["wis"]), au.feats()])
+	# 効き目
+	check(ro.skill_fx("stealth") > 0.0 and ro.skill_fx("stealth") <= 0.4, "〈隠密〉の効き目 %d%%" % int(ro.skill_fx("stealth") * 100))
+	var rn := Character.create("rn", "human", "ranger", Jobs.auto_stats("ranger"))
+	check(rn.dealt_mult("beast") > 1.0 and is_equal_approx(rn.dealt_mult("humanoid"), 1.0), "〈自然〉で野獣への与ダメージが上がる (×%.2f)" % rn.dealt_mult("beast"))
+	check(rn.taken_mult("beast") < 1.0 and is_equal_approx(rn.taken_mult("undead"), 1.0), "〈動物使い〉で野獣からの被ダメージが減る (×%.2f)" % rn.taken_mult("beast"))
+	var cl := Character.create("c", "human", "cleric", Jobs.auto_stats("cleric"))
+	check(cl.dealt_mult("undead") > 1.0 and cl.heal_mult() > 1.0, "〈宗教〉でアンデッドに強く、〈医術〉で回復が増える")
+	var b0 := fi.roll_cooldown()
+	fi.choices["asi4"] = {"take": "feat:mobile"}
+	fi.level = 4
+	fi.recalc_stats()
+	check(fi.roll_cooldown() < b0 and fi.speed() > Balance.HERO_SPEED * 1.05, "特技「身軽」で転がりの待ち時間が縮み、足が速くなる")
+	# セーブとロード
+	var d := f2.to_dict()
+	var f3 := Character.from_dict(d)
+	check(f3.profs == f2.profs and f3.has_feat("tough") and int(f3.stats["str"]) == int(f2.stats["str"]) and int(f3.base_stats["str"]) == str0, "技能、選択、能力値がセーブで残る")
+	var old := {"name": "古", "race": "human", "cls": "rogue", "level": 3, "xp": 900, "stats": {"str": 9, "dex": 16, "con": 14, "int": 13, "wis": 11, "cha": 12}}
+	var o := Character.from_dict(old)
+	check(int(o.stats["dex"]) == 16 and Talents.picks_valid("rogue", o.profs) and o.pending().size() == 2, "古いセーブは、能力値そのまま、技能はおまかせ、熟達は未選択で読める")
+
 # ---------- 持ち物と売買、セーブ ----------
 
 func _test_state() -> void:
@@ -99,11 +191,15 @@ func _test_state() -> void:
 		party.append(Character.create(cls, "human", cls, Jobs.auto_stats(cls)))
 	gs.new_game(party)
 	var silver0 := gs.bank_silver
-	check(gs.buy("longsword") == "" and gs.count("longsword") == 1 and gs.bank_silver == silver0 - 220, "買える")
+	var ls_price := gs.buy_price("longsword")
+	check(ls_price <= 220 and ls_price >= int(220 * 0.7), "〈説得〉で値段が下がる(長剣 220 → %d)" % ls_price)
+	check(gs.buy("longsword") == "" and gs.count("longsword") == 1 and gs.bank_silver == silver0 - ls_price, "買える")
 	check(gs.equip(party[0], "longsword") == "" and party[0].equip["weapon"] == "longsword" and gs.count("shortsword") == 1, "装備すると、古い武器が持ち物へ戻る")
 	check(gs.equip(party[2], "plate") != "", "着られない鎧は装備できない")
 	var sell0 := gs.bank_silver
-	check(gs.sell("shortsword") == "" and gs.bank_silver == sell0 + ItemDB.sell_price("shortsword"), "売れる (+%d)" % ItemDB.sell_price("shortsword"))
+	var ss_price := gs.sell_price("shortsword")
+	check(ss_price >= ItemDB.sell_price("shortsword"), "〈ペテン〉で買い取りが上がる(%d → %d)" % [ItemDB.sell_price("shortsword"), ss_price])
+	check(gs.sell("shortsword") == "" and gs.bank_silver == sell0 + ss_price, "売れる (+%d)" % ss_price)
 	party[1].hp = 5.0
 	check(gs.use_item("potion", party[1]) != "" and party[1].hp > 5.0, "治療薬でHPが回復する")
 	check(gs.use_item("potion", party[1]) == "" or party[1].hp >= party[1].max_hp() - 0.01 or true, "満タンのとき薬を無駄にしない")
@@ -499,6 +595,11 @@ func _test_game() -> void:
 	check(make.slots[1]["cls"] == "ranger" and Jobs.points_used(make.slots[1]["stats"]) == 27, "クラスを替えると、能力値が推奨配分になる")
 	make._on_stat("str", -1)
 	check(Jobs.points_used(make.slots[1]["stats"]) == 26 - (0 if int(make.slots[1]["stats"]["str"]) != 8 else 0) or true, "能力値を増減できる")
+	check(Talents.picks_valid("ranger", make.slots[1]["picks"]), "クラスを替えると、技能がおまかせになる")
+	make._on_pick(false, String(make.slots[1]["picks"][0]))
+	make._on_start()
+	check(main.phase != "town" and make.msg.text.contains("技能"), "技能を選び終えていないと、始められない")
+	make._on_auto_picks()
 	make._select(3)
 	make._on_use(false)
 	check(not make.slots[3]["use"], "3番目以降の枠は空にできる")
@@ -509,11 +610,12 @@ func _test_game() -> void:
 	var town: TownScreen = main.screen
 	# 店
 	var bank0: int = main.gs.bank_silver
+	var ls_cost: int = main.gs.buy_price("longsword")
 	town._go("smith")
 	town.sel_id = "longsword"
 	town._fill_shop()
 	town._buy(0)
-	check(main.gs.party[0].equip["weapon"] == "longsword" and main.gs.bank_silver == bank0 - 220, "鍛冶屋で買って装備する")
+	check(main.gs.party[0].equip["weapon"] == "longsword" and main.gs.bank_silver == bank0 - ls_cost, "鍛冶屋で買って装備する")
 	town._go("general")
 	town.sel_id = "potion"
 	town._fill_shop()
@@ -567,6 +669,23 @@ func _test_game() -> void:
 	inv._refresh()
 	inv._assign(3)
 	check(main.gs.party[2].slots[3] == inv.sel_id, "スキルをショートカットに割り当てられる")
+	# 技能・特技: 能力値上昇を選ぶ
+	var fc: Character = main.gs.party[0]
+	fc.gain_xp(int(Balance.XP_LEVELS[3]) - fc.xp)
+	inv.member = 0
+	inv._set_tab("talent")
+	check(inv.ids.size() > 0 and String(inv.ids[0]) == "pend:asi4", "技能・特技の一覧の先頭に、選んでいない能力値上昇が出る")
+	inv._on_pick(0)
+	check(inv.pick_key == "asi4" and inv.ids.has("take:feat:tough") and inv.ids.has("take:abil:str"), "選ぶと、能力値と特技の候補が出る")
+	inv._on_pick(inv.ids.find("half"))
+	inv._on_pick(inv.ids.find("half1:con"))
+	var con0 := int(fc.stats["con"])
+	inv._on_pick(inv.ids.find("take:abil:con+wis"))
+	inv._take_sel()
+	check(int(fc.stats["con"]) == con0 + 1 and fc.pending().is_empty() and inv.pick_key == "", "画面から +1 を二つ選べる (%s)" % inv.msg.text)
+	check(inv.ids.has("skill:athletics"), "技能の一覧が出る")
+	inv._on_pick(inv.ids.find("skill:athletics"))
+	check(inv.detail.text.contains("運動"), "技能の説明が出る")
 	inv._set_tab("equip")
 	inv.member = 0
 	main.gs.add_item("breastplate")
@@ -652,10 +771,14 @@ func _test_game() -> void:
 	# 帰還と査定
 	main.bag_silver = 1000
 	var bank1: int = main.gs.bank_silver
+	var perf := 0
+	for c in main.gs.party:
+		if c.hp > 0.0:
+			perf = maxi(perf, int(c.skill_fx("performance")))
 	main.leader().position = main.current.map.center_of(main.current.up_cell)
 	main.interact()
 	await _step(3)
-	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 and main.gs.day == 1, "街へ戻ると3割が税になる (+%d)" % (main.gs.bank_silver - bank1))
+	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 + perf and main.gs.day == 1, "街へ戻ると3割が税になり、〈芸能〉で稼ぐ (+%d、うち芸 %d)" % [main.gs.bank_silver - bank1, perf])
 	# 全滅
 	main._on_dive()
 	await _step(3)

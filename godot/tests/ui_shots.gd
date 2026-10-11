@@ -1,6 +1,6 @@
 extends SceneTree
 ## 画面の確認用:  xvfb-run godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- 出力フォルダ
-## タイトル、キャラ作成、街と各店、持ち物、迷宮の戦闘を撮る。
+## タイトル、キャラ作成、街と各店、持ち物(技能・特技を含む)、迷宮の戦闘を撮る。
 
 var out := "/tmp"
 var main: Node
@@ -63,6 +63,19 @@ func _run() -> void:
 	main.inventory.sel_id = String(main.gs.party[2].skills[0])
 	main.inventory._refresh()
 	await shot("skills")
+	# 技能・特技(盗賊の熟達と、Lv4 の能力値上昇)
+	var rg: Character = main.gs.party[3]
+	rg.gain_xp(int(Balance.XP_LEVELS[3]) - rg.xp)
+	main.inventory.member = 3
+	main.inventory._set_tab("talent")
+	main.inventory.sel_id = "skill:stealth"
+	main.inventory._refresh()
+	await shot("talent")
+	main.inventory._on_pick(main.inventory.ids.find("pend:asi4"))
+	main.inventory._on_pick(main.inventory.ids.find("take:feat:lucky"))
+	await shot("talent_pick")
+	main.inventory._set_tab("status")
+	await shot("status")
 	main.close_inventory()
 	main.gs.party[1].hp = float(main.gs.party[1].max_hp())
 	main._on_dive()

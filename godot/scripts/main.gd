@@ -559,15 +559,32 @@ func party_passive() -> int:
 	var best := 0
 	for h in heroes:
 		if not h.down:
-			best = maxi(best, Balance.passive_perception(h.ch.level) + int(h.ch.class_data()["search"]) / 2)
+			best = maxi(best, h.ch.passive_perception())
 	return best
 
 func party_best(kind: String) -> int:
-	var best := -99
+	var c := party_best_char(kind)
+	return -99 if c == null else (c.search_bonus() if kind == "search" else c.lock_bonus())
+
+## その判定をいちばん得意な仲間(倒れていない人)
+func party_best_char(kind: String) -> Character:
+	var best: Character = null
+	var bv := -999
 	for h in heroes:
 		if h.down:
 			continue
-		best = maxi(best, h.ch.search_bonus() if kind == "search" else h.ch.lock_bonus())
+		var v: int = h.ch.search_bonus() if kind == "search" else h.ch.lock_bonus()
+		if v > bv:
+			bv = v
+			best = h.ch
+	return best
+
+## 倒れていない仲間のうち、その技能の効き目がいちばん大きい値
+func party_skill_fx(id: String) -> float:
+	var best := 0.0
+	for h in heroes:
+		if not h.down:
+			best = maxf(best, h.ch.skill_fx(id))
 	return best
 
 func _passive_detect(pc: Vector2i) -> void:
@@ -622,8 +639,9 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 	var kind := String(t["kind"])
 	if kind == "save":
 		var sv: Dictionary = t["save"]
-		var bonus := victim.ch.level / 2 + victim.ch.mod("dex" if String(sv["ability"]) == "敏捷力" else "con")
-		var roll := Dice.d20()
+		var abil := String(Talents.SAVE_ABIL_JP.get(String(sv["ability"]), "dex"))
+		var bonus := victim.ch.save_bonus(abil)
+		var roll := victim.ch.roll_d20()
 		var ok := roll + bonus >= int(sv["dc"])
 		log_msg("%sセーヴ %d%+d=%d / 難易度%d → %s" % [sv["ability"], roll, bonus, roll + bonus, int(sv["dc"]), "成功" if ok else "失敗"],
 			Color("9be29b") if ok else Color("ff8a7a"))
@@ -641,7 +659,7 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 		log_msg("音が響いた。近くの魔物がこちらへ向かう", Color("ffb070"))
 	if t.has("damage") and scale > 0.0:
 		var n := Dice.roll(String(t["damage"]))
-		var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale)
+		var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * (1.0 - victim.ch.skill_fx("survival")))
 		log_msg("%sダメージ %d" % [t.get("damage_type", ""), int(round(dealt))], Color("ff6a5a"))
 		victim.damage(dealt, victim.position + Vector2(0, 1), true)
 
@@ -730,9 +748,10 @@ func _open_chest(c: Dictionary) -> void:
 	c["taken"] = true
 	current.queue_redraw()
 	var items: Array = c["items"]
-	bag_silver += int(c["silver"])
-	if int(c["silver"]) > 0:
-		log_msg("燐晶を回収: 約%d銀貨相当(税は持ち帰ったときに引かれる)" % int(c["silver"]), Color("f1d98a"))
+	var silver := int(round(int(c["silver"]) * (1.0 + party_skill_fx("sleight"))))
+	bag_silver += silver
+	if silver > 0:
+		log_msg("燐晶を回収: 約%d銀貨相当(税は持ち帰ったときに引かれる)" % silver, Color("f1d98a"))
 	for i in range(1, items.size()):
 		var s := String(items[i])
 		if s.contains("治療薬"):
@@ -768,16 +787,18 @@ func _pick_lock(d: Dictionary) -> void:
 	if _pick_cd > 0.0:
 		return
 	_pick_cd = 0.6
-	var roll := Dice.d20()
-	var bonus := party_best("lock")
+	var who := party_best_char("lock")
+	var roll := who.roll_d20()
+	var bonus := who.lock_bonus()
 	var ok := roll == 20 or roll + bonus >= int(d["lock_dc"])
 	log_msg("解錠 %d%+d / 難易度%d → %s" % [roll, bonus, int(d["lock_dc"]), "成功" if ok else "失敗"], Color("9be29b") if ok else Color("ff8a7a"))
 	if ok:
 		d["unlocked"] = true
 
 func _disarm(t: Dictionary) -> void:
-	var roll := Dice.d20()
-	var bonus := party_best("lock")
+	var who := party_best_char("lock")
+	var roll := who.roll_d20()
+	var bonus := who.lock_bonus()
 	var dc := int(t["disarm_dc"])
 	if roll == 20 or roll + bonus >= dc:
 		t["st"] = "disarmed"
@@ -796,14 +817,15 @@ func search() -> void:
 	var m := current.map
 	var lp := leader().position
 	var pc := m.cell_of(lp)
-	var bonus := party_best("search")
+	var who := party_best_char("search")
+	var bonus := who.search_bonus()
 	var found := false
 	for t in current.traps:
 		if t["st"] != "hidden":
 			continue
 		var tc := Vector2i(int(t["x"]), int(t["y"]))
 		if lp.distance_to(m.center_of(tc)) <= 4.5 * Balance.CELL and m.los(pc.x, pc.y, tc.x, tc.y):
-			if Dice.d20() + bonus >= int(t["detect_dc"]):
+			if who.roll_d20() + bonus >= int(t["detect_dc"]):
 				_reveal_trap(t)
 				found = true
 	for d in m.doors:
@@ -811,7 +833,7 @@ func search() -> void:
 			continue
 		var dc := Vector2i(d["x"], d["y"])
 		if lp.distance_to(m.center_of(dc)) <= 4.5 * Balance.CELL and m.los(pc.x, pc.y, dc.x, dc.y):
-			if Dice.d20() + bonus >= int(d["find_dc"]):
+			if who.roll_d20() + bonus >= int(d["find_dc"]):
 				_reveal_door(d)
 				found = true
 	if not found:
@@ -912,8 +934,11 @@ func _on_enemy_killed(en: Enemy) -> void:
 		return
 	var share := gs.party_xp_share(en.xp, alive.size())
 	for h in alive:
-		if h.ch.gain_xp(share) > 0:
+		var before: int = h.ch.pending().size()
+		if h.ch.gain_xp(int(round(share * (1.0 + h.ch.skill_fx("history"))))) > 0:
 			log_msg("%sのレベルが上がった! Lv%d" % [h.ch.name, h.ch.level], Color("9ad8ff"))
+			if h.ch.pending().size() > before:
+				log_msg("%sは、能力値上昇か特技を選べる(Tab →「技能・特技」)" % h.ch.name, Color("ffe9a8"))
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
 
 func return_to_surface() -> void:
@@ -935,4 +960,14 @@ func return_to_surface() -> void:
 			downed.append(c.name)
 	if not downed.is_empty():
 		lines.append("倒れた仲間: %s(神殿で蘇らせよう)" % "、".join(downed))
+	# 〈芸能〉: 宿で芸を見せて稼ぐ(倒れていない仲間のうち、いちばん高い人)
+	var perf := 0.0
+	var performer := ""
+	for c in gs.party:
+		if c.hp > 0.0 and c.skill_fx("performance") > perf:
+			perf = c.skill_fx("performance")
+			performer = c.name
+	if perf > 0.0:
+		gs.bank_silver += int(perf)
+		lines.append("%sが宿で芸を見せた  +%d銀貨(〈芸能〉)" % [performer, int(perf)])
 	go_town(lines)

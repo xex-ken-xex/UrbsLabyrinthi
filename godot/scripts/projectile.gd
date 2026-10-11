@@ -13,10 +13,12 @@ var pierce := false
 var slow := 0.0
 var stun := 0.0
 var src: Hero = null
+var src_type := ""             # 魔物の撃った弾の、魔物の種別(〈動物使い〉〈看破〉が見る)
 var hit_set := {}
 
-func setup_enemy(fl: FloorInstance, pos: Vector2, d: Vector2, damage: float, col: Color) -> void:
+func setup_enemy(fl: FloorInstance, pos: Vector2, d: Vector2, damage: float, col: Color, mon_type: String = "") -> void:
 	game_floor = fl
+	src_type = mon_type
 	position = pos
 	dir = d
 	dmg = damage
@@ -66,7 +68,7 @@ func _physics_process(delta: float) -> void:
 			if h.down:
 				continue
 			if position.distance_to(h.position) < h.radius + 4.0:
-				h.damage(dmg, position - dir * 10.0)
+				h.damage(dmg, position - dir * 10.0, false, src_type)
 				queue_free()
 				return
 	queue_redraw()
