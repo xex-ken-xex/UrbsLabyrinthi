@@ -110,6 +110,30 @@ func _test_talents() -> void:
 	check(not Talents.picks_valid("fighter", ["arcana", "religion", "history", "medicine"]), "クラスの一覧から足りない選び方は通らない")
 	check(not Talents.picks_valid("fighter", ["athletics", "athletics", "perception", "survival"]), "同じ技能の重複は通らない")
 	check(Talents.picks_valid("fighter", ["athletics", "perception", "arcana", "stealth"]), "クラスから2つ + 自由に2つは通る")
+	# 生まれ表: どの前職でも、どのクラスと種族でも、正しい選び方になり、前職の技能が入る(重なった分は別の技能)
+	var bbad := 0
+	var cover := {}
+	for j in Birth.JOBS.size():
+		for p in Birth.JOBS[j]["skills"]:
+			cover[p] = true
+		for cls in Talents.CLASS_PROF:
+			for race in ["human", "elf", "dwarf", "halfling"]:
+				var b := {"origin": 0, "job": j, "turn": 0, "reason": 0}
+				var pk := Birth.apply_to_picks(b, cls, race, Talents.default_picks(cls, race))
+				var fixed: Array = Talents.RACE_PROF.get(race, [])
+				var ok := Talents.picks_valid(cls, pk)
+				for p in Birth.job_skills(b):
+					if not pk.has(p) and not fixed.has(p):
+						ok = false
+				if not ok:
+					bbad += 1
+	check(bbad == 0, "生まれ表の前職の技能が、12前職×6クラス×4種族で正しく入る (%d件の誤り)" % bbad)
+	check(cover.size() == Talents.SKILLS.size(), "18の技能が、どれもいずれかの前職に入っている (%d)" % cover.size())
+	var rb := Birth.roll()
+	check(Birth.valid(rb) and Birth.text(rb).begins_with(String(Birth.ORIGINS[int(rb["origin"])]["text"])), "生い立ちをふると、一文になる")
+	var bc := Character.create("b", "human", "fighter", Jobs.auto_stats("fighter"), "M", [], rb)
+	check(Character.from_dict(bc.to_dict()).birth == rb, "生い立ちはセーブに残る")
+	check(Character.from_dict({"name": "古い"}).birth.is_empty() and Birth.sanitize({"origin": 99}).is_empty(), "古いセーブや壊れた生い立ちは空になる")
 	var elf := Character.create("e", "elf", "wizard", Jobs.auto_stats("wizard"))
 	check(elf.proficient("perception") and not elf.profs.has("perception"), "エルフは〈知覚〉に習熟(選ぶ数に入らない)")
 	var fi := Character.create("f", "human", "fighter", Jobs.auto_stats("fighter"), "M", ["athletics", "perception", "arcana", "stealth"])

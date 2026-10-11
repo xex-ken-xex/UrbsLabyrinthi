@@ -398,6 +398,8 @@ func _status_text(c: Character) -> String:
 	t += "特技: %s" % ("、".join(fs) if not fs.is_empty() else "なし")
 	if not c.pending().is_empty():
 		t += "\n[color=#e8dcb0]★ 選んでいない能力値上昇・特技・熟達がある(「技能・特技」で選ぶ)[/color]"
+	if not c.birth.is_empty():
+		t += "\n\n[color=#8a90a0]生い立ち: %s[/color]" % Birth.text(c.birth)
 	return t
 
 # ---------- 操作 ----------
