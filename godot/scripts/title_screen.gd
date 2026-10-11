@@ -5,6 +5,18 @@ extends Control
 signal new_game
 signal continue_game
 signal show_credits
+signal key_config
+
+var _focus: Button
+var _note: Label
+
+func set_note(text: String) -> void:
+	if _note != null:
+		_note.text = text
+
+func focus_default() -> void:
+	if _focus != null:
+		_focus.grab_focus()
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -39,10 +51,15 @@ func _ready() -> void:
 	var b2 := UIKit.button("つづきから", func(): continue_game.emit(), 260)
 	b2.disabled = not GameState.has_save()
 	var b3 := UIKit.button("クレジット", func(): show_credits.emit(), 260)
+	var b5 := UIKit.button("操作の設定", func(): key_config.emit(), 260)
 	var b4 := UIKit.button("終了", func(): get_tree().quit(), 260)
-	for b in [b1, b2, b3, b4]:
+	for b in [b1, b2, b5, b3, b4]:
 		v.add_child(b)
-	(b2 if not b2.disabled else b1).call_deferred("grab_focus")
+	_focus = b2 if not b2.disabled else b1
+	_focus.call_deferred("grab_focus")
 	var foot := UIKit.label("燐晶を持ち帰れ。通路は毎夜、変わる。", 14, UIKit.DIM)
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(foot)
+	_note = UIKit.label("", 14, Color("a8c8e8"))
+	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_note)

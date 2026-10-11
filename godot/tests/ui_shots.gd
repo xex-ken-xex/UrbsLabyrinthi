@@ -106,5 +106,13 @@ func _run() -> void:
 		lead.cmd = {"move": (best.position - lead.position).normalized() if is_instance_valid(best) and not best.dead else Vector2.ZERO, "guard": false, "dodge": false}
 		await physics_frame
 	await shot("fight2")
+	main.open_inventory()
+	await shot("dungeon_menu")
+	main.close_inventory()
+	main.open_key_config()
+	await shot("keyconfig")
+	main.key_config._on_slot("search", "pad")
+	await shot("keyconfig2")
+	main.close_key_config()
 	print("saved")
 	quit()

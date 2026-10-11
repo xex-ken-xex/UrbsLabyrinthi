@@ -44,7 +44,7 @@ func _ready() -> void:
 	margin.add_child(root)
 	var head := UIKit.hbox(16)
 	head.add_child(UIKit.label("持ち物", 28, UIKit.GOLD))
-	head.add_child(UIKit.label("Tab / Esc で閉じる", 14, UIKit.DIM))
+	head.add_child(UIKit.label("%s で閉じる" % Controls.hint("inventory"), 14, UIKit.DIM))
 	root.add_child(head)
 	member_box = UIKit.hbox(8)
 	root.add_child(member_box)
@@ -56,6 +56,8 @@ func _ready() -> void:
 		var b := UIKit.button(t[1], _set_tab.bind(t[0]), 150)
 		tab_btns[t[0]] = b
 		tabs.add_child(b)
+		if t[0] == "item":
+			b.call_deferred("grab_focus")
 	row.add_child(tabs)
 	var mid := UIKit.vbox(6)
 	mid.custom_minimum_size = Vector2(380, 0)
@@ -81,14 +83,19 @@ func _ready() -> void:
 	msg = UIKit.label("", 15, UIKit.GOOD)
 	root.add_child(msg)
 
-func _unhandled_key_input(e: InputEvent) -> void:
-	if not visible:
+func _unhandled_input(e: InputEvent) -> void:
+	if not visible or e.is_echo():
 		return
-	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_TAB or e.keycode == KEY_ESCAPE):
+	if e.is_action_pressed("inventory") or e.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		closed.emit()
-	elif e is InputEventKey and e.pressed and not e.echo and tab == "skill" and e.keycode >= KEY_1 and e.keycode <= KEY_4:
-		_assign(e.keycode - KEY_1)
+		return
+	if tab == "skill":
+		for i in 4:
+			if e.is_action_pressed("skill%d" % (i + 1)):
+				get_viewport().set_input_as_handled()
+				_assign(i)
+				return
 
 func _ch() -> Character:
 	return gs.party[member]

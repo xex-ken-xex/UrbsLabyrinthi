@@ -18,6 +18,16 @@ Release の `UrbsLabyrinthi-setup.exe` を実行すると、`%LOCALAPPDATA%\Prog
 新しい版は、上から入れ直せばよい。アンインストールしても、セーブ(`%APPDATA%\Godot\app_userdata\Urbs Labyrinthi\`)と、`assets\` に自分で置いた画像は残る。
 作り方は `installer/UrbsLabyrinthi.nsi`。`tools/package-release.sh` が、`makensis`(Ubuntu は `apt install nsis`)があればいっしょに作る。
 
+## 起動時の自動更新(.pck だけ)
+
+書き出したゲームは、起動するたびに GitHub の最新の Release の `latest.json` を見て、ゲームの中身(`.pck`)が違えば受け取り、実行ファイルの隣の `UrbsLabyrinthi.pck` を入れ替えて起動し直す(`scripts/updater.gd`)。
+実行ファイル(エンジン)は入れ替えない。エンジンの版が変わったときは、インストーラーか ZIP で入れ直すよう、タイトルに出る。
+
+- 受け取りは、いったん `UrbsLabyrinthi.pck.new` に置き、SHA-256 を確かめてから入れ替える。Windows では、ゲームが終わるのを PowerShell が待って入れ替え、起動し直す
+- 通信できないとき、フォルダに書き込めないときは、そのまま今の版で起動する(タイトルの下に理由が出る)
+- 確かめている間に Esc(コントローラーは B)で飛ばせる。`-- --no-update` を付けて起動すると、確かめない
+- Release には `UrbsLabyrinthi-windows.pck`、`UrbsLabyrinthi-linux.pck`、`latest.json` を `tools/package-release.sh` が作って載せる
+
 ## セットアップ(必要なライブラリを入れる)
 
 [`SetupScript/`](SetupScript/README.md) に、Ubuntu 用(`setup-ubuntu.sh`)と Windows 用(`setup-windows.bat`)がある。

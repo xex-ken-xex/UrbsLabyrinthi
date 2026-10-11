@@ -7,6 +7,7 @@ signal dive
 signal open_inventory
 signal to_title
 signal arena_requested
+signal key_config
 
 const LOCATIONS := {
 	"hub": {"name": "縁環区・坑口広場", "art": "town"},
@@ -132,10 +133,19 @@ func _glass(p: PanelContainer, a: float = 0.62) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", UIKit.box(Color(0.04, 0.05, 0.08, a), Color(0.66, 0.47, 0.29, 0.7)))
 	return p
 
-func _unhandled_key_input(e: InputEvent) -> void:
-	if visible and e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_TAB:
+func _unhandled_input(e: InputEvent) -> void:
+	if visible and not e.is_echo() and e.is_action_pressed("inventory"):
 		get_viewport().set_input_as_handled()
 		open_inventory.emit()
+
+## コントローラーで操れるよう、いまの場所のボタンに焦点を置く
+func focus_default() -> void:
+	if menu_box == null:
+		return
+	for b in menu_box.get_children():
+		if b is Button and not (b as Button).is_queued_for_deletion() and b.has_meta("here"):
+			(b as Button).grab_focus()
+			return
 
 func _say(text: String, color: Color = UIKit.GOLD) -> void:
 	if msg == null:
@@ -171,14 +181,23 @@ func _refresh_menu() -> void:
 		var b := UIKit.button(it[1], _go.bind(id), 0)
 		if id == location:
 			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
+			b.set_meta("here", true)
 		menu_box.add_child(b)
 	menu_box.add_child(Control.new())
-	menu_box.add_child(UIKit.button("持ち物・装備 (Tab)", func(): open_inventory.emit()))
+	menu_box.add_child(UIKit.button("持ち物・装備 (%s)" % Controls.hint("inventory"), func(): open_inventory.emit()))
 	var dive_btn := UIKit.button("迷宮へ潜る", func(): dive.emit())
 	dive_btn.add_theme_stylebox_override("normal", UIKit.box(Color(0.1, 0.22, 0.3, 1.0), UIKit.ACCENT, 2))
 	menu_box.add_child(dive_btn)
 	menu_box.add_child(UIKit.button("闘技場(調整用)", func(): arena_requested.emit()))
+	menu_box.add_child(UIKit.button("操作の設定", func(): key_config.emit()))
 	menu_box.add_child(UIKit.button("タイトルへ", func(): to_title.emit()))
+	# 作り直したボタンは焦点を失うので、焦点が無ければ、いまの場所に置く
+	call_deferred("_refocus")
+
+func _refocus() -> void:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion():
+		focus_default()
 
 func _go(loc: String) -> void:
 	location = loc

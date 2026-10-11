@@ -32,7 +32,7 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size_v), Color(0, 0, 0, 0.92))
 		draw_multiline_string(UI.font(), Vector2(size_v.x * 0.15, 120.0), CREDITS, HORIZONTAL_ALIGNMENT_LEFT, size_v.x * 0.7, 16, -1, Color(0.9, 0.92, 0.95))
 		return
-	if game == null or game.current == null or not ["dungeon", "menu", "overlay"].has(game.phase):
+	if game == null or game.current == null or not ["dungeon", "overlay"].has(game.phase) or game.key_config != null:
 		return
 	var fl: FloorInstance = game.current
 	var heroes: Array = game.heroes
@@ -80,8 +80,12 @@ func _draw() -> void:
 		_draw_minimap(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
-		var lines := ["移動: WASD/矢印   触れれば自動で攻撃(押し込むと有利)   構え: Space   転がり: Shift   スキル: 1〜4   仲間の切替: Q",
-			"調べる: E   探る: F   持ち物: Tab   治療薬: R   F1: クレジット",
+		var H := func(id: String) -> String: return Controls.hint(id)
+		var lines := ["移動: %s%s%s%s   触れれば自動で攻撃(押し込むと有利)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
+				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("guard"), H.call("dodge"),
+				H.call("skill1"), H.call("skill4"), H.call("switch")],
+			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
+				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal")],
 			"敵のHPを削るほど押し込める。こちらのHPが減ると押される。"]
 		for i in lines.size():
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))

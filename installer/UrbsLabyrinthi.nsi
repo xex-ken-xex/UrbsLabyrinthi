@@ -87,6 +87,7 @@ SectionEnd
 Section "Uninstall"
   Delete "$INSTDIR\UrbsLabyrinthi.exe"
   Delete "$INSTDIR\UrbsLabyrinthi.pck"
+  Delete "$INSTDIR\UrbsLabyrinthi.pck.new"
   Delete "$INSTDIR\UrbsLabyrinthi.console.exe"
   Delete "$INSTDIR\run-with-log.bat"
   Delete "$INSTDIR\README.md"
