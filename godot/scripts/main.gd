@@ -910,6 +910,9 @@ func close_inventory() -> void:
 	inventory.queue_free()
 	inventory = null
 	_menu_cd = 0.3
+	if phase == "town" and screen is TownScreen:
+		(screen as TownScreen).refresh_top()
+		screen.call_deferred("focus_default")   # 持ち物を閉じたら、コントローラーの焦点を街へ戻す
 	if _prev_phase == "dungeon":
 		phase = "dungeon"
 		for h in heroes:

@@ -134,9 +134,28 @@ func _glass(p: PanelContainer, a: float = 0.62) -> PanelContainer:
 	return p
 
 func _unhandled_input(e: InputEvent) -> void:
-	if visible and not e.is_echo() and e.is_action_pressed("inventory"):
+	if not visible:
+		return
+	if not e.is_echo() and e.is_action_pressed("inventory"):
 		get_viewport().set_input_as_handled()
 		open_inventory.emit()
+		return
+	# コントローラー: 左の行き先と、右の中身のあいだを行き来する
+	var f := get_viewport().gui_get_focus_owner()
+	if f == null:
+		if e.is_action_pressed("ui_up") or e.is_action_pressed("ui_down") or e.is_action_pressed("ui_left") or e.is_action_pressed("ui_right") or e.is_action_pressed("ui_accept"):
+			get_viewport().set_input_as_handled()
+			focus_default()
+		return
+	if menu_box.is_ancestor_of(f) and e.is_action_pressed("ui_right"):
+		if _focus_content():
+			get_viewport().set_input_as_handled()
+	elif content.is_ancestor_of(f) and (e.is_action_pressed("ui_left") or e.is_action_pressed("ui_cancel")):
+		get_viewport().set_input_as_handled()
+		if f is Button and shop_actions != null and is_instance_valid(shop_actions) and shop_actions.is_ancestor_of(f):
+			shop_list.grab_focus()   # 品物の操作から、品物の一覧へ戻る
+		else:
+			focus_default()
 
 ## コントローラーで操れるよう、いまの場所のボタンに焦点を置く
 func focus_default() -> void:
@@ -146,6 +165,48 @@ func focus_default() -> void:
 		if b is Button and not (b as Button).is_queued_for_deletion() and b.has_meta("here"):
 			(b as Button).grab_focus()
 			return
+
+## 右の中身で、最初に操れるものに焦点を置く。無ければ false
+func _focus_content() -> bool:
+	if content == null:
+		return false
+	var c := _first_focusable(content)
+	if c == null:
+		return false
+	c.grab_focus()
+	return true
+
+func _first_focusable(n: Node) -> Control:
+	var all: Array = []
+	_collect_focusable(n, all)
+	for c in all:
+		if c.has_meta("pref"):
+			return c
+	return all[0] if not all.is_empty() else null
+
+func _collect_focusable(n: Node, out: Array) -> void:
+	for ch in n.get_children():
+		if ch.is_queued_for_deletion() or not (ch is Control) or not (ch as Control).visible:
+			continue
+		if _can_focus(ch):
+			out.append(ch)
+		_collect_focusable(ch, out)
+
+func _can_focus(c: Control) -> bool:
+	if c.focus_mode == Control.FOCUS_NONE or not c.visible:
+		return false
+	if c is BaseButton and (c as BaseButton).disabled:
+		return false
+	if c is ItemList and (c as ItemList).item_count == 0:
+		return false
+	return true
+
+## 中身を作り直したあと、焦点が消えていれば中身の最初へ置く
+func _refocus_content() -> void:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion():
+		if not _focus_content():
+			focus_default()
 
 func _say(text: String, color: Color = UIKit.GOLD) -> void:
 	if msg == null:
@@ -206,6 +267,12 @@ func _go(loc: String) -> void:
 	_walk_log.clear()
 	_say("")
 	_refresh_all()
+	# 行き先を選んだら、そのまま中身を操れるようにする(広場のように中身が無ければ、左に残る)
+	call_deferred("_enter_content")
+
+func _enter_content() -> void:
+	if not _focus_content():
+		focus_default()
 
 func _build_content() -> void:
 	UIKit.clear(content)
@@ -247,6 +314,7 @@ func _content_shop(sid: String) -> void:
 		if shop_mode == m[0]:
 			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
 		mb.add_child(b)
+	mb.set_meta("modes", true)
 	content.add_child(mb)
 	var row := UIKit.hbox(10)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -255,6 +323,9 @@ func _content_shop(sid: String) -> void:
 	shop_list.custom_minimum_size = Vector2(380, 0)
 	shop_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	shop_list.item_selected.connect(_on_shop_pick)
+	shop_list.item_activated.connect(_on_shop_activate)
+	shop_list.focus_entered.connect(_on_list_focus)
+	shop_list.set_meta("pref", true)
 	row.add_child(shop_list)
 	var rv := UIKit.vbox(8)
 	rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -272,6 +343,20 @@ func _set_mode(m: String) -> void:
 	shop_mode = m
 	sel_id = ""
 	_build_content()
+	call_deferred("_refocus_content")
+
+## 一覧に焦点が来たら、選んでいなければ先頭を選ぶ(コントローラーでも説明が出るように)
+func _on_list_focus() -> void:
+	if shop_list.item_count > 0 and not shop_list.is_anything_selected() and not shop_list.is_item_disabled(0):
+		shop_list.select(0)
+		_on_shop_pick(0)
+
+## 一覧で決定したら、その品物の操作(購入する など)へ移る
+func _on_shop_activate(i: int) -> void:
+	_on_shop_pick(i)
+	var b := _first_focusable(shop_actions)
+	if b != null:
+		b.grab_focus()
 
 func _fill_shop() -> void:
 	shop_list.clear()
@@ -354,6 +439,7 @@ func _buy(member: int) -> void:
 	_say("%sを買った。%s" % [ItemDB.item_name(sel_id), extra], UIKit.GOOD)
 	_refresh_top()
 	_fill_shop()
+	call_deferred("_refocus_shop")
 
 func _sell() -> void:
 	var name := ItemDB.item_name(sel_id)
@@ -366,6 +452,20 @@ func _sell() -> void:
 		sel_id = ""
 	_refresh_top()
 	_fill_shop()
+	call_deferred("_refocus_shop")
+
+## 買う・売るのボタンは作り直されるので、焦点を同じ操作か一覧へ戻す
+func _refocus_shop() -> void:
+	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if f != null and is_instance_valid(f) and not f.is_queued_for_deletion():
+		return
+	var b := _first_focusable(shop_actions)
+	if b != null:
+		b.grab_focus()
+	elif shop_list.item_count > 0:
+		shop_list.grab_focus()
+	else:
+		_refocus_content()
 
 # ---------- 神殿 ----------
 
@@ -403,6 +503,7 @@ func _revive(c: Character) -> void:
 	_say("%sは目を開けた。「……夜が、明けたのですね。」" % c.name, UIKit.GOOD)
 	_refresh_top()
 	_build_content()
+	call_deferred("_refocus_content")
 
 func _bless() -> void:
 	if gs.bank_silver < 100 or gs.blessed:
@@ -412,6 +513,7 @@ func _bless() -> void:
 	_say("神官が、燐晶の粉を額に置いた。「灯が、あなたと共に在りますように。」", UIKit.GOOD)
 	_refresh_top()
 	_build_content()
+	call_deferred("_refocus_content")
 
 func _pray() -> void:
 	_say("膝をつき、目を閉じた。聖堂の奥で、誰も座っていない十二番目の座が、静かに光っている。", UIKit.TEXT)
@@ -444,6 +546,7 @@ func _rest(cost: int) -> void:
 	_say("湯を使い、寝床で眠った。体が軽い。", UIKit.GOOD)
 	_refresh_top()
 	_build_content()
+	call_deferred("_refocus_content")
 
 func _rumor() -> void:
 	_say("酒場の隅で聞こえた話だ。\n" + String(RUMORS.pick_random()), UIKit.TEXT)
