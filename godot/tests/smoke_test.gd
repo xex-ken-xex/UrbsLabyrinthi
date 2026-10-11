@@ -18,6 +18,8 @@ func _initialize() -> void:
 func _run() -> void:
 	await _test_dice()
 	_test_data()
+	_test_controls()
+	_test_updater()
 	_test_talents()
 	_test_state()
 	await _test_assets()
@@ -91,6 +93,55 @@ func _test_data() -> void:
 	check(not ItemDB.can_equip("plate", "wizard") and not ItemDB.can_equip("greataxe", "cleric"), "クラスの制限が効く")
 
 # ---------- 技能、セーヴ、能力値上昇、特技 ----------
+
+func _test_controls() -> void:
+	Controls.setup()
+	var miss := 0
+	for a in Controls.ACTIONS:
+		if InputMap.action_get_events(a[0]).is_empty():
+			miss += 1
+	check(miss == 0, "すべての操作に、キーかボタンが割り当たっている")
+	check(Controls.hint("search") == "F" and Controls.hint("inventory") == "Tab", "画面の説明に出すキー (%s, %s)" % [Controls.hint("search"), Controls.hint("inventory")])
+	var pad := InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	check(InputMap.event_is_action(pad, "interact"), "コントローラーの A で調べる")
+	var st := InputEventJoypadMotion.new()
+	st.axis = JOY_AXIS_LEFT_X
+	st.axis_value = -1.0
+	check(InputMap.event_is_action(st, "move_left"), "左スティックで移動")
+	var esc := InputEventKey.new()
+	esc.physical_keycode = KEY_ESCAPE
+	check(InputMap.event_is_action(esc, "inventory"), "Esc でも持ち物を開閉する")
+	# 割り当てを変えて、保存して、読み直す
+	var rt := InputEventJoypadMotion.new()
+	rt.axis = JOY_AXIS_TRIGGER_RIGHT
+	rt.axis_value = 0.9
+	var d := Controls.from_event(rt)
+	check(d == {"t": "axis", "a": JOY_AXIS_TRIGGER_RIGHT, "v": 1} and Controls.label(d) == "RT", "RT を押すと、軸の入力として記録する")
+	var g := InputEventKey.new()
+	g.physical_keycode = KEY_G
+	g.pressed = true
+	Controls.set_bind("search", "k0", Controls.from_event(g))
+	check(Controls.conflicts("search", Controls.binds["search"]["keys"][0]).is_empty(), "G はほかと重ならない")
+	Controls.binds = {}
+	Controls.setup()
+	var gk := InputEventKey.new()
+	gk.physical_keycode = KEY_G
+	check(InputMap.event_is_action(gk, "search") and Controls.hint("search") == "G", "変えた割り当ては保存され、次の起動でも効く")
+	check(not Controls.conflicts("skill1", {"t": "key", "c": KEY_E}).is_empty(), "ほかの操作と同じキーは、重なりとして分かる")
+	check(Controls.conflicts("confirm", {"t": "btn", "b": JOY_BUTTON_A}).is_empty(), "決定と調べるは同じ A でよい")
+	Controls.reset()
+	check(Controls.hint("search") == "F", "初期設定に戻せる")
+
+func _test_updater() -> void:
+	check(not Updater.should_check(), "エディタやテストでは、更新を確かめない")
+	var os_name := OS.get_name()
+	var good := {"tag": "v9", "godot": "4.7.2", "pck": {os_name: {"url": "https://example.com/a.pck", "sha256": "ABC", "size": 3}}}
+	var p := Updater.parse_latest(good)
+	check(p.get("sha", "") == "abc" and p.get("tag", "") == "v9" and p.get("url", "") == "https://example.com/a.pck", "latest.json から、この OS の .pck を読む")
+	check(Updater.parse_latest({"tag": "v9"}).is_empty() and Updater.parse_latest("x").is_empty() and Updater.parse_latest({"pck": {"Other": {}}}).is_empty(), "壊れた latest.json は使わない")
+	var ps := Updater.windows_script(1234, "C:\\Users\\ケン's\\a.pck.new", "C:\\Users\\ケン's\\a.pck", "C:\\x\\a.exe", PackedStringArray(["--no-update"]))
+	check(ps.contains("Wait-Process -Id 1234") and ps.contains("'C:\\Users\\ケン''s\\a.pck.new'") and ps.contains("-ArgumentList '--','--no-update'"), "Windows の入れ替えの命令(単引用符を重ねる)")
 
 func _test_talents() -> void:
 	print("[talents]")

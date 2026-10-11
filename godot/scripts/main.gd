@@ -13,6 +13,7 @@ var ui_layer: CanvasLayer
 var hud_layer: CanvasLayer
 var screen: Control                # 開いている画面(タイトル、作成、街)
 var inventory: InventoryScreen
+var key_config: KeyConfig
 var current: FloorInstance
 var floors := {}                   # 層の番号 → FloorInstance(この日の控え)
 var bag_silver := 0
@@ -48,7 +49,16 @@ func _ready() -> void:
 	hud = Hud.new()
 	hud.game = self
 	hud_layer.add_child(hud)
-	show_title()
+	_trace("起動: %s" % " ".join(OS.get_cmdline_args()))
+	if Updater.should_check() and not OS.get_cmdline_user_args().has("--autotest-town"):
+		var up := Updater.new()
+		up.finished.connect(func(note: String):
+			show_title()
+			if note != "":
+				_title_note(note))
+		_set_screen(up)
+	else:
+		show_title()
 	if OS.get_cmdline_user_args().has("--autotest-town"):
 		call_deferred("_autotest_town")
 
@@ -125,21 +135,24 @@ func _autotest_town() -> void:
 	get_tree().quit()
 
 func _setup_input() -> void:
-	var defs := {
-		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
-		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
-		"guard": [KEY_SPACE], "dodge": [KEY_SHIFT],
-		"skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3], "skill4": [KEY_4],
-		"switch": [KEY_Q], "interact": [KEY_E], "search": [KEY_F], "quick_heal": [KEY_R],
-		"reload_assets": [KEY_F6], "inventory": [KEY_TAB], "confirm": [KEY_ENTER, KEY_KP_ENTER], "credits": [KEY_F1],
-	}
-	for a in defs:
-		if not InputMap.has_action(a):
-			InputMap.add_action(a)
-		for k in defs[a]:
-			var ev := InputEventKey.new()
-			ev.physical_keycode = k
-			InputMap.action_add_event(a, ev)
+	Controls.setup()
+
+## 操作の設定(タイトルと街から開く)
+func open_key_config() -> void:
+	if key_config != null:
+		return
+	key_config = KeyConfig.new()
+	key_config.closed.connect(close_key_config)
+	ui_layer.add_child(key_config)
+
+func close_key_config() -> void:
+	if key_config == null:
+		return
+	key_config.queue_free()
+	key_config = null
+	_menu_cd = 0.3
+	if screen != null and screen.has_method("focus_default"):
+		screen.call("focus_default")
 
 func leader() -> Hero:
 	if heroes.is_empty() or active < 0 or active >= heroes.size() or not is_instance_valid(heroes[active]):
@@ -163,7 +176,13 @@ func show_title() -> void:
 	t.new_game.connect(show_make)
 	t.continue_game.connect(_on_continue)
 	t.show_credits.connect(func(): hud.show_credits = true)
+	t.key_config.connect(open_key_config)
 	_set_screen(t)
+
+## タイトルの下に、更新の結果を出す
+func _title_note(text: String) -> void:
+	if screen is TitleScreen:
+		(screen as TitleScreen).set_note(text)
 
 func show_make() -> void:
 	phase = "make"
@@ -204,6 +223,7 @@ func go_town(report: Array) -> void:
 	t.open_inventory.connect(open_inventory)
 	t.arena_requested.connect(start_arena)
 	t.to_title.connect(show_title)
+	t.key_config.connect(open_key_config)
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)
@@ -510,7 +530,7 @@ func _check_wipe() -> void:
 		{"text": "未査定の燐晶 %d銀貨相当 を失った" % lost, "size": 16},
 		{"text": "灯手隊が、倒れた仲間を担ぎ出してくれた。", "size": 16, "color": Color("f1d98a")},
 		{"text": "", "size": 8},
-		{"text": "Enter: 街へ", "size": 18, "color": Color("9ad8ff")},
+		{"text": "%s: 街へ" % Controls.hint("confirm"), "size": 18, "color": Color("9ad8ff")},
 	]
 
 func _after_overlay() -> void:
@@ -938,7 +958,7 @@ func _on_enemy_killed(en: Enemy) -> void:
 		if h.ch.gain_xp(int(round(share * (1.0 + h.ch.skill_fx("history"))))) > 0:
 			log_msg("%sのレベルが上がった! Lv%d" % [h.ch.name, h.ch.level], Color("9ad8ff"))
 			if h.ch.pending().size() > before:
-				log_msg("%sは、能力値上昇か特技を選べる(Tab →「技能・特技」)" % h.ch.name, Color("ffe9a8"))
+				log_msg("%sは、能力値上昇か特技を選べる(%s →「技能・特技」)" % [h.ch.name, Controls.hint("inventory")], Color("ffe9a8"))
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
 
 func return_to_surface() -> void:

@@ -42,12 +42,13 @@ jobs:
             echo "- \`UrbsLabyrinthi-setup.exe\` … Windows 用のインストーラー(Windows 10/11 x64。管理者の権限は要らない。未署名なので、SmartScreen が出たら「詳細情報」→「実行」)"
             echo "- \`UrbsLabyrinthi-windows.zip\` … 展開して \`UrbsLabyrinthi.exe\` を実行(Windows 10/11 x64)"
             echo "- \`UrbsLabyrinthi-linux.zip\` … 展開して \`./UrbsLabyrinthi.x86_64\` を実行(Ubuntu 22.04/24.04 x86_64。先に \`SetupScript/setup-ubuntu.sh\`)"
-            echo "- \`SHA256SUMS.txt\` … ZIP とインストーラーのハッシュ"
+            echo "- \`*.pck\`、\`latest.json\` … 起動時の自動更新が使う(ゲームの中身と、その版)"
+            echo "- \`SHA256SUMS.txt\` … ハッシュ"
             echo
             echo "ビルドの記録:"
             echo '```'
             cat Deploy/VERSION
             echo '```'
           } > notes.md
-          gh release create "$TAG" dist/UrbsLabyrinthi-setup.exe dist/UrbsLabyrinthi-windows.zip dist/UrbsLabyrinthi-linux.zip dist/SHA256SUMS.txt \
+          gh release create "$TAG" dist/UrbsLabyrinthi-setup.exe dist/UrbsLabyrinthi-windows.zip dist/UrbsLabyrinthi-windows.pck dist/UrbsLabyrinthi-linux.pck dist/latest.json dist/UrbsLabyrinthi-linux.zip dist/SHA256SUMS.txt \
             --title "$TAG — $TITLE" --notes-file notes.md --target "${{ github.sha }}" --latest

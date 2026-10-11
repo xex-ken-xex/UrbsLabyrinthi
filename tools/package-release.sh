@@ -53,5 +53,23 @@ cp "$D/linux/assets/README.txt" "$L/assets/README.txt"
 common "$L"
 (cd "$WORK" && rm -f "$OUT/UrbsLabyrinthi-linux.zip" && zip -qr -9 -y "$OUT/UrbsLabyrinthi-linux.zip" UrbsLabyrinthi-linux)
 
+# 起動時の更新用: ゲームの中身(.pck)と、latest.json(版と、.pck の場所とハッシュ)
+TAG="${INSTALLER_VERSION:-dev}"
+REPO="${GITHUB_REPOSITORY:-xex-ken-xex/UrbsLabyrinthi}"
+cp "$D/windows/UrbsLabyrinthi.pck" "$OUT/UrbsLabyrinthi-windows.pck"
+cp "$D/linux/UrbsLabyrinthi.pck" "$OUT/UrbsLabyrinthi-linux.pck"
+python3 - "$OUT" "$TAG" "$REPO" "$D/VERSION" <<'PY'
+import hashlib, json, os, re, sys
+out, tag, repo, ver = sys.argv[1:5]
+m = re.search(r"godot:\s*(\d+)\.(\d+)(?:\.(\d+))?", open(ver).read())
+godot = "%s.%s.%s" % (m.group(1), m.group(2), m.group(3) or "0")
+pck = {}
+for os_name, f in (("Windows", "UrbsLabyrinthi-windows.pck"), ("Linux", "UrbsLabyrinthi-linux.pck")):
+    p = os.path.join(out, f)
+    pck[os_name] = {"url": "https://github.com/%s/releases/download/%s/%s" % (repo, tag, f),
+                    "sha256": hashlib.sha256(open(p, "rb").read()).hexdigest(), "size": os.path.getsize(p)}
+json.dump({"tag": tag, "godot": godot, "pck": pck}, open(os.path.join(out, "latest.json"), "w"), indent=1)
+PY
+SUMS="$SUMS UrbsLabyrinthi-windows.pck UrbsLabyrinthi-linux.pck latest.json"
 (cd "$OUT" && sha256sum $SUMS > SHA256SUMS.txt)
 ls -la "$OUT"
