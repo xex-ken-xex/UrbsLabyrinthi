@@ -4,6 +4,8 @@ extends Control
 
 var game: Node                      # Main
 var log_lines: Array = []           # {text, color, age}
+var pickups: Array = []             # 拾ったものの知らせ {key, tex, name, color, amount, unit, age}。同じ物は数をまとめる
+const PICKUP_LIFE := 4.0
 var overlay: Array = []             # 空でなければ全面の報告を出す(各要素は {text, color, size})
 var hint := ""
 var title_shown := 7.0
@@ -20,7 +22,23 @@ func add_log(text: String, color: Color = Color.WHITE) -> void:
 	while log_lines.size() > 8:
 		log_lines.pop_front()
 
+## 拾ったものを、右の地図の下に絵つきで知らせる。続けて同じ物を拾うと、数を足す
+func add_pickup(key: String, tex: Texture2D, name_s: String, color: Color, amount: float, unit: String) -> void:
+	for p in pickups:
+		if p["key"] == key and float(p["age"]) < PICKUP_LIFE - 0.5:
+			p["amount"] = float(p["amount"]) + amount
+			p["age"] = 0.0
+			p["bump"] = 0.25
+			return
+	pickups.append({"key": key, "tex": tex, "name": name_s, "color": color, "amount": amount, "unit": unit, "age": 0.0, "bump": 0.25})
+	while pickups.size() > 6:
+		pickups.pop_front()
+
 func _process(delta: float) -> void:
+	for p in pickups:
+		p["age"] = float(p["age"]) + delta
+		p["bump"] = maxf(0.0, float(p["bump"]) - delta)
+	pickups = pickups.filter(func(p): return float(p["age"]) < PICKUP_LIFE)
 	for l in log_lines:
 		l["age"] += delta
 	title_shown = maxf(0.0, title_shown - delta)
@@ -78,6 +96,7 @@ func _draw() -> void:
 		UI.text_center(self, size_v.x / 2.0, size_v.y - 96.0, hint, 18, Color("ffe9a8"))
 	if game.arena == null:
 		_draw_minimap(fl, size_v)
+	_draw_pickups(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var H := func(id: String) -> String: return Controls.hint(id)
@@ -91,6 +110,32 @@ func _draw() -> void:
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))
 	if not overlay.is_empty():
 		_draw_overlay(size_v)
+
+func _draw_pickups(fl: FloorInstance, size_v: Vector2) -> void:
+	if pickups.is_empty():
+		return
+	var w := 230.0
+	var x := size_v.x - w - 16.0
+	var y := 16.0 + fl.map.h * 3.0 + 16.0 if game.arena == null else 16.0
+	for p in pickups:
+		var age := float(p["age"])
+		var a := clampf(minf(age / 0.15, (PICKUP_LIFE - age) / 0.6), 0.0, 1.0)
+		var slide := (1.0 - clampf(age / 0.15, 0.0, 1.0)) * 30.0
+		var r := Rect2(x + slide, y, w, 36)
+		draw_rect(r, Color(0, 0, 0, 0.6 * a))
+		var col: Color = p["color"]
+		draw_rect(Rect2(r.position, Vector2(3, r.size.y)), Color(col.r, col.g, col.b, a))
+		var s := 28.0 + float(p["bump"]) * 16.0
+		if p["tex"] != null:
+			draw_texture_rect(p["tex"], Rect2(r.position + Vector2(8 + 14 - s / 2.0, 18 - s / 2.0), Vector2(s, s)), false, Color(1, 1, 1, a))
+		var amt := float(p["amount"])
+		var q := ""
+		if String(p["unit"]) == "kg":
+			q = "%.2fkg" % amt
+		elif amt > 1.0:
+			q = "×%d" % int(amt)
+		UI.text(self, r.position + Vector2(44, 23), "%s  %s" % [p["name"], q], 14, Color(col.r, col.g, col.b, a), false)
+		y += 40.0
 
 func _draw_skillbar(size_v: Vector2) -> void:
 	var heroes: Array = game.heroes

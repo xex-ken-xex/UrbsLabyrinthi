@@ -1075,6 +1075,22 @@ func _test_game() -> void:
 	check(fl.enemies.is_empty(), "AIの仲間が魔物の群れを倒す")
 	check(main.gs.party[0].xp > xp0, "倒すと全員に経験点が入る")
 	check(worst < 1.5, "戦闘中も重ならない (最大 %.2f px)" % worst)
+	# 拾ったものを見せる(#20)
+	main.hud.pickups.clear()
+	var lh: Hero = main.leader()
+	main._on_ground_picked({"kind": "crystal", "purity": "mid", "kg": 0.2, "pos": lh.position}, lh)
+	main._on_ground_picked({"kind": "crystal", "purity": "mid", "kg": 0.1, "pos": lh.position}, lh)
+	main._on_ground_picked({"kind": "item", "id": "potion", "qty": 1, "pos": lh.position}, lh)
+	var pops := fl.get_children().filter(func(n): return n is PickupPop)
+	check(pops.size() >= 3 and pops.any(func(n): return n.stack > 0), "拾った物の絵が仲間の頭の上へ跳ぶ(重ならないよう積む)")
+	var want_kg: float = 0.3 * (1.0 + main.party_skill_fx("sleight"))
+	check(main.hud.pickups.size() == 2 and is_equal_approx(float(main.hud.pickups[0]["amount"]), want_kg), "右の知らせは、同じ物をまとめる (%d件、%.2fkg)" % [main.hud.pickups.size(), float(main.hud.pickups[0]["amount"])])
+	# 解錠の演出(#21)
+	var nfx := fl.get_children().filter(func(n): return n is UnlockFx).size()
+	var door := {"x": 1, "y": 1, "type": "locked", "unlocked": false, "lock_dc": 1}
+	main._pick_cd = 0.0
+	main._pick_lock(door)
+	check(fl.get_children().filter(func(n): return n is UnlockFx).size() == nfx + 1, "解錠を試みると、錠前の演出が出る")
 	# 階段
 	for n in range(1, Balance.MAX_FLOOR):
 		main.leader().position = main.current.map.center_of(main.current.down_cell)

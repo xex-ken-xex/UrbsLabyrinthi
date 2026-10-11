@@ -113,6 +113,17 @@ func _run() -> void:
 		lead.attack()
 		await physics_frame
 	await shot("fight2")
+	# 拾ったものと、解錠の演出
+	lead.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	main._on_ground_picked({"kind": "crystal", "purity": "high", "kg": 0.42, "pos": lead.position + Vector2(40, 10)}, lead)
+	main._on_ground_picked({"kind": "crystal", "purity": "high", "kg": 0.12, "pos": lead.position + Vector2(30, 20)}, lead)
+	main._on_ground_picked({"kind": "item", "id": "potion", "qty": 1, "pos": lead.position + Vector2(-40, 10)}, lead)
+	main._on_ground_picked({"kind": "item", "id": "relic_coins", "qty": 2, "pos": lead.position + Vector2(-20, 30)}, lead)
+	fl.add_child(UnlockFx.make(lead.position + Vector2(60, -30), true))
+	fl.add_child(UnlockFx.make(lead.position + Vector2(-70, -30), false))
+	for i in 20:
+		await physics_frame
+	await shot("pickup")
 	main.open_inventory()
 	await shot("dungeon_menu")
 	main.close_inventory()
