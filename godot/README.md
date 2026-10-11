@@ -219,3 +219,12 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 ## マップチップ
 
 床、通路、壁、扉、階段、宝箱、罠は、舞台ごとのドット絵(32×32、つなぎ目なし)を同梱している(`assets/tiles/`、`tools/make-tiles.py` が描く)。床と壁は変種を混ぜて敷く。置いた画像が優先される。作り方のプロンプトは `docs/tile-prompts.md`。
+
+## 広い迷宮、光る燐晶、税のかからない自生物
+
+- 層(第N層)は、1〜3階のグループ(全18階)。1階の広さは、第1〜2層が 192×128、第3〜6層が 128×86、第7層以降が 96×64。魔物は、巣の間隔(縄張り)を取って置く。理由と数字は `docs/dungeon-scale.md`、`docs/dungeon-ecology.md`。
+- 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
+  地上へ戻るとき、純度ごとに査定され、**3割が燐晶税**。
+- 茸や苔、魔物の素材、遺品は、**燐晶ではないので、税がかからない**。持ち物に入り、食べる・使う・売る。一覧は `docs/items-and-forage.md`。
+- アイテムの絵は、16列のシート(`assets/items/items_sheet.png`、`tools/make-items.py`)。プロンプトは `docs/item-prompts.md`。
+- 量の調整: `Balance.CRYSTAL_SCALE`(燐晶)、`Balance.FORAGE_CELLS`(自生物の密度)。

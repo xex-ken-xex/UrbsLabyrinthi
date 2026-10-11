@@ -116,7 +116,6 @@ Intended to be drawn on top of a floor tile.
 | `door_open_<舞台>` | 開いた扉。左端の4ピクセルほどの細い板 |
 | `icon_stairs_up` | 上りの階段。上に矢印 |
 | `icon_stairs_down` | 下りの階段。下に矢印 |
-| `icon_chest` | 宝箱。鉄の帯と金の錠前 |
 | `icon_trap` | 気づいた罠。床の剣山 |
 
 鍵のかかった扉は赤く、隠し扉は青白く、ゲームが色を変えて描く。絵は、ふつうの扉のままでよい。

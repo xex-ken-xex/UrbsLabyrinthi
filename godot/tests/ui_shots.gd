@@ -52,7 +52,13 @@ func _run() -> void:
 	await shot("pleasure")
 	town._go("general")
 	await shot("general")
+	for id in ["kuro_take", "tomoshi_take", "iki_take", "shinju_gai", "nenneki", "relic_tag", "kemono_niku", "hikari_goke"]:
+		main.gs.add_item(id, 3)
 	main.open_inventory()
+	main.inventory._set_tab("item")
+	main.inventory.sel_id = "tomoshi_take"
+	main.inventory._refresh()
+	await shot("inventory_items")
 	main.inventory._set_tab("equip")
 	main.inventory.sel_id = "dagger"
 	main.gs.add_item("dagger")

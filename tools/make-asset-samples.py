@@ -54,8 +54,6 @@ def icon(name, draw_fn):
     im = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw_fn(ImageDraw.Draw(im))
     im.save(os.path.join(OUT, name))
-icon("icon_chest.png", lambda d: (d.rectangle((14, 26, 50, 48), fill=(140, 96, 32, 255), outline=(40, 24, 8, 255), width=3),
-                                  d.rectangle((14, 26, 50, 34), fill=(204, 154, 51, 255)), d.ellipse((29, 32, 35, 38), fill=(240, 220, 120, 255))))
 icon("icon_stairs_up.png", lambda d: d.polygon([(32, 8), (56, 52), (8, 52)], fill=(120, 200, 255, 120), outline=(160, 220, 255, 255)))
 icon("icon_stairs_down.png", lambda d: d.polygon([(32, 56), (56, 12), (8, 12)], fill=(255, 190, 90, 120), outline=(255, 210, 130, 255)))
 icon("icon_trap.png", lambda d: (d.line((14, 14, 50, 50), fill=(230, 64, 51, 255), width=6), d.line((14, 50, 50, 14), fill=(230, 64, 51, 255), width=6)))
@@ -80,6 +78,9 @@ if os.path.isdir(tiles_dir):
     for f in sorted(os.listdir(tiles_dir)):
         if f.endswith(".png") and (f.endswith("_fuyou.png") or f.startswith("icon_")):
             shutil.copy(os.path.join(tiles_dir, f), os.path.join(OUT, f))
+items_sheet = os.path.join(ROOT, "godot", "assets", "items", "items_sheet.png")
+if os.path.exists(items_sheet):
+    shutil.copy(items_sheet, os.path.join(OUT, "items_sheet.png"))
 spr = os.path.join(ROOT, "godot", "assets", "sprites")
 if os.path.isdir(spr):
     for f in sorted(os.listdir(spr)):

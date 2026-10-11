@@ -5,7 +5,7 @@ extends RefCounted
 
 const CELL := 32                       # 1マス(5フィート)の画素数
 const FT_TO_PX := 4.0                  # 移動速度: 1フィート/ラウンド → 画素/秒(30フィートで120)
-const MAX_FLOOR := 10                  # 書き出してある層の数
+const MAX_FLOOR := 18                  # 書き出してある階の数(10の層が、1〜3階ずつのグループ。tools/export-floors.mjs の LAYERS)
 const NIGHTS := 7                      # 書き出してある夜の数(7夜で一巡。世界の「節」と同じ周期)
 const TAX_RATE := 0.3                  # 燐晶税(都市GM資料)
 
@@ -42,6 +42,11 @@ static var ENEMY_HP_SCALE := 1.5            # 魔物の最大HPにかける(SRD 
 static var ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当たりでは、これを攻撃間隔で割った毎秒のダメージにする)
 static var TRAP_DMG_SCALE := 0.6            # 罠のダメージにかける
 static var ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
+
+# 燐晶と自生物(docs/dungeon-scale.md、docs/items-and-forage.md)
+const TAX_NOTE := "燐晶だけが課税"
+static var CRYSTAL_SCALE := 0.3             # 層に置く・魔物や遺体が落とす燐晶の量(kg)にかける。1.0 で、地図生成器の宝の量そのまま
+static var FORAGE_CELLS := 70.0             # 自生物は、歩ける床(部屋と通路)この数のマスにつき1つ
 
 ## 闘技場で、実行中に動かして調整できる係数。[初期値, 最小, 最大, 説明]
 const TUNABLE := {
