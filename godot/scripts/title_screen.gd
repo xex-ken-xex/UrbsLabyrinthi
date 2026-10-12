@@ -47,6 +47,17 @@ func _ready() -> void:
 	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t2)
 	v.add_child(Control.new())
+	# 目的を、ボタンの上に大きく。ゆっくり明滅して目を引く
+	var goal := UIKit.label("燐晶を持ち帰れ。通路は毎夜、変わる。", 26, Color("ffe6a0"))
+	goal.add_theme_font_override("font", UI.title_font())
+	goal.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	goal.add_theme_constant_override("outline_size", 6)
+	goal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(goal)
+	var tw := goal.create_tween().set_loops()
+	tw.tween_property(goal, "modulate", Color(1.25, 1.15, 0.9), 1.4).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(goal, "modulate", Color(0.8, 0.78, 0.72), 1.4).set_trans(Tween.TRANS_SINE)
+	v.add_child(Control.new())
 	var b1 := UIKit.button("はじめから", func(): new_game.emit(), 260)
 	var b2 := UIKit.button("つづきから", func(): continue_game.emit(), 260)
 	b2.disabled = not GameState.has_save()
@@ -57,9 +68,6 @@ func _ready() -> void:
 		v.add_child(b)
 	_focus = b2 if not b2.disabled else b1
 	_focus.call_deferred("grab_focus")
-	var foot := UIKit.label("燐晶を持ち帰れ。通路は毎夜、変わる。", 14, UIKit.DIM)
-	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(foot)
 	_note = UIKit.label("", 14, Color("a8c8e8"))
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(_note)

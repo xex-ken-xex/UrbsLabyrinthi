@@ -761,14 +761,20 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 		var pid := String(e["purity"])
 		var kg := float(e["kg"]) * (1.0 + party_skill_fx("sleight"))     # 盗賊の「手際」は、拾える燐晶を増やす
 		bag_crystal[pid] = float(bag_crystal.get(pid, 0.0)) + kg
-		h.game_floor.spawn_text(e["pos"] + Vector2(0, -14), "%s %.2fkg" % [Crystal.jp(pid), kg], Crystal.COLORS.get(pid, Color.WHITE))
+		var ccol: Color = Crystal.COLORS.get(pid, Color.WHITE)
+		var ctex := ItemIcons.texture(Crystal.icon_id(pid, kg))
+		h.game_floor.add_child(PickupPop.make(ctex, "%s %.2fkg" % [Crystal.jp(pid), kg], ccol, e["pos"], h))
+		hud.add_pickup("crystal_" + pid, ctex, Crystal.jp(pid), ccol, kg, "kg")
 		return
 	var id := String(e["id"])
 	var qty := int(e.get("qty", 1))
 	gs.add_item(id, qty)
 	var it := ItemDB.get_item(id)
 	var rare := int(it.get("price", 0)) >= 40 or String(it.get("kind", "")) in ["weapon", "armor", "acc"]
-	h.game_floor.spawn_text(e["pos"] + Vector2(0, -14), "%s%s" % [ItemDB.item_name(id), "" if qty == 1 else " ×%d" % qty], Color("d8f0d8") if not rare else Color("ffe9a8"))
+	var icol := Color("d8f0d8") if not rare else Color("ffe9a8")
+	var itex := ItemIcons.texture(id)
+	h.game_floor.add_child(PickupPop.make(itex, "%s%s" % [ItemDB.item_name(id), "" if qty == 1 else " ×%d" % qty], icol, e["pos"], h))
+	hud.add_pickup("item_" + id, itex, ItemDB.item_name(id), icol, float(qty), "")
 	if rare:
 		log_msg("拾った: %s" % ItemDB.item_name(id), Color("ffe9a8"))
 
@@ -789,8 +795,10 @@ func _pick_lock(d: Dictionary) -> void:
 	var bonus := who.lock_bonus()
 	var ok := roll == 20 or roll + bonus >= int(d["lock_dc"])
 	log_msg("解錠 %d%+d / 難易度%d → %s" % [roll, bonus, int(d["lock_dc"]), "成功" if ok else "失敗"], Color("9be29b") if ok else Color("ff8a7a"))
+	current.add_child(UnlockFx.make(current.map.center_of(Vector2i(int(d["x"]), int(d["y"]))), ok))
 	if ok:
 		d["unlocked"] = true
+		current.map_changed()
 
 func _disarm(t: Dictionary) -> void:
 	var who := party_best_char("lock")
