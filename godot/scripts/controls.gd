@@ -1,11 +1,12 @@
 class_name Controls
 extends RefCounted
 ## 操作の割り当て(キーボードとコントローラー)。初期値、保存(user://controls.cfg)、表示用の名前。
-## 一つの操作に、キーを2つと、コントローラーの入力を1つ割り当てられる。
+## 一つの操作に、キーを2つと、マウスのボタンを1つと、コントローラーの入力を1つ割り当てられる。
 ## 移動は、左スティックでもいつでもできる(割り当ての外)。
 
 const PATH := "user://controls.cfg"
-const VERSION := 2      # 2: 攻撃を足し(Space)、構えを Ctrl に移し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
+const VERSION := 3      # 2: 攻撃を足し(Space)、構えを Ctrl に移し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
+                        # 3: マウスの枠を足した(左クリックで攻撃、右クリックで構え)
 const MOVE := ["move_up", "move_down", "move_left", "move_right"]
 
 ## [id, 名前]。この順に設定画面へ並ぶ
@@ -26,9 +27,19 @@ static func _b(btn: int) -> Dictionary:
 	return {"t": "btn", "b": btn}
 static func _ax(axis: int, v: int) -> Dictionary:
 	return {"t": "axis", "a": axis, "v": v}
+static func _m(btn: int) -> Dictionary:
+	return {"t": "mouse", "m": btn}
 
-## 初期値。{"keys": [キー1, キー2], "pad": コントローラー}。無い所は {}
+## 初期値。{"keys": [キー1, キー2], "mouse": マウスのボタン, "pad": コントローラー}。無い所は {}
 static func defaults() -> Dictionary:
+	var d := _default_binds()
+	for id in d:
+		d[id]["mouse"] = {}
+	d["attack"]["mouse"] = _m(MOUSE_BUTTON_LEFT)       # マウスの方向へ振る
+	d["guard"]["mouse"] = _m(MOUSE_BUTTON_RIGHT)
+	return d
+
+static func _default_binds() -> Dictionary:
 	return {
 		"move_up": {"keys": [_k(KEY_W), _k(KEY_UP)], "pad": _b(JOY_BUTTON_DPAD_UP)},
 		"move_down": {"keys": [_k(KEY_S), _k(KEY_DOWN)], "pad": _b(JOY_BUTTON_DPAD_DOWN)},
@@ -73,6 +84,10 @@ static func setup() -> void:
 					binds[id] = _sanitize(v, binds[id])
 		if int(cf.get_value("meta", "version", 1)) < 2:
 			_migrate_v1()
+		if int(cf.get_value("meta", "version", 1)) < 3:
+			var d := defaults()
+			for a in ACTIONS:
+				binds[a[0]]["mouse"] = d[a[0]]["mouse"]
 	for id in FIXED:
 		if not InputMap.has_action(id):
 			InputMap.add_action(id)
@@ -83,14 +98,17 @@ static func setup() -> void:
 
 static func _sanitize(v: Dictionary, fallback: Dictionary) -> Dictionary:
 	var keys: Array = v.get("keys", []) if v.get("keys", []) is Array else []
-	var out := {"keys": [{}, {}], "pad": {}}
+	var out := {"keys": [{}, {}], "pad": {}, "mouse": {}}
 	for i in 2:
 		if i < keys.size() and keys[i] is Dictionary and to_event(keys[i]) != null and String(keys[i].get("t", "")) == "key":
 			out["keys"][i] = keys[i]
 	var p = v.get("pad", {})
-	if p is Dictionary and to_event(p) != null and String(p.get("t", "")) != "key":
+	if p is Dictionary and to_event(p) != null and String(p.get("t", "")) in ["btn", "axis"]:
 		out["pad"] = p
-	if (out["keys"] as Array).all(func(x): return (x as Dictionary).is_empty()) and (out["pad"] as Dictionary).is_empty():
+	var ms = v.get("mouse", {})
+	if ms is Dictionary and to_event(ms) != null and String(ms.get("t", "")) == "mouse":
+		out["mouse"] = ms
+	if (out["keys"] as Array).all(func(x): return (x as Dictionary).is_empty()) and (out["pad"] as Dictionary).is_empty() and (out["mouse"] as Dictionary).is_empty():
 		return fallback   # 何も割り当てが無いと遊べないので、初期値に戻す
 	return out
 
@@ -110,6 +128,9 @@ static func apply() -> void:
 		var pe := to_event(b["pad"])
 		if pe != null:
 			InputMap.action_add_event(id, pe)
+		var me := to_event(b.get("mouse", {}))
+		if me != null:
+			InputMap.action_add_event(id, me)
 	# 左スティックの移動(割り当ての外。いつでも使える)
 	var stick := {"move_up": [JOY_AXIS_LEFT_Y, -1.0], "move_down": [JOY_AXIS_LEFT_Y, 1.0],
 		"move_left": [JOY_AXIS_LEFT_X, -1.0], "move_right": [JOY_AXIS_LEFT_X, 1.0]}
@@ -161,9 +182,9 @@ static func reset() -> void:
 	save()
 
 static func set_bind(id: String, slot: String, d: Dictionary) -> void:
-	# slot: "k0" / "k1" / "pad"
-	if slot == "pad":
-		binds[id]["pad"] = d
+	# slot: "k0" / "k1" / "mouse" / "pad"
+	if slot == "pad" or slot == "mouse":
+		binds[id][slot] = d
 	else:
 		binds[id]["keys"][int(slot.substr(1))] = d
 	apply()
@@ -184,7 +205,16 @@ static func to_event(d: Dictionary) -> InputEvent:
 			m.axis = int(d.get("a", 0)) as JoyAxis
 			m.axis_value = 1.0 if int(d.get("v", 1)) >= 0 else -1.0
 			return m
+		"mouse":
+			var mb := InputEventMouseButton.new()
+			mb.button_index = int(d.get("m", 0)) as MouseButton
+			return mb if mb.button_index in MOUSE_OK else null
 	return null
+
+## 割り当てられるマウスのボタン(ホイールは画面の拡縮に使うので外す)
+const MOUSE_OK := [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]
+const MOUSE_JP := {MOUSE_BUTTON_LEFT: "左クリック", MOUSE_BUTTON_RIGHT: "右クリック", MOUSE_BUTTON_MIDDLE: "中クリック",
+	MOUSE_BUTTON_XBUTTON1: "マウス戻る", MOUSE_BUTTON_XBUTTON2: "マウス進む"}
 
 ## 押された入力を記録の形にする(設定画面の「押してください」で使う)。使えない入力なら {}
 static func from_event(e: InputEvent) -> Dictionary:
@@ -195,6 +225,8 @@ static func from_event(e: InputEvent) -> Dictionary:
 		return _b(e.button_index)
 	if e is InputEventJoypadMotion and absf(e.axis_value) > 0.6:
 		return _ax(e.axis, 1 if e.axis_value > 0.0 else -1)
+	if e is InputEventMouseButton and e.pressed and e.button_index in MOUSE_OK:
+		return _m(e.button_index)
 	return {}
 
 const BTN_JP := {
@@ -212,6 +244,8 @@ static func label(d: Dictionary) -> String:
 			return OS.get_keycode_string(int(d["c"]))
 		"btn":
 			return String(BTN_JP.get(int(d["b"]), "ボタン%d" % int(d["b"])))
+		"mouse":
+			return String(MOUSE_JP.get(int(d["m"]), "マウス%d" % int(d["m"])))
 		"axis":
 			var a := int(d["a"])
 			var v := int(d["v"])
@@ -257,6 +291,7 @@ static func conflicts(id: String, d: Dictionary) -> Array:
 		var b: Dictionary = binds[other]
 		var all: Array = (b["keys"] as Array).duplicate()
 		all.append(b["pad"])
+		all.append(b.get("mouse", {}))
 		for x in all:
 			if x == d:
 				out.append(other)
