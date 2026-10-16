@@ -667,8 +667,29 @@ func _relic_reward(id: String) -> int:
 func _content_guild() -> void:
 	_head(String(LOCATIONS["guild"]["name"]), String(QUOTES["guild"]))
 	content.add_child(UIKit.label("大穴の縁に建つ、潜行者組合の本部。窓口の向こうで、査定課の秤が鳴っている。", 14, UIKit.DIM))
-	# 遺品課
-	content.add_child(UIKit.label("遺品課  遺品の引き取り", 18, UIKit.ACCENT))
+	var cols := UIKit.hbox(16)
+	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(cols)
+	var lc := UIKit.vbox(6)
+	lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(lc)
+	var rc := UIKit.vbox(6)
+	rc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(rc)
+	_guild_relics(lc)
+	_guild_insurance(lc)
+	_guild_report(lc)
+	_guild_board(rc)
+
+func _wrap(t: String, sz: int, col: Color = UIKit.TEXT) -> Label:
+	var lb := UIKit.label(t, sz, col)
+	lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return lb
+
+## 遺品課: 遺品を引き取り、謝礼を出す
+func _guild_relics(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("遺品課  遺品の引き取り", 18, UIKit.ACCENT))
 	var any := false
 	var total := 0
 	for id in RELIC_RATE:
@@ -677,48 +698,112 @@ func _content_guild() -> void:
 			continue
 		any = true
 		total += _relic_reward(id) * n
-		var row := UIKit.hbox(8)
+		var row := UIKit.hbox(6)
 		var ic := TextureRect.new()
 		ic.texture = ItemIcons.texture(id)
-		ic.custom_minimum_size = Vector2(28, 28)
+		ic.custom_minimum_size = Vector2(26, 26)
 		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		row.add_child(ic)
-		var nl := UIKit.label("%s ×%d   謝礼 %d銀貨/1つ" % [ItemDB.item_name(id), n, _relic_reward(id)], 16)
-		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(nl)
-		row.add_child(UIKit.button("1つ渡す", _hand_relic.bind(id, 1), 110))
+		row.add_child(_wrap("%s ×%d  謝礼 %d銀/1つ" % [ItemDB.item_name(id), n, _relic_reward(id)], 15))
+		row.add_child(UIKit.button("1つ渡す", _hand_relic.bind(id, 1), 92))
 		if n > 1:
-			row.add_child(UIKit.button("全部渡す", _hand_relic.bind(id, n), 110))
+			row.add_child(UIKit.button("全部", _hand_relic.bind(id, n), 64))
 		else:
 			var gap := Control.new()
-			gap.custom_minimum_size = Vector2(110, 0)
+			gap.custom_minimum_size = Vector2(64, 0)
 			row.add_child(gap)
-		content.add_child(row)
+		box.add_child(row)
 	if any:
-		content.add_child(UIKit.button("遺品をまとめて渡す(謝礼 %d銀貨)" % total, _hand_all_relics))
+		box.add_child(UIKit.button("遺品をまとめて渡す(謝礼 %d銀貨)" % total, _hand_all_relics))
 	else:
-		content.add_child(UIKit.label("届ける遺品はない。迷宮で遺体を調べると、認識票や遺品が見つかることがある。", 15, UIKit.DIM))
-	content.add_child(UIKit.label("認識票と遺品の装備は、ここでしか引き取らない(店では売れない)。", 14, UIKit.DIM))
-	# 査定課
-	content.add_child(UIKit.label("査定課  前回の査定", 18, UIKit.ACCENT))
+		box.add_child(_wrap("届ける遺品はない。迷宮で遺体を調べると、認識票や遺品が見つかることがある。", 14, UIKit.DIM))
+	box.add_child(_wrap("認識票と遺品の装備は、ここでしか引き取らない(店では売れない)。", 13, UIKit.DIM))
+
+## 帰還積立: 次の潜行で全滅しても、灯手隊が装備と持ち物の半分を拾ってくる
+func _guild_insurance(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("帰還記録課  帰還積立", 18, UIKit.ACCENT))
+	if gs.insured:
+		box.add_child(_wrap("次の潜行は、帰還積立に入っている。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。", 14, UIKit.GOOD))
+		return
+	var cost := gs.insurance_cost()
+	var b := UIKit.button("帰還積立に入る(%d銀貨)" % cost, _insure)
+	b.disabled = gs.bank_silver < cost
+	box.add_child(b)
+	box.add_child(_wrap("次の潜行一回ぶん。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。掛け金は仲間のレベルで決まる。", 13, UIKit.DIM))
+
+func _guild_report(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("査定課  前回の査定", 18, UIKit.ACCENT))
 	if last_report.is_empty():
-		content.add_child(UIKit.label("今夜の査定の記録は、まだない。", 15, UIKit.DIM))
-	else:
-		for l in last_report:
-			var lb := UIKit.label(String(l), 15)
-			lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			content.add_child(lb)
-	# 掲示板
-	content.add_child(UIKit.label("掲示板", 18, UIKit.ACCENT))
+		box.add_child(_wrap("今夜の査定の記録は、まだない。", 14, UIKit.DIM))
+		return
+	for l in last_report:
+		box.add_child(_wrap(String(l), 14))
+
+## 掲示板: 受けた依頼と、今日の依頼、告示
+func _guild_board(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("掲示板  依頼(受けられるのは%d件まで)" % GameState.MAX_QUESTS, 18, UIKit.ACCENT))
+	for i in gs.quests.size():
+		var q: Dictionary = gs.quests[i]
+		var have := gs.count(String(q["id"]))
+		var ok := have >= int(q["n"])
+		var row := UIKit.hbox(6)
+		row.add_child(_wrap("受けている: %s %s %d/%d  報酬 %d銀" % [q["client"], ItemDB.item_name(String(q["id"])), mini(have, int(q["n"])), int(q["n"]), int(q["reward"])], 15,
+			UIKit.GOOD if ok else UIKit.TEXT))
+		var d := UIKit.button("納品する", _deliver.bind(i), 92)
+		d.disabled = not ok
+		row.add_child(d)
+		row.add_child(UIKit.button("やめる", _drop_quest.bind(i), 64))
+		box.add_child(row)
+	var offers := gs.offered_quests()
+	for q2 in offers:
+		var row2 := UIKit.hbox(6)
+		row2.add_child(_wrap("【依頼】%s「%s」%s ×%d  報酬 %d銀" % [q2["client"], q2["line"], ItemDB.item_name(String(q2["id"])), int(q2["n"]), int(q2["reward"])], 15, Color("e8dcb0")))
+		var a := UIKit.button("受ける", _accept.bind(q2), 72)
+		a.disabled = gs.quests.size() >= GameState.MAX_QUESTS
+		row2.add_child(a)
+		box.add_child(row2)
+	box.add_child(_wrap("依頼の品は、迷宮で拾うか、魔物から取る。掲示板の依頼は、日ごとに貼り替わる。", 13, UIKit.DIM))
+	box.add_child(Control.new())
 	if notices.is_empty():
-		var pool := NOTICES.duplicate()
-		pool.shuffle()
-		notices = pool.slice(0, 2)
+		notices = [NOTICES.pick_random()]
 	for n2 in notices:
-		var nb := UIKit.label(String(n2), 15, Color("e8dcb0"))
-		nb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		content.add_child(nb)
+		box.add_child(_wrap(String(n2), 14, UIKit.DIM))
+
+func _after_guild(line: String, col: Color) -> void:
+	_say(line, col)
+	_refresh_top()
+	_build_content()
+	call_deferred("_refocus_content")
+
+func _insure() -> void:
+	var cost := gs.insurance_cost()
+	if gs.bank_silver < cost or gs.insured:
+		return
+	gs.bank_silver -= cost
+	gs.insured = true
+	gs.save()
+	_after_guild("帰還記録課の帳面に、仲間の名を書き込んだ。「無事に戻れば、それが一番だがね。」(-%d銀貨)" % cost, UIKit.GOOD)
+
+func _accept(q: Dictionary) -> void:
+	var r := gs.accept_quest(q)
+	if r != "":
+		_say(r, UIKit.BAD)
+		return
+	_after_guild("掲示板から%sの依頼書を剥がして、受付に出した。「%s ×%d。頼んだよ。」" % [q["client"], ItemDB.item_name(String(q["id"])), int(q["n"])], UIKit.TEXT)
+
+func _deliver(i: int) -> void:
+	var q: Dictionary = gs.quests[i]
+	var got := gs.deliver_quest(i)
+	if got < 0:
+		_say("まだ数が足りない", UIKit.BAD)
+		return
+	_after_guild("%sを納めた。受付が%sからの報酬を数えて渡した。(+%d銀貨)" % [ItemDB.item_name(String(q["id"])), q["client"], got], UIKit.GOOD)
+
+func _drop_quest(i: int) -> void:
+	var q: Dictionary = gs.quests[i]
+	gs.drop_quest(i)
+	_after_guild("%sの依頼をやめた。依頼書は、また掲示板に貼り戻された。" % q["client"], UIKit.TEXT)
 
 func _hand_relic(id: String, n: int) -> void:
 	var got := 0

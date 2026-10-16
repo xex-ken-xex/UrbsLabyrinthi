@@ -324,6 +324,33 @@ func _test_state() -> void:
 	gs.add_item("tome_mana_shield")
 	check(gs.use_item("tome_mana_shield", party[0]) == "", "戦士は呪文書を読めない")
 	check(gs.use_item("tome_mana_shield", party[2]) != "" and party[2].skills.has("mana_shield"), "魔術師は呪文書で覚える")
+	# 坑口館: 依頼と帰還積立
+	var offers := gs.offered_quests()
+	check(offers.size() == 3 and offers == gs.offered_quests(), "掲示板の依頼は、日ごとに3つで、同じ日なら同じ")
+	var q: Dictionary = offers[0]
+	check(gs.accept_quest(q) == "" and gs.quests.size() == 1 and not gs.offered_quests().any(func(o): return o["id"] == q["id"]), "依頼を受けると、掲示板から外れる")
+	check(gs.accept_quest(q) != "", "同じ品の依頼は二つ受けない")
+	check(gs.deliver_quest(0) == -1, "数が足りないと納品できない")
+	gs.add_item(String(q["id"]), int(q["n"]) + 1)
+	var b0 := gs.bank_silver
+	check(gs.deliver_quest(0) == int(q["reward"]) and gs.bank_silver == b0 + int(q["reward"]) and gs.count(String(q["id"])) == 1 and gs.quests.is_empty(),
+		"納品すると、品が減って報酬が入る (+%d)" % int(q["reward"]))
+	gs.accept_quest(gs.offered_quests()[0])
+	gs.insured = true
+	check(gs.insurance_cost() == 20 + 10 * 4, "帰還積立の掛け金は、仲間のレベルで決まる")
+	check(gs.save(), "セーブできる")
+	var gs3 := GameState.new()
+	check(gs3.load_save() and gs3.insured and gs3.quests.size() == 1 and gs3.quests[0]["id"] == gs.quests[0]["id"], "帰還積立と受けた依頼が、セーブで残る")
+	var inv := gs.inventory.duplicate()
+	var keep: String = party[0].equip["weapon"]
+	gs.lose_half()
+	var halved := true
+	for id in inv:
+		halved = halved and gs.count(id) == int(floor(int(inv[id]) / 2.0))
+	check(halved and party[0].equip["weapon"] == keep, "積立があって全滅すると、持ち物は半分、装備は残る")
+	gs.inventory = inv
+	gs.insured = false
+	gs.quests = []
 	check(gs.save(), "セーブできる")
 	var gs2 := GameState.new()
 	check(gs2.load_save() and gs2.party.size() == 4 and gs2.bank_silver == gs.bank_silver and gs2.party[0].equip["weapon"] == "longsword"
