@@ -239,11 +239,85 @@ func _back_to_inn(said: String) -> void:
 
 func _on_party_made(chars: Array) -> void:
 	gs.new_game(chars)
+	DiveSave.clear()
 	go_town(["「ようこそ、ヴェルガ・ノクスへ。許可証は灰等級から。」", "預け金 %d銀貨。装備と薬を整えてから、迷宮へ。" % gs.bank_silver])
 
 func _on_continue() -> void:
 	if gs.load_save():
-		go_town(["記録を読み込んだ。第%d日。" % (gs.day + 1)])
+		var d := DiveSave.read()
+		if not d.is_empty() and int(d.get("day", -1)) == gs.day:
+			resume_dive(d)
+			return
+		DiveSave.clear()
+		go_town(["記録を読み込んだ。%s。" % ZaCalendar.label(gs.day)])
+
+# ---------- 迷宮の中の記録 ----------
+
+## 迷宮の中で記録をつける(持ち物の画面から)。パーティと持ち物は save.json、迷宮の様子は dive.sav
+func save_dive() -> bool:
+	if dtime == null or current == null or arena != null:
+		return false
+	var fls := {}
+	for n in floors:
+		fls[n] = DiveSave.floor_snap(floors[n])
+	var hs: Array = []
+	for h in heroes:
+		hs.append({"party": gs.party.find(h.ch), "pos": h.position, "buffs": h.buffs.duplicate(true), "rust": h.rust, "last_stand": h.last_stand})
+	var d := {"version": DiveSave.VERSION, "day": gs.day, "floor": current.floor_no, "floors": fls, "heroes": hs,
+		"active": gs.party.find(leader().ch), "bag": bag_crystal.duplicate(), "light_t": light_t, "insured": dive_insured,
+		"minutes": dtime.minutes, "resting": dtime.resting, "rest_end": dtime.rest_end, "rest_from": dtime.rest_from}
+	if not gs.save() or not DiveSave.write(d):
+		return false
+	log_msg("記録をつけた(%s、%s)。" % [ZaCalendar.label(gs.day), current.map.data["meta"].get("floor_label", "")], Color("9be29b"))
+	return true
+
+## 迷宮の中の記録から、その場所で再開する
+func resume_dive(d: Dictionary) -> void:
+	_trace("resume_dive 日%d 層%d" % [gs.day, int(d["floor"])])
+	_set_screen(null)
+	_clear_dungeon()
+	_clear_bag()
+	for c in gs.party:
+		var h := Hero.new()
+		h.setup(null, c)
+		add_child(h)
+		heroes.append(h)
+	for r in d.get("heroes", []):
+		var i := int(r["party"])
+		if i < 0 or i >= heroes.size():
+			continue
+		var h: Hero = heroes[i]
+		h.buffs = r.get("buffs", {})
+		h.rust = int(r.get("rust", 0))
+		h.last_stand = bool(r.get("last_stand", true))
+	active = clampi(int(d.get("active", 0)), 0, heroes.size() - 1)
+	_apply_control()
+	bag_crystal = d.get("bag", {}).duplicate()
+	light_t = float(d.get("light_t", 0.0))
+	dive_insured = bool(d.get("insured", false))
+	phase = "dungeon"
+	hud.overlay = []
+	dtime = DungeonTime.new(self)
+	dtime.minutes = float(d.get("minutes", dtime.minutes))
+	dtime.resting = bool(d.get("resting", false))
+	dtime.rest_end = float(d.get("rest_end", 0.0))
+	dtime.rest_from = float(d.get("rest_from", 0.0))
+	var fls: Dictionary = d.get("floors", {})
+	for n in fls:
+		var fl := _make_floor(int(n))
+		if fl != null:
+			DiveSave.floor_apply(fl, fls[n])
+	enter_floor(int(d["floor"]), "up")
+	for r in d.get("heroes", []):
+		var i := int(r["party"])
+		if i >= 0 and i < heroes.size():
+			heroes[i].position = r["pos"]
+	trail = [leader().position]
+	camera.position = leader().position
+	camera.reset_smoothing()
+	_last_cell = Vector2i(-99, -99)
+	_refresh_view()
+	log_msg("記録から再開した。%s、%s。" % [ZaCalendar.label(gs.day), current.map.data["meta"].get("night_label", "")], Color("9be29b"))
 
 func _trace(msg: String) -> void:
 	print("[urbs] ", msg)   # 強制終了の直前の行が、ログに残る
@@ -368,6 +442,7 @@ func floor_path(n: int, night: int) -> String:
 ## 夜が替わるので、通路も部屋の中身も組み直される(大部屋と階段は同じ場所)
 func start_day() -> void:
 	_trace("start_day 日%d" % gs.day)
+	DiveSave.clear()      # 前の夜の迷宮の記録は、もう使わない
 	_clear_dungeon()
 	_clear_bag()
 	light_t = 0.0
@@ -402,18 +477,26 @@ func _apply_control() -> void:
 	if current != null:
 		current.leader = leader()
 
-func enter_floor(n: int, arrive: String) -> void:
+## その夜の層を作る(まだ作っていなければ)。作れなければ null
+func _make_floor(n: int) -> FloorInstance:
 	var fl: FloorInstance = floors.get(n)
+	if fl != null:
+		return fl
+	fl = FloorInstance.create(floor_path(n, gs.day))
 	if fl == null:
-		fl = FloorInstance.create(floor_path(n, gs.day))
-		if fl == null:
-			push_error("層を読めない: %d" % n)
-			return
-		fl.message.connect(_on_floor_message)
-		fl.shake.connect(func(v: float): _shake = maxf(_shake, v))
-		fl.enemy_killed.connect(_on_enemy_killed)
-		fl.ground_picked.connect(_on_ground_picked)
-		floors[n] = fl
+		push_error("層を読めない: %d" % n)
+		return null
+	fl.message.connect(_on_floor_message)
+	fl.shake.connect(func(v: float): _shake = maxf(_shake, v))
+	fl.enemy_killed.connect(_on_enemy_killed)
+	fl.ground_picked.connect(_on_ground_picked)
+	floors[n] = fl
+	return fl
+
+func enter_floor(n: int, arrive: String) -> void:
+	var fl := _make_floor(n)
+	if fl == null:
+		return
 	if current != null and current.get_parent() == self:
 		remove_child(current)
 	current = fl
@@ -677,6 +760,7 @@ func _check_wipe() -> void:
 		return
 	var lost := bag_value()
 	_clear_bag()
+	DiveSave.clear()      # 全滅を、迷宮の記録で取り消せないように
 	# 持ち物も装備も、全部失う(ken 10/16)。帰還積立に入っていれば、装備は戻り、持ち物は半分
 	var lost_items := gs.lose_half() if dive_insured else gs.lose_everything()
 	var lost_line := "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items
@@ -1272,6 +1356,8 @@ func open_inventory() -> void:
 	inventory.closed.connect(close_inventory)
 	ui_layer.add_child(inventory)
 	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
+	if phase == "menu" and dtime != null:
+		inventory.set_save(Callable(self, "save_dive"))
 
 ## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま
 func sync_hero_order() -> void:
@@ -1540,6 +1626,7 @@ func return_to_surface() -> void:
 		if bag_crystal.has(pid) and float(bag_crystal[pid]) > 0.0:
 			detail.append("%s %.2fkg × %d銀" % [Crystal.jp(pid), float(bag_crystal[pid]), Crystal.price(pid)])
 	_clear_bag()
+	DiveSave.clear()
 	gs.day += 1
 	var lines: Array = []
 	if not detail.is_empty():
