@@ -9,6 +9,8 @@ var gs: GameState
 var special_handler: Callable = Callable()   # (id, Character) -> bool。灯油や帰還の札のように、迷宮の中で効くもの
 var rest_handler: Callable = Callable()      # 迷宮の中だけ。「休む(野営)」
 var rest_btn: Button
+var save_btn: Button
+var save_handler: Callable = Callable()      # 迷宮の中だけ。「記録をつける」(-> bool)
 var reorder_handler: Callable = Callable()   # 隊列を入れ替えたあと、迷宮の中の並びを合わせる(Main)
 var tab := "item"
 var member := 0
@@ -33,6 +35,17 @@ func open(state: GameState, special: Callable = Callable(), rest: Callable = Cal
 	rest_btn.visible = rest.is_valid()
 	member = clampi(member, 0, gs.party.size() - 1)
 	_refresh()
+
+## 迷宮の中で、記録をつけられるようにする
+func set_save(h: Callable) -> void:
+	save_handler = h
+	save_btn.visible = h.is_valid()
+
+func _on_save() -> void:
+	if not save_handler.is_valid():
+		return
+	var ok: bool = save_handler.call()
+	save_btn.text = "記録した" if ok else "記録できない"
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -68,6 +81,10 @@ func _ready() -> void:
 	rest_btn.tooltip_text = "6〜8時間休んで、HPとMPを戻す。寝込みを襲われることがある"
 	rest_btn.visible = false
 	tabs.add_child(rest_btn)
+	save_btn = UIKit.button("記録をつける", _on_save, 150)
+	save_btn.tooltip_text = "迷宮の中の、この場所から再開できるように記録する(タイトルの「つづきから」)"
+	save_btn.visible = false
+	tabs.add_child(save_btn)
 	row.add_child(tabs)
 	var mid := UIKit.vbox(6)
 	mid.custom_minimum_size = Vector2(380, 0)

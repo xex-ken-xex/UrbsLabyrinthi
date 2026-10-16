@@ -29,6 +29,7 @@ func _run() -> void:
 	await _test_contact()
 	await _test_tempo()
 	await _test_game()
+	await _test_dive_save()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -295,6 +296,78 @@ func _test_talents() -> void:
 	check(int(o.stats["dex"]) == 16 and Talents.picks_valid("rogue", o.profs) and o.pending().size() == 2, "古いセーブは、能力値そのまま、技能はおまかせ、熟達は未選択で読める")
 
 # ---------- 持ち物と売買、セーブ ----------
+
+# ---------- 迷宮の中の記録 ----------
+
+func _test_dive_save() -> void:
+	print("[迷宮の中の記録]")
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await _step(3)
+	main.show_make()
+	await _step(3)
+	main.screen._on_start()
+	await _step(3)
+	main.gs.day = 3
+	main._on_dive()
+	await _step(5)
+	main.scripted_input = true
+	main.enter_floor(2, "up")
+	await _step(3)
+	var fl: FloorInstance = main.current
+	var lead: Hero = main.leader()
+	lead.position = fl.map.center_of(fl.up_cell) + Vector2(30, 0)
+	# 層の様子を変える: 魔物を1体減らし、1体に傷を負わせ、扉を開け、罠を見つけ、燐晶を袋に入れる
+	var n_en := fl.enemies.size()
+	var gone: Enemy = fl.enemies[0]
+	fl.enemies.erase(gone)
+	gone.queue_free()
+	var hurt: Enemy = fl.enemies[0]
+	hurt.hp = 1.5
+	var hurt_pos := hurt.position
+	fl.map.doors[0]["open"] = true
+	fl.traps[0]["st"] = "revealed"
+	fl.map.explored[5] = 1
+	var n_ground := fl.ground.entries.size()
+	fl.ground.entries.pop_back()
+	main.bag_crystal = {"high": 0.5}
+	main.gs.party[0].hp = 3.0
+	main.gs.add_item("kuro_take", 2)
+	main.dtime.minutes = 22 * 60
+	var lead_pos := lead.position
+	var kuro: int = main.gs.count("kuro_take")
+	check(main.save_dive() and DiveSave.exists(), "迷宮の中で記録をつけられる")
+	# 記録のあとに起きたことは、読み込むと戻る
+	main.gs.party[0].hp = 10.0
+	main.gs.add_item("kuro_take", 5)
+	main.bag_crystal = {}
+	main.show_title()
+	await _step(3)
+	main._on_continue()
+	var hp_now: float = main.gs.party[0].hp       # 動き出すと、僧侶の仲間が癒すので、すぐに見る
+	await _step(5)
+	var fl2: FloorInstance = main.current
+	check(main.phase == "dungeon" and fl2 != null and fl2.floor_no == 2, "つづきからで、記録した層から再開する")
+	check(main.leader().position.distance_to(lead_pos) < 1.0, "仲間の位置が戻る")
+	check(absf(hp_now - 3.0) < 0.01 and main.gs.count("kuro_take") == kuro, "HPと持ち物は、記録したときのもの (HP %.2f, 黒茸 %d/%d)" % [hp_now, main.gs.count("kuro_take"), kuro])
+	check(is_equal_approx(float(main.bag_crystal.get("high", 0.0)), 0.5), "袋の燐晶が戻る")
+	check(absf(main.dtime.minutes - 22 * 60) < 5.0, "迷宮の時刻が戻る (%.1f)" % main.dtime.minutes)
+	check(fl2.enemies.size() == n_en - 1, "倒した魔物は戻らない (%d → %d)" % [n_en, fl2.enemies.size()])
+	var found := false
+	for e in fl2.enemies:
+		if e.position.distance_to(hurt_pos) < 0.5 and absf(e.hp - 1.5) < 0.01:
+			found = true
+	check(found, "傷ついた魔物は、傷ついたまま同じ場所にいる")
+	check(bool(fl2.map.doors[0]["open"]) and String(fl2.traps[0]["st"]) == "revealed" and fl2.map.explored[5] == 1, "開けた扉、見つけた罠、見た範囲が戻る")
+	check(fl2.ground.entries.size() == n_ground - 1, "拾ったものは、床に戻らない")
+	check(main.floors.has(1), "通ってきた層も、記録したときの様子で戻る")
+	# 夜が明けて街へ戻ると、迷宮の記録は消える
+	main.return_to_surface()
+	await _step(3)
+	check(not DiveSave.exists(), "街へ戻ると、迷宮の記録は消える")
+	main.queue_free()
+	await _step(2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 
 func _test_calendar() -> void:
 	print("[座暦]")
