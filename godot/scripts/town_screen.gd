@@ -391,7 +391,7 @@ func _refresh_top() -> void:
 			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT)
 		party_bar.add_child(l)
 	silver_label.text = "預け金 %d銀貨" % gs.bank_silver
-	var sp := TownLines.special_name(gs.day)
+	var sp := TownLines.special_name(gs.day) if ZaCalendar.date(gs.day)["month"] != 13 else ""      # 座渡しは、日付に名前が入っている
 	date_label.text = "%s  %s%s" % [ZaCalendar.label(gs.day), ZaCalendar.setsu(gs.day), ("  " + sp) if sp != "" else ""]
 
 func _refocus() -> void:
@@ -410,7 +410,7 @@ func _go(loc: String) -> void:
 		_say(TownLines.pick("leave", gs.day, LEAVE_LINES) if from != "hub" else TownLines.pick("hub", gs.day, [HUB_LINE]), UIKit.TEXT)
 	else:
 		last_place = loc
-		_say(String(ENTER_LINES.get(loc, "")), UIKit.TEXT)
+		_say(TownLines.pick("enter", gs.day, [String(ENTER_LINES.get(loc, ""))]), UIKit.TEXT)
 	_refresh_all()
 	# 行き先を選んだら、そのまま中身を操れるようにする
 	call_deferred("focus_default")

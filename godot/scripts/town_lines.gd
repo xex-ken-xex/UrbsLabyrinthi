@@ -3,7 +3,7 @@ extends RefCounted
 ## 街のセリフを、座暦の月と祭りの夜で替える(ken 10/16)。中身は data/town_lines.json。
 ## months["1"〜"13"]: その月の行(13 は座渡し)。special["月-夜"]: 祭りなどの夜だけの行(その夜は、こちらだけを使う)。
 ## 空座の月の31夜目からは(大閏の年)、special["12-31"] の行も、月の行に混ぜる。
-## 区分: hub(広場に着いた) / leave(広場へ戻った) / signs(看板) / inn(宿の主人) / rumors(酒場の噂) / walk / look / fortune(寝息通り)
+## 区分: hub(広場に着いた) / leave(広場へ戻った) / enter(店へ入った。沈黙の夜だけ) / signs(看板) / inn(宿の主人) / rumors(酒場の噂) / walk / look / fortune(寝息通り)
 
 const PATH := "res://data/town_lines.json"
 const MONTH_SHARE := 0.7          # 月の行と、いつもの行が両方あるとき、月の行を選ぶ割合
