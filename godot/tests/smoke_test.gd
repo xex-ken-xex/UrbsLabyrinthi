@@ -1033,6 +1033,14 @@ func _test_game() -> void:
 	check(GameSettings.zoom_index == 0 and is_equal_approx(main.camera.zoom.x, GameSettings.ZOOMS[0][1]), "－で画面が広くなる (×%.1f)" % main.camera.zoom.x)
 	GameSettings.set_zoom(z0)
 	main.camera.zoom = Vector2.ONE * GameSettings.zoom()
+	# ミニマップ(+ / -)
+	var m0: int = GameSettings.minimap_index
+	main.minimap_step(1)
+	check(GameSettings.minimap_index == mini(m0 + 1, GameSettings.MINIMAPS.size() - 1) and is_equal_approx(main.camera.zoom.x, GameSettings.zoom()), "+ はミニマップを拡大し、画面の倍率は変えない")
+	main.minimap_step(-9)
+	main.minimap_step(-1)
+	check(GameSettings.minimap_index == 0, "- でミニマップを縮小する")
+	GameSettings.set_minimap(m0)
 	# 擬音
 	var nk := fl.get_child_count()
 	Sfx.cue(fl, main.leader().position, "door")

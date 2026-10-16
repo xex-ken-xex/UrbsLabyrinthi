@@ -97,7 +97,7 @@ func _draw() -> void:
 	if game.arena == null:
 		_draw_minimap(fl, size_v)
 	if game.dtime != null:
-		_draw_sky(game.dtime, size_v, size_v.x - fl.map.w * 3.0 - 20.0)
+		_draw_sky(game.dtime, size_v, size_v.x - GameSettings.MINIMAP_SIZE.x - 20.0)
 	_draw_pickups(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
@@ -105,7 +105,7 @@ func _draw() -> void:
 		var lines := ["移動: %s%s%s%s   攻撃: %s(正面へ一撃)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
 				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("guard"), H.call("dodge"),
 				H.call("skill1"), H.call("skill4"), H.call("switch")],
-			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   画面の拡大: %s / %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
+			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   ミニマップ: %s / %s(画面はホイール)   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
 				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal"), H.call("rest"), H.call("zoom_in"), H.call("zoom_out")],
 			"魔物は触れると殴ってくる。敵のHPを削るほど押し込め、こちらのHPが減ると押される。戻る・閉じる: Esc"]
 		for i in lines.size():
@@ -163,7 +163,7 @@ func _draw_pickups(fl: FloorInstance, size_v: Vector2) -> void:
 		return
 	var w := 230.0
 	var x := size_v.x - w - 16.0
-	var y := 16.0 + fl.map.h * 3.0 + 16.0 if game.arena == null else 16.0
+	var y := 16.0 + GameSettings.MINIMAP_SIZE.y + 16.0 if game.arena == null else 16.0
 	for p in pickups:
 		var age := float(p["age"])
 		var a := clampf(minf(age / 0.15, (PICKUP_LIFE - age) / 0.6), 0.0, 1.0)
@@ -221,14 +221,25 @@ func _draw_skillbar(size_v: Vector2) -> void:
 			UI.text(self, r.position + Vector2(8, 18), "[%d] -" % (i + 1), 14, Color(0.4, 0.4, 0.45), false)
 		draw_rect(r, Color("e8dcb0") if ready else Color(1, 1, 1, 0.18), false, 1.5 if ready else 1.0)
 
+## 右上の小さな地図。仲間のまわりだけを、決まった大きさの枠に描く(+ / - で拡大・縮小)
 func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
 	var m := fl.map
-	var s := 3.0
-	var ox := size_v.x - m.w * s - 16.0
-	var oy := 16.0
-	draw_rect(Rect2(ox - 4, oy - 4, m.w * s + 8, m.h * s + 8), Color(0, 0, 0, 0.55))
-	for y in m.h:
-		for x in m.w:
+	var s := GameSettings.minimap_scale()
+	var box := GameSettings.MINIMAP_SIZE
+	var bx := size_v.x - box.x - 16.0
+	var by := 16.0
+	draw_rect(Rect2(bx - 4, by - 4, box.x + 8, box.y + 8), Color(0, 0, 0, 0.55))
+	var lc := m.cell_of(game.leader().position)
+	var cw := int(box.x / s)
+	var chh := int(box.y / s)
+	var x0 := lc.x - cw / 2
+	var y0 := lc.y - chh / 2
+	# 枠の左上のマスが (x0, y0) になるよう、原点をずらす
+	var ox := bx - x0 * s
+	var oy := by - y0 * s
+	var inside := func(c: Vector2i) -> bool: return c.x >= x0 and c.y >= y0 and c.x < x0 + cw and c.y < y0 + chh
+	for y in range(maxi(0, y0), mini(m.h, y0 + chh)):
+		for x in range(maxi(0, x0), mini(m.w, x0 + cw)):
 			var i := y * m.w + x
 			if m.explored[i] == 0:
 				continue
@@ -243,14 +254,15 @@ func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
 			draw_rect(Rect2(ox + x * s, oy + y * s, s, s), c)
 	for st in [[fl.up_cell, Color("7bd0ff")], [fl.down_cell, Color("ffb050")]]:
 		var cc: Vector2i = st[0]
-		if m.explored[m.idx(cc.x, cc.y)] == 1:
+		if m.explored[m.idx(cc.x, cc.y)] == 1 and inside.call(cc):
 			draw_rect(Rect2(ox + cc.x * s - 1, oy + cc.y * s - 1, s + 2, s + 2), st[1])
 	for h in game.heroes:
 		var pc := m.cell_of(h.position)
-		draw_rect(Rect2(ox + pc.x * s - 1, oy + pc.y * s - 1, s + 2, s + 2), Color.WHITE if h == game.leader() else Color(0.8, 0.9, 1.0, 0.8))
+		if inside.call(pc):
+			draw_rect(Rect2(ox + pc.x * s - 1, oy + pc.y * s - 1, s + 2, s + 2), Color.WHITE if h == game.leader() else Color(0.8, 0.9, 1.0, 0.8))
 	for en in fl.enemies:
 		var ec := m.cell_of(en.position)
-		if m.visible[m.idx(ec.x, ec.y)] == 1:
+		if m.in_bounds(ec.x, ec.y) and m.visible[m.idx(ec.x, ec.y)] == 1 and inside.call(ec):
 			draw_rect(Rect2(ox + ec.x * s - 1, oy + ec.y * s - 1, s + 1, s + 1), Color("ff4a3a"))
 
 func _draw_overlay(size_v: Vector2) -> void:
