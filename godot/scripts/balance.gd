@@ -64,6 +64,8 @@ static var ENEMY_HP_SCALE := 1.5            # 魔物の最大HPにかける(SRD 
 # SRD の「1ラウンド6秒」を、アクションの手数に直す係数
 static var ENEMY_DMG_SCALE := 0.4           # 敵の一撃にかける(体当たりでは、これを攻撃間隔で割った毎秒のダメージにする)
 static var TRAP_DMG_SCALE := 0.6            # 罠のダメージにかける
+const NEEDLE_CHANCE := 0.12            # 遺体を調べたとき、毒針が仕込んである確率
+static var TRAP_MON_MULT := 1.5             # 魔物が罠で受けるダメージに、さらにかける(誘い込んでかけるのが割に合うように)
 static var ENEMY_ATTACK_INTERVAL := 1.6     # 敵の攻撃の間隔(秒)
 
 # 燐晶と自生物(docs/dungeon-scale.md、docs/items-and-forage.md)

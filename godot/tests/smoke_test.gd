@@ -172,6 +172,14 @@ func _test_updater() -> void:
 	var ps := Updater.windows_script(1234, "C:\\Users\\ケン's\\a.pck.new", "C:\\Users\\ケン's\\a.pck", "C:\\x\\a.exe", PackedStringArray(["--no-update"]))
 	check(ps.contains("Wait-Process -Id 1234") and ps.contains("'C:\\Users\\ケン''s\\a.pck.new'") and ps.contains("-ArgumentList '--','--no-update'"), "Windows の入れ替えの命令(単引用符を重ねる)")
 
+	# 固定キーのショートカット(Shift 5回)を止める命令
+	var on := StickyKeys.script(true, "C:\\Users\\ケン's\\sticky")
+	var off := StickyKeys.script(false, "C:\\Users\\ケン's\\sticky")
+	check(not StickyKeys.enabled() or OS.get_name() == "Windows", "固定キーの切り替えは Windows だけ")
+	check(on.contains("SystemParametersInfo(0x3B") and on.contains("-band (-bnot 4)") and on.contains("'C:\\Users\\ケン''s\\sticky'") and not on.contains("0x3B,8,[ref]$v,1"),
+		"前面になったら、固定キーのショートカットだけを外す(設定には保存しない)")
+	check(off.contains("Test-Path") and off.contains("-bor 4") and off.contains("Remove-Item"), "離れるときは、外したときだけ戻す")
+
 func _test_talents() -> void:
 	print("[talents]")
 	var pb := [[1, 2], [4, 2], [5, 3], [8, 3], [9, 4], [13, 5], [17, 6], [20, 6]]
@@ -1415,6 +1423,8 @@ func _test_corpses(main: Node) -> void:
 	var bodies: Array = fl.ground.entries.filter(func(e): return e["kind"] == "corpse")
 	check(not bodies.is_empty() and bodies.all(func(e): return not (e["cause"] as Dictionary).is_empty() and ["bones", "sit", "hang"].has(e["look"]) and ItemIcons.texture(String(e["id"])) != null), "遺体には原因の魔物と、3つの見た目のどれかがある (%d体)" % bodies.size())
 	_clear_enemies(fl)
+	for t in fl.traps:
+		t["st"] = "disarmed"        # 遺体のそばに罠があると、E が罠のほうになる
 	var body: Dictionary = bodies[0]
 	main.leader().position = body["pos"]
 	for h in main.heroes:
@@ -1441,8 +1451,9 @@ func _trap_at(main: Node, fx: String) -> Dictionary:
 	var lp: Vector2 = main.leader().position
 	var t: Dictionary = fl.traps[0].duplicate()
 	var c := fl.map.cell_of(lp)
-	t["x"] = c.x + 1
-	t["y"] = c.y
+	var tc := _cell_away(fl, c, 1)
+	t["x"] = tc.x
+	t["y"] = tc.y
 	t["st"] = "revealed"
 	t["fx"] = fx
 	t["kind"] = "save"
@@ -1452,7 +1463,227 @@ func _trap_at(main: Node, fx: String) -> Dictionary:
 	t["disarm_dc"] = 99
 	t["roomId"] = fl.map.room_at[fl.map.idx(c.x, c.y)]
 	fl.traps.append(t)
+	fl.trap_at[tc] = t
+	for h in main.heroes:
+		if fl.map.cell_of(h.position) == tc:
+			h.position = lp          # 仲間が罠のマスに立っていると、すぐ踏んでしまう
 	return t
+
+func _trap_fx_count(fl: FloorInstance, kind: String) -> int:
+	var n := 0
+	for ch in fl.get_children():
+		if ch is TrapFx and ch.kind == kind and not ch.is_queued_for_deletion():
+			n += 1
+	return n
+
+func _full_hp(main: Node) -> void:
+	for h in main.heroes:
+		h.ch.hp = 500.0          # 罠の試験の間は、倒れて操作する仲間が替わらないように多めにする
+		h.down = false
+		h.iframes = 0.0
+		h.roll_t = 0.0
+		h.stuck_t = 0.0
+		h.poison_t = 0.0
+		h.knock = Vector2.ZERO
+
+## 動かず、殴らない魔物(罠の試験用)
+func _dummy(fl: FloorInstance, pos: Vector2, hp: int) -> Enemy:
+	var e := _fake_enemy(fl, pos, hp)
+	e.state = "idle"
+	e.speed = 0.0
+	e.dmg = 0.0
+	e.asleep = true
+	return e
+
+## c から道のりでちょうど d マスの床(無ければ c)
+func _cell_away(fl: FloorInstance, c: Vector2i, d: int) -> Vector2i:
+	var flow := fl.map.compute_flow(c.x, c.y, d + 1)
+	var best := c
+	var bd := -1.0
+	for i in flow.size():
+		if flow[i] == d:
+			var q := Vector2i(i % fl.map.w, i / fl.map.w)
+			var sd := Vector2(q - c).length()      # まっすぐの距離もなるべく遠く
+			if sd > bd:
+				bd = sd
+				best = q
+	return best
+
+## 予兆のある罠、魔物も踏む罠、ずっと動いている罠(PR: 罠を増やす)
+func _test_trap_motion(main: Node) -> void:
+	print("[trap motion]")
+	var fl: FloorInstance = main.current
+	_clear_enemies(fl)
+	_full_hp(main)
+	var lead: Hero = main.leader()
+	# 書き出した罠の fx は、どれもゲームで動く
+	var seen := {}
+	for f in range(1, Balance.MAX_FLOOR + 1):
+		var inst := FloorInstance.create(main.floor_path(f, 0))
+		for tt in inst.traps:
+			seen[tt["fx"]] = true
+		inst.free()
+	var unknown: Array = []
+	for k in seen:
+		if not (TrapFx.MOVING.has(k) or TrapFx.PERIODIC.has(k) or main.TRAP_CUE.has(k)):
+			unknown.append(k)
+	check(unknown.is_empty() and seen.has("explode") and seen.has("teleport_one"), "書き出した罠の動き %d種が、どれもゲームで動く %s" % [seen.size(), unknown])
+	check(Sfx.CUES.has("boom") and float(Sfx.CUES["boom"][2]) > 2.0 and String(Sfx.CUES["warp"][0]) == "ﾌｯ", "爆発は大きな「どかーーーーん!」、転移は「ﾌｯ」")
+	# 爆発: 導火の間は無傷。爆ぜると、円の中の仲間も魔物も傷つき、落ちているものが焼ける
+	_full_hp(main)
+	var t := _trap_at(main, "explode")
+	t["damage"] = "4d10"
+	var tp := fl.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	lead.position = tp
+	var en := _dummy(fl, tp + Vector2(30, 0), 500)
+	fl.ground.add_crystal(tp + Vector2(0, 20), "low", 0.1)
+	var n_ground := fl.ground.entries.size()
+	var hp0: float = lead.ch.hp
+	main._trigger_trap(t, lead)
+	await _step(20)
+	check(lead.ch.hp == hp0 and _trap_fx_count(fl, "explode") == 1, "爆発の罠: 導火の間(0.8秒)は、まだ何も起きない (%.1f→%.1f / %.0f / %d)" % [hp0, lead.ch.hp, en.hp, _trap_fx_count(fl, "explode")])
+	await _step(50)
+	check(lead.ch.hp < hp0 and en.hp < 500.0, "爆ぜると、仲間も魔物も巻き込む (仲間 %.0f→%.0f / 魔物 %.0f)" % [hp0, lead.ch.hp, en.hp])
+	check(fl.ground.entries.size() < n_ground, "爆風で、落ちている燐晶が焼ける")
+	_clear_enemies(fl)
+	# 転がり(無敵の間)なら、爆発でも無傷
+	_full_hp(main)
+	t = _trap_at(main, "explode")
+	t["damage"] = "4d10"
+	lead.position = fl.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	hp0 = lead.ch.hp
+	main._trigger_trap(t, lead)
+	await _step(56)
+	lead.iframes = 0.5
+	await _step(20)
+	check(lead.ch.hp == hp0, "爆ぜる瞬間に転がっていれば、無傷")
+	# 棘: 一拍おいて出る。離れれば当たらない
+	_full_hp(main)
+	t = _trap_at(main, "spikes")
+	t["damage"] = "4d10"
+	tp = fl.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	lead.position = tp
+	hp0 = lead.ch.hp
+	main._trigger_trap(t, lead)
+	await _step(10)
+	lead.position = fl.map.center_of(_cell_away(fl, fl.map.cell_of(tp), 2))
+	await _step(30)
+	check(lead.ch.hp == hp0, "飛び出す棘: 踏んですぐ離れれば当たらない")
+	# 網: 動けない。攻撃の連打で早く抜ける
+	_full_hp(main)
+	t = _trap_at(main, "net")
+	lead.position = fl.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	main._trigger_trap(t, lead)
+	await _step(30)
+	check(lead.stuck_t > 0.0 and lead.stuck_kind == "net" and not lead.can_attack(), "落ちる網: 網の下の者は動けない")
+	var left: float = lead.stuck_t
+	lead.atk_held = false
+	lead.cmd["attack"] = true
+	lead._struggle(0.0)
+	check(lead.stuck_t < left - 0.2, "攻撃を押すと、もがいて早く抜ける")
+	lead.cmd["attack"] = false
+	_full_hp(main)
+	# 魔物も罠を踏む(マスを移ったとき)
+	t = _trap_at(main, "pit")
+	t["st"] = "hidden"
+	var tc := Vector2i(int(t["x"]), int(t["y"]))
+	lead.position = fl.map.center_of(tc) + Vector2(-Balance.CELL * 3.0, 0)
+	en = _dummy(fl, fl.map.center_of(tc) + Vector2(Balance.CELL, 0), 50)
+	en.trap_cell = tc + Vector2i(1, 0)
+	main._check_traps()
+	check(t["st"] == "hidden", "置かれたマスから動かない魔物は、罠を踏まない")
+	en.position = fl.map.center_of(tc)
+	main._check_traps()
+	check(t["st"] == "triggered" and not fl.enemies.has(en), "魔物が落とし穴を踏むと、落ちていなくなる")
+	_full_hp(main)
+	t = _trap_at(main, "explode")
+	t["damage"] = "4d10"
+	var ec := Vector2i(int(t["x"]), int(t["y"]))
+	en = _dummy(fl, fl.map.center_of(_cell_away(fl, ec, 1)), 400)
+	lead.position = main.random_room_pos(fl, -1)      # 遠く(別の部屋)から投げる
+	hp0 = lead.ch.hp
+	main.spring_trap(t)
+	await _step(90)
+	check(en.hp < 400.0 and lead.ch.hp == hp0, "わざと発動させた爆発に、魔物を巻き込める (魔物 %.0f / 仲間は無傷)" % en.hp)
+	_clear_enemies(fl)
+	# 振り子: ずっと動いている。刃の通り道にいると当たる
+	_full_hp(main)
+	t = _trap_at(main, "pendulum")
+	t["damage"] = "2d10"
+	var pend := TrapFx.make(fl, t, null)
+	fl.add_child(pend)
+	en = _dummy(fl, pend.origin, 400)
+	lead.position = main.random_room_pos(fl, -1)
+	await _step(150)
+	check(en.hp < 400.0, "振り子の刃が、通り道の魔物に当たる")
+	t["st"] = "disarmed"
+	await _step(2)
+	var hp_e: float = en.hp
+	en.position = pend.origin
+	await _step(150)
+	check(en.hp == hp_e, "解除した振り子は止まる (%.1f → %.1f)" % [hp_e, en.hp])
+	pend.queue_free()
+	_clear_enemies(fl)
+	# 転移の罠: 踏んだ一人だけが飛ばされ、仲間とはぐれる
+	if main.heroes.size() >= 2:
+		_full_hp(main)
+		var other: Hero = main.heroes[1] if main.heroes[0] == lead else main.heroes[0]
+		var op: Vector2 = other.position
+		var lc: Vector2i = fl.map.cell_of(lead.position)
+		var r0: int = fl.map.room_at[fl.map.idx(lc.x, lc.y)]
+		t = _trap_at(main, "teleport_one")
+		main._trigger_trap(t, lead)
+		await _step(3)
+		var lc2: Vector2i = fl.map.cell_of(lead.position)
+		check(fl.map.room_at[fl.map.idx(lc2.x, lc2.y)] != r0 and other.position.distance_to(op) < Balance.CELL * 2.0,
+			"転移の罠: 踏んだ一人だけが別の部屋へ飛ばされる (部屋 %d → %d、仲間の動き %.0fpx)" % [r0, fl.map.room_at[fl.map.idx(lc2.x, lc2.y)], other.position.distance_to(op)])
+	# 転び: 袋の燐晶が散らばる
+	_full_hp(main)
+	main.bag_crystal = {"low": 1.0}
+	n_ground = fl.ground.entries.size()
+	t = _trap_at(main, "trip")
+	main._trigger_trap(t, lead)
+	check(float(main.bag_crystal["low"]) < 1.0 and fl.ground.entries.size() > n_ground, "転びの罠: 袋の燐晶が床に散らばる")
+	# 召喚: 魔物が湧く
+	var ne: int = fl.enemies.size()
+	t = _trap_at(main, "summon")
+	main._trigger_trap(t, lead)
+	check(fl.enemies.size() > ne, "召喚の罠: 魔物の群れが湧く (%d体)" % (fl.enemies.size() - ne))
+	_clear_enemies(fl)
+	# 予兆のない罠の効き目
+	_full_hp(main)
+	for fx in ["poison", "rotate", "blind", "fear", "rust", "chill", "restrain"]:
+		t = _trap_at(main, fx)
+		main._trigger_trap(t, lead)
+	check(lead.poison_t > 0.0 and lead.confuse_t > 0.0 and lead.blind_t > 0.0 and lead.fear_t > 0.0 and lead.rust == 1 and lead.buff("chill") < 1.0 and lead.stuck_kind == "teeth",
+		"毒・回転・眩惑・恐怖・錆・冷気・歯列が、それぞれ効く")
+	check(main.light_radius() <= 2, "目がくらむと、見える範囲が狭まる")
+	_full_hp(main)
+	for h in main.heroes:
+		h.ch.hp = float(h.ch.max_hp())
+	lead.confuse_t = 0.0
+	lead.blind_t = 0.0
+	lead.fear_t = 0.0
+	lead.rust = 0
+	lead.buffs.clear()
+	# 動いている罠はどれも、止まらずに終わる
+	var kinds := ["boulder", "collapse", "log", "censer", "fire", "darts", "bolt", "crush", "gas", "fog"]
+	for k in kinds:
+		t = _trap_at(main, k)
+		t["damage"] = "1d4"
+		t["save"] = {"ability": "耐久力", "dc": 5}
+		main.spring_trap(t)
+	await _step(420)
+	var still := 0
+	for k in kinds:
+		if k != "collapse" and k != "censer" and k != "fog":
+			still += _trap_fx_count(fl, k)
+	var left2: Array = []
+	for ch in fl.get_children():
+		if ch is TrapFx and not ch.is_queued_for_deletion():
+			left2.append(ch.kind)
+	check(still == 0, "大岩・吊り灯・像・矢・壁・煙は、動き終えると消える %s" % [left2])
+	_full_hp(main)
 
 func _test_traps(main: Node) -> void:
 	print("[traps]")
@@ -1538,6 +1769,7 @@ func _test_traps(main: Node) -> void:
 			if not (d["type"] == "locked" and not d["unlocked"] and not d["open"]):
 				all_locked = false
 	check(rid >= 0 and shut > 0 and all_locked, "落とし格子で、部屋の扉が閉ざされる (%d枚)" % shut)
+	await _test_trap_motion(main)
 	main.return_to_surface()
 	await _step(3)
 

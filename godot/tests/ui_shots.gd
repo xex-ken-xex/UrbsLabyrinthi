@@ -175,6 +175,35 @@ func _run() -> void:
 	main.open_trap_menu(tt)
 	await shot("trap_menu")
 	main._on_trap_choice("")
+	# 動きのある罠: 爆発の導火 → どかーん、振り子・噴き口・崩れる天井・網
+	for e in fl.enemies:
+		e.speed = 0.0
+	var mk := func(fx: String, cell: Vector2i) -> Dictionary:
+		var t2: Dictionary = fl.traps[0].duplicate()
+		t2["x"] = cell.x
+		t2["y"] = cell.y
+		t2["fx"] = fx
+		t2["st"] = "revealed"
+		t2["damage"] = "1d4"
+		fl.traps.append(t2)
+		return t2
+	var tx: Dictionary = mk.call("explode", lc + Vector2i(2, 0))
+	main.spring_trap(tx)
+	for i in 30:
+		await physics_frame
+	await shot("trap_fuse")
+	for i in 22:
+		await physics_frame
+	await shot("trap_boom")
+	for k in [["pendulum", Vector2i(-3, -2)], ["flame", Vector2i(3, -2)], ["collapse", Vector2i(-2, 2)], ["spikes", Vector2i(2, 2)], ["gas", Vector2i(0, 3)]]:
+		var t3: Dictionary = mk.call(k[0], lc + k[1])
+		if TrapFx.PERIODIC.has(k[0]):
+			fl.add_child(TrapFx.make(fl, t3, null))
+		else:
+			main.spring_trap(t3)
+	for i in 40:
+		await physics_frame
+	await shot("trap_moving")
 	# 迷宮の時間: 夕方、休息中、夜
 	main.dtime.minutes = 17 * 60
 	await shot("sky_dusk")

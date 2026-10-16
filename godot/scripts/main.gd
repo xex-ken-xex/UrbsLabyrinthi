@@ -37,9 +37,13 @@ var trap_menu: TrapMenu = null     # 見つけた罠の前で、どうするか�
 var _menu_trap: Dictionary = {}
 var _crystal_cue_ms := -10000
 var scripted_input := false        # テスト用: true の間は、キー入力を読まない
+var _shake := 0.0                  # 画面の揺れ(爆発の罠など)
+var _blind_was := false
 
 func _ready() -> void:
 	Dice.rng.randomize()
+	if DisplayServer.window_is_focused():
+		StickyKeys.suppress()
 	_setup_input()
 	camera = Camera2D.new()
 	camera.zoom = Vector2.ONE * GameSettings.zoom()
@@ -67,6 +71,14 @@ func _ready() -> void:
 		show_title()
 	if OS.get_cmdline_user_args().has("--autotest-town"):
 		call_deferred("_autotest_town")
+
+## Windows の固定キーのショートカット(Shift 5回)は、ゲームが前面にある間だけ止める(StickyKeys)
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_APPLICATION_FOCUS_IN:
+			StickyKeys.suppress()
+		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_EXIT_TREE, NOTIFICATION_PREDELETE:
+			StickyKeys.restore()
 
 ## 書き出したビルドで「迷宮 → 街」を再現するための確認用(--autotest-town を付けて起動する)
 func _autotest_town() -> void:
@@ -322,6 +334,7 @@ func start_arena() -> void:
 	current.heroes = heroes
 	current.leader = leader()
 	current.message.connect(_on_floor_message)
+	current.shake.connect(func(v: float): _shake = maxf(_shake, v))
 	current.enemy_killed.connect(_on_enemy_killed)
 	current.ground_picked.connect(_on_ground_picked)
 	var center := current.map.center_of(current.up_cell)
@@ -393,6 +406,7 @@ func enter_floor(n: int, arrive: String) -> void:
 			push_error("層を読めない: %d" % n)
 			return
 		fl.message.connect(_on_floor_message)
+		fl.shake.connect(func(v: float): _shake = maxf(_shake, v))
 		fl.enemy_killed.connect(_on_enemy_killed)
 		fl.ground_picked.connect(_on_ground_picked)
 		floors[n] = fl
@@ -445,6 +459,8 @@ func light_radius() -> int:
 	for h in heroes:
 		if not h.down:
 			b = maxi(b, h.ch.light_bonus())
+	if leader().blind_t > 0.0:
+		return 2          # 眩惑の罠: 目がくらんで、近くしか見えない
 	return Balance.LIGHT_RADIUS + b + (2 if light_t > 0.0 else 0)
 
 func _refresh_view() -> void:
@@ -498,6 +514,9 @@ func _dungeon_frame(delta: float) -> void:
 	var lead := leader()
 	_update_trail(lead)
 	camera.position = (Vector2(Arena.W, Arena.H) * Balance.CELL / 2.0) if arena != null else lead.position
+	if arena == null:
+		_shake = maxf(0.0, _shake - delta)
+		camera.offset = Vector2(Dice.rng.randf_range(-1, 1), Dice.rng.randf_range(-1, 1)) * 22.0 * _shake if _shake > 0.0 else Vector2.ZERO
 	var pc := current.map.cell_of(lead.position)
 	if pc != _last_cell:
 		_last_cell = pc
@@ -509,6 +528,9 @@ func _dungeon_frame(delta: float) -> void:
 		_check_traps()
 		if dtime != null:
 			dtime.update(delta)
+	if (lead.blind_t > 0.0) != _blind_was:
+		_blind_was = lead.blind_t > 0.0
+		_refresh_view()
 	_detect_t -= delta
 	if _detect_t <= 0.0:
 		_detect_t = 0.2
@@ -774,60 +796,245 @@ func _reveal_door(d: Dictionary) -> void:
 	_refresh_view()
 
 func _check_traps() -> void:
-	for t in current.traps:
-		if t["st"] != "hidden" and t["st"] != "revealed":
+	var now := Time.get_ticks_msec()
+	for h in heroes:
+		if h.down:
 			continue
-		if int(t.get("safe_until", 0)) > Time.get_ticks_msec():
+		var t: Variant = current.trap_at.get(current.map.cell_of(h.position))
+		if t == null or (t["st"] != "hidden" and t["st"] != "revealed") or TrapFx.PERIODIC.has(t["fx"]):
+			continue
+		if int(t.get("safe_until", 0)) > now:
 			continue          # 飛び越えている最中(後ろの仲間も続いて越える)
-		var tc := Vector2i(int(t["x"]), int(t["y"]))
-		for h in heroes:
-			if h.down:
-				continue
-			if current.map.cell_of(h.position) == tc:
-				_trigger_trap(t, h)
-				break
+		_trigger_trap(t, h)
+	# 魔物も罠を踏む(マスを移ったときだけ。置かれたマスの罠は踏まない)
+	for e in current.enemies.duplicate():
+		if e.dead:
+			continue
+		var c := current.map.cell_of(e.position)
+		if c == e.trap_cell:
+			continue
+		e.trap_cell = c
+		var t2: Variant = current.trap_at.get(c)
+		if t2 != null and (t2["st"] == "hidden" or t2["st"] == "revealed") and not TrapFx.PERIODIC.has(t2["fx"]):
+			_trigger_trap(t2, e)
 
-func _trigger_trap(t: Dictionary, victim: Hero) -> void:
+## 予兆のない罠の、踏んだ瞬間の擬音(予兆のある罠は TrapFx.START_CUE)
+const TRAP_CUE := {"pit": "pit", "teleport": "warp", "teleport_one": "warp", "cage": "trap", "alarm": "trap_alarm", "squeak": "squeak",
+	"summon": "summon", "rust": "rust", "rotate": "spin", "trip": "trip", "poison": "poison", "slide": "slide", "prone": "slide",
+	"blind": "flash", "fear": "wail", "chill": "chill", "restrain": "teeth", "lift": "lift", "bolt": "trap"}
+
+func _cell_seen(p: Vector2) -> bool:
+	var c := current.map.cell_of(p)
+	return current.map.in_bounds(c.x, c.y) and current.map.visible[current.map.idx(c.x, c.y)] == 1
+
+## 罠が働く。victim は踏んだ者(仲間か魔物)。
+## 予兆のある罠(TrapFx.MOVING)は判定を振らず、そのとき範囲にいたかで決まる。予兆のない罠は、いままでどおりセーヴか攻撃で決める
+func _trigger_trap(t: Dictionary, victim: Body) -> void:
 	t["st"] = "triggered"
 	current.queue_redraw()
-	Sfx.cue(current, current.map.center_of(Vector2i(int(t["x"]), int(t["y"]))), "trap_alarm" if String(t["kind"]) == "alarm" else "trap")
-	log_msg("罠！ %s(%s)  %sが踏んだ" % [t["name"], SEVERITY_JP.get(String(t["severity"]), ""), victim.ch.name], Color("ff6a5a"))
-	log_msg(String(t["effect"]), Color(0.85, 0.7, 0.7))
+	var fx := String(t.get("fx", ""))
+	var pos := current.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	var hero: Hero = victim as Hero
+	var en: Enemy = victim as Enemy
+	var seen := hero != null or _cell_seen(pos)
+	if seen:
+		var who := hero.ch.name if hero != null else en.display_name
+		log_msg("罠！ %s(%s)  %sが踏んだ" % [t["name"], SEVERITY_JP.get(String(t["severity"]), ""), who], Color("ff6a5a") if hero != null else Color("ffb070"))
+		log_msg(String(t["effect"]), Color(0.85, 0.7, 0.7))
+	if TrapFx.MOVING.has(fx):
+		var cue := String(TrapFx.START_CUE.get(fx, ""))
+		if cue != "":
+			Sfx.cue(current, pos, cue)
+		current.add_child(TrapFx.make(current, t, victim))
+		return
+	Sfx.cue(current, pos, String(TRAP_CUE.get(fx, "trap")))
 	var scale := 1.0
 	var failed := true          # 仕掛けの動き(落とし穴など)が働くか
 	var kind := String(t["kind"])
 	if kind == "save":
 		var sv: Dictionary = t["save"]
-		var abil := String(Talents.SAVE_ABIL_JP.get(String(sv["ability"]), "dex"))
-		var bonus := victim.ch.save_bonus(abil)
-		var roll := victim.ch.roll_d20()
-		var ok := roll + bonus >= int(sv["dc"])
-		log_msg("%sセーヴ %d%+d=%d / 難易度%d → %s" % [sv["ability"], roll, bonus, roll + bonus, int(sv["dc"]), "成功" if ok else "失敗"],
-			Color("9be29b") if ok else Color("ff8a7a"))
+		var ok := false
+		if hero != null:
+			var abil := String(Talents.SAVE_ABIL_JP.get(String(sv["ability"]), "dex"))
+			var bonus := hero.ch.save_bonus(abil)
+			var roll := hero.ch.roll_d20()
+			ok = roll + bonus >= int(sv["dc"])
+			log_msg("%sセーヴ %d%+d=%d / 難易度%d → %s" % [sv["ability"], roll, bonus, roll + bonus, int(sv["dc"]), "成功" if ok else "失敗"],
+				Color("9be29b") if ok else Color("ff8a7a"))
+		else:
+			ok = Dice.d20() + TrapFx.mon_save(en) >= int(sv["dc"])
 		if ok:
 			scale = 0.5 if t.get("half_on_success", false) else 0.0
 			failed = false
 	elif kind == "attack":
+		var ac: int = (hero.ch.armor_class() - hero.rust) if hero != null else en.ac
 		var roll2 := Dice.d20()
-		var hit := roll2 != 1 and (roll2 == 20 or roll2 + int(t["attack_bonus"]) >= victim.ch.armor_class())
-		log_msg("攻撃 %d+%d / AC%d → %s" % [roll2, int(t["attack_bonus"]), victim.ch.armor_class(), "命中" if hit else "外れ"],
-			Color("ff8a7a") if hit else Color("9be29b"))
+		var hit := roll2 != 1 and (roll2 == 20 or roll2 + int(t["attack_bonus"]) >= ac)
+		if hero != null:
+			log_msg("攻撃 %d+%d / AC%d → %s" % [roll2, int(t["attack_bonus"]), ac, "命中" if hit else "外れ"],
+				Color("ff8a7a") if hit else Color("9be29b"))
 		if not hit:
 			scale = 0.0
 			failed = false
 	elif kind == "alarm":
 		current.alert_radius(victim.position, 14.0)
-		log_msg("音が響いた。近くの魔物がこちらへ向かう", Color("ffb070"))
+		if seen:
+			log_msg("音が響いた。近くの魔物がこちらへ向かう", Color("ffb070"))
 	if t.has("damage") and scale > 0.0:
 		var n := Dice.roll(String(t["damage"]))
-		var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * (1.0 - victim.ch.skill_fx("survival")))
-		log_msg("%sダメージ %d" % [t.get("damage_type", ""), int(round(dealt))], Color("ff6a5a"))
-		victim.damage(dealt, victim.position + Vector2(0, 1), true)
-	if failed:
-		match String(t.get("fx", "")):
-			"pit": call_deferred("_fall_down")
-			"teleport": call_deferred("_trap_teleport")
-			"cage": _drop_cage(t)
+		if hero != null:
+			var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * (1.0 - hero.ch.skill_fx("survival")))
+			log_msg("%sダメージ %d" % [t.get("damage_type", ""), int(round(dealt))], Color("ff6a5a"))
+			hero.damage(dealt, hero.position + Vector2(0, 1), true)
+		else:
+			en.take_damage(maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * Balance.TRAP_MON_MULT), Vector2.DOWN, null)
+	if failed and victim.is_alive():
+		_trap_effect(t, fx, victim, pos)
+
+## 予兆のない罠の、セーヴに失敗したときの動き
+func _trap_effect(t: Dictionary, fx: String, victim: Body, pos: Vector2) -> void:
+	var hero: Hero = victim as Hero
+	var en: Enemy = victim as Enemy
+	match fx:
+		"pit":
+			if hero != null:
+				call_deferred("_fall_down")
+			else:
+				en.fall_away()
+		"teleport":
+			if hero != null:
+				call_deferred("_trap_teleport")
+			else:
+				call_deferred("_teleport_one", victim)
+		"teleport_one": call_deferred("_teleport_one", victim)
+		"cage": _drop_cage(t)
+		"summon": _trap_summon(pos)
+		"squeak": pass          # 鳴るだけ(alarm で魔物が来る)
+		"rust":
+			if hero != null:
+				hero.rust = mini(3, hero.rust + 1)
+				log_msg("%sの鎧が錆びた。この潜行の間、守りが %d 下がる" % [hero.ch.name, hero.rust], Color("ffb070"))
+			else:
+				en.apply_sunder(10.0)
+		"rotate":
+			if hero != null:
+				hero.confuse_t = 5.0
+				log_msg("目が回る。しばらく前後左右が逆になる", Color("ffb070"))
+			else:
+				en.apply_stun(1.5)
+		"trip":
+			TrapFx.knock_down(victim, 0.6)
+			if hero != null:
+				_spill_crystals(hero)
+		"poison":
+			var dps := maxf(0.5, Dice.average(String(t.get("damage", "1d4"))) * Balance.TRAP_DMG_SCALE * 0.12)
+			TrapFx.poison(victim, 8.0, dps)
+			if hero != null:
+				log_msg("%sは毒に冒された" % hero.ch.name, Color("9be06a"))
+		"slide":
+			var dirs: Array = []
+			var c := current.map.cell_of(victim.position)
+			for d in FloorMap.DIRS4:
+				if not current.map.opaque(c.x + d.x, c.y + d.y):
+					dirs.append(Vector2(d))
+			var v: Vector2 = dirs[Dice.rng.randi_range(0, dirs.size() - 1)] if not dirs.is_empty() else Vector2.ZERO
+			victim.knock = v * 360.0 / maxf(0.5, victim.body_mass() * 0.7)
+			TrapFx.knock_down(victim, 0.9)
+		"prone": TrapFx.knock_down(victim, 1.2)
+		"lift": TrapFx.hold(victim, "lift", 1.0)
+		"restrain":
+			TrapFx.hold(victim, "teeth", 3.0)
+			if hero != null:
+				log_msg("挟まれた! 攻撃を連打してこじ開ける", Color("ffb070"))
+		"blind":
+			if hero != null:
+				hero.blind_t = 6.0
+				if hero == leader():
+					_refresh_view()
+			else:
+				en.apply_stun(1.5)
+		"fear":
+			if hero != null:
+				hero.fear_t = 4.0
+			elif en.kind != "mindless":
+				en.state = "flee"
+				en.timer = 3.0
+		"chill": TrapFx.slow(victim, "chill", 0.55, 8.0)
+
+## 転移の罠: 踏んだ一人(または魔物)だけが、同じ層の別の部屋へ。仲間とははぐれる
+func _teleport_one(b: Body) -> void:
+	if phase != "dungeon" or current == null or arena != null or not is_instance_valid(b) or not b.is_alive():
+		return
+	var m := current.map
+	var pc := m.cell_of(b.position)
+	var at := random_room_pos(current, m.room_at[m.idx(pc.x, pc.y)] if m.in_bounds(pc.x, pc.y) else -1)
+	if at.x >= INF:
+		return
+	b.position = at
+	b.knock = Vector2.ZERO
+	Sfx.cue(current, at, "warp_out")
+	if b is Hero:
+		var h := b as Hero
+		if h == leader():
+			trail = [h.position]
+			camera.position = h.position
+			camera.reset_smoothing()
+			_last_cell = Vector2i(-99, -99)
+			_refresh_view()
+		if heroes.size() > 1:
+			log_msg("%sだけが、どこかへ飛ばされた。仲間とはぐれた(%s で操作する仲間を替えられる)" % [h.ch.name, Controls.hint("switch")], Color("b8a8e8"))
+		else:
+			log_msg("どこかへ飛ばされた。", Color("b8a8e8"))
+	else:
+		(b as Enemy).trap_cell = m.cell_of(at)
+
+## 召喚の罠: 罠のそばに、この層の魔物の群れが湧く
+func _trap_summon(pos: Vector2) -> void:
+	var meta: Dictionary = current.map.data["meta"]
+	var party_n := 0
+	for h in heroes:
+		if not h.down:
+			party_n += 1
+	var level := int(meta.get("party", {}).get("level", 1))
+	var enc := EncounterGen.generate(String(meta.get("theme", "generic")), level, 0, maxi(1, party_n))
+	if enc.is_empty():
+		return
+	var lines: Array = []
+	for g in enc["groups"]:
+		lines.append(EncounterGen.mon_line(g))
+	var made: Array = current.spawn_encounter(lines, String(enc["kind"]), pos, "呼び出された")
+	if not made.is_empty() and _cell_seen(pos):
+		var l0: Dictionary = lines[0]
+		log_msg("%sが呼び出された!" % String(l0.get("world_name", l0.get("name_ja", "魔物"))), Color("ff6a5a"))
+
+## 転びの罠: 袋の燐晶の一部が、床へ散らばる(拾い直せる)
+func _spill_crystals(h: Hero) -> void:
+	var spilled := 0.0
+	for pid in bag_crystal.keys():
+		var kg := float(bag_crystal[pid])
+		var lose := kg * 0.25
+		if lose < 0.005:
+			continue
+		bag_crystal[pid] = kg - lose
+		var pieces := clampi(int(lose / 0.05) + 1, 1, 4)
+		for i in pieces:
+			current.ground.add_crystal(h.position, String(pid), lose / pieces, Vector2.from_angle(Dice.rng.randf() * TAU) * Dice.rng.randf_range(280.0, 480.0))
+		spilled += lose
+	if spilled > 0.0:
+		Sfx.cue(current, h.position + Vector2(0, 12), "spill")
+		log_msg("袋から燐晶がこぼれた(%.2fkg)。拾い直せる" % spilled, Color("ffb070"))
+
+## 遺体の毒針(遺体を調べたとき、ときどき)。予兆が無いので【耐久力】セーヴ
+func _corpse_needle(pos: Vector2) -> void:
+	var h := leader()
+	var dc := 10 + current.layer_no
+	var roll := h.ch.roll_d20()
+	var bonus := h.ch.save_bonus("con")
+	Sfx.cue(current, pos, "needle")
+	var ok := roll + bonus >= dc
+	log_msg("遺体に毒針が仕込んであった! 耐久力セーヴ %d%+d / 難易度%d → %s" % [roll, bonus, dc, "成功" if ok else "失敗"], Color("9be29b") if ok else Color("ff8a7a"))
+	if not ok:
+		h.poison(10.0, 0.8 + current.layer_no * 0.4)
 
 # ---------- 操作 ----------
 
@@ -881,6 +1088,8 @@ func interact() -> void:
 		return
 	var body := current.ground.corpse_near(leader().position, CORPSE_REACH)
 	if not body.is_empty():
+		if not bool(body["searched"]) and Dice.rng.randf() < Balance.NEEDLE_CHANCE:
+			_corpse_needle(body["pos"])
 		current.ground.search_corpse(body)
 		current.queue_redraw()
 		_update_hint()
@@ -969,7 +1178,8 @@ func _disarm(t: Dictionary) -> void:
 	elif roll + bonus <= dc - 5:
 		log_msg("解除に失敗した!", Color("ff8a7a"))
 		Sfx.cue(current, current.map.center_of(Vector2i(int(t["x"]), int(t["y"]))), "disarm_fail")
-		_trigger_trap(t, leader())
+		if not TrapFx.PERIODIC.has(String(t.get("fx", ""))):
+			_trigger_trap(t, leader())
 	else:
 		log_msg("解除に失敗した(もう一度試せる)", Color("ffb070"))
 
@@ -1085,14 +1295,18 @@ func open_trap_menu(t: Dictionary) -> void:
 	hud.hint = ""
 	_freeze_world(true)
 	var who := party_best_char("lock")
-	var fx_note := {"pit": "踏むと床が抜けて、下の階へ落ちる。", "teleport": "踏むと、同じ層のどこかへ引き込まれる。", "cage": "踏むと格子が落ち、部屋の出口が閉ざされる。"}
-	var note := "%s(%s)。%s%s" % [String(t["trigger"]) if t.has("trigger") else "", SEVERITY_JP.get(String(t["severity"]), ""), String(fx_note.get(String(t.get("fx", "")), "")), String(t.get("effect", ""))]
+	var fx := String(t.get("fx", ""))
+	var fx_note := {"pit": "踏むと床が抜けて、下の階へ落ちる。", "teleport": "踏むと、同じ層のどこかへ引き込まれる。", "cage": "踏むと格子が落ち、部屋の出口が閉ざされる。",
+		"teleport_one": "踏んだ一人だけが、同じ層のどこかへ飛ばされる。"}
+	var note := "%s(%s)。%s%s" % [String(t["trigger"]) if t.has("trigger") else "", SEVERITY_JP.get(String(t["severity"]), ""), String(fx_note.get(fx, "")), String(t.get("effect", ""))]
+	var opts: Array = [["disarm", "解除する", "%sの盗賊道具 %+d / 難易度 %d。大きく外すと発動する。" % [who.name, who.lock_bonus(), int(t["disarm_dc"])]]]
+	if TrapFx.MOVING.has(fx):
+		opts.append(["spring", "わざと発動させる", "石を投げて発動させる。離れていれば無事。巻き込まれる範囲に仲間や魔物がいれば当たる。音で魔物が気づく。"])
+	elif not TrapFx.PERIODIC.has(fx):
+		opts.append(["spring", "わざと発動させる", "石を投げて空撃ちさせる。確実だが、音で近くの魔物が気づく。"])
+	opts.append(["jump", "飛び越える" if not TrapFx.PERIODIC.has(fx) else "間合いを測って抜ける", "%sの〈軽業〉か〈運動〉 %+d / 難易度 %d。罠は残る。失敗すると踏む。" % [leader().ch.name, jump_bonus(), jump_dc(t)]])
 	trap_menu = TrapMenu.new()
-	trap_menu.setup("罠: %s" % t["name"], note, [
-		["disarm", "解除する", "%sの盗賊道具 %+d / 難易度 %d。大きく外すと発動する。" % [who.name, who.lock_bonus(), int(t["disarm_dc"])]],
-		["spring", "わざと発動させる", "石を投げて空撃ちさせる。確実だが、音で近くの魔物が気づく。"],
-		["jump", "飛び越える", "%sの〈軽業〉か〈運動〉 %+d / 難易度 %d。罠は残る。失敗すると踏む。" % [leader().ch.name, jump_bonus(), jump_dc(t)]],
-	])
+	trap_menu.setup("罠: %s" % t["name"], note, opts)
 	trap_menu.chosen.connect(_on_trap_choice)
 	ui_layer.add_child(trap_menu)
 
@@ -1116,6 +1330,23 @@ func _on_trap_choice(a: String) -> void:
 func spring_trap(t: Dictionary) -> void:
 	t["st"] = "triggered"
 	var pos := current.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	var fx := String(t.get("fx", ""))
+	if TrapFx.MOVING.has(fx):
+		# 動きのある罠は、本当に動く(離れて投げれば無事。魔物を巻き込める)
+		log_msg("石を投げた。%sが動き出した" % t["name"], Color("e8dcb0"))
+		var cue := String(TrapFx.START_CUE.get(fx, ""))
+		if cue != "":
+			Sfx.cue(current, pos, cue)
+		current.add_child(TrapFx.make(current, t, null))
+		current.alert_radius(pos, 8.0)
+		current.queue_redraw()
+		return
+	if fx == "summon":
+		Sfx.cue(current, pos, "summon")
+		log_msg("石を投げた。%sが働いた" % t["name"], Color("e8dcb0"))
+		_trap_summon(pos)
+		current.queue_redraw()
+		return
 	Sfx.cue(current, pos, "trap_alarm" if String(t["kind"]) == "alarm" else "trap")
 	log_msg("石を投げた。%sが空を切った" % t["name"], Color("e8dcb0"))
 	var loud := 14.0 if String(t["kind"]) == "alarm" else 8.0
@@ -1132,8 +1363,8 @@ func jump_trap(t: Dictionary) -> void:
 	if ok:
 		t["safe_until"] = Time.get_ticks_msec() + 6000
 		current.spawn_text(leader().position + Vector2(0, -26), "ひらり", Color("9be29b"))
-	else:
-		_trigger_trap(t, leader())
+	elif not TrapFx.PERIODIC.has(String(t.get("fx", ""))):
+		_trigger_trap(t, leader())      # 振り子や噴き口は、外せばそのまま刃や炎が来る
 
 ## 落とし穴: 一行ごと下の階へ落ちる(どこかの部屋)。いちばん下の階では、浅い穴で済む
 func _fall_down() -> void:
