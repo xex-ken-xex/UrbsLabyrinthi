@@ -79,6 +79,14 @@ func _run() -> void:
 	await shot("pleasure")
 	town._go("general")
 	await shot("general")
+	main.gs.add_item("relic_tag", 2)
+	main.gs.add_item("relic_gear")
+	main.gs.add_item("relic_coins", 3)
+	town.last_report = ["査定: 燐晶 低0.70kg 高0.60kg → 77銀貨(税 23銀貨)", "預け金 377銀貨"]
+	town._go("guild")
+	await shot("guild")
+	town._hand_relic("relic_tag", 1)
+	await shot("guild_hand")
 	for id in ["kuro_take", "tomoshi_take", "iki_take", "shinju_gai", "nenneki", "relic_tag", "kemono_niku", "hikari_goke"]:
 		main.gs.add_item(id, 3)
 	main.open_inventory()
