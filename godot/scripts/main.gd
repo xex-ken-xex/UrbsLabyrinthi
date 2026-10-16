@@ -392,7 +392,7 @@ func start_day() -> void:
 	hud.overlay = []
 	dtime = DungeonTime.new(self)
 	enter_floor(1, "up")
-	log_msg("第%d日。%s。" % [gs.day + 1, current.map.data["meta"].get("night_label", "")], Color("e8dcb0"))
+	log_msg("%s、%s。" % [ZaCalendar.label(gs.day), current.map.data["meta"].get("night_label", "")], Color("e8dcb0"))
 
 func _apply_control() -> void:
 	for i in heroes.size():

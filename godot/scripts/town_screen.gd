@@ -112,6 +112,7 @@ var last_report: Array = []        # 坑口館の査定課で、もう一度読�
 var notices: Array = []
 var party_bar: HBoxContainer
 var silver_label: Label
+var date_label: Label              # 今夜の座暦の日付(預け金の上)
 var signs: Control                 # 広場の看板(画面の上に置く)
 var report_box: PanelContainer     # 地上へ戻ったときの、ギルドの査定報告
 var place_box: HBoxContainer       # 店の中: 左に戻るボタン、右に中身
@@ -133,7 +134,7 @@ func arrive(lines: Array) -> void:
 	report = lines
 	location = "hub"
 	sel_id = ""
-	_say(HUB_LINE, UIKit.TEXT)
+	_say(TownLines.pick("hub", gs.day, [HUB_LINE]), UIKit.TEXT)
 	_refresh_all()
 
 func _ready() -> void:
@@ -156,8 +157,14 @@ func _ready() -> void:
 	party_bar = UIKit.hbox(10)
 	party_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	th.add_child(party_bar)
+	var rv := UIKit.vbox(0)
+	date_label = UIKit.label("", 13, UIKit.DIM)
+	date_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rv.add_child(date_label)
 	silver_label = UIKit.label("", 20, Color("f1d98a"))
-	th.add_child(silver_label)
+	silver_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rv.add_child(silver_label)
+	th.add_child(rv)
 	root.add_child(top)
 	# 真ん中: 広場では背景の絵だけ(看板は別の層)。店の中では、左に戻るボタン、右に中身
 	var stage := Control.new()
@@ -240,8 +247,8 @@ func _make_sign(sg: Array) -> Control:
 	b.add_theme_color_override("font_color", Color("f3e2b8") if id != "dive" else Color("d8f6ff"))
 	b.custom_minimum_size = Vector2(150, 0)
 	b.pressed.connect(_on_sign.bind(id))
-	b.focus_entered.connect(_say.bind(String(sg[4]), UIKit.TEXT))
-	b.mouse_entered.connect(_say.bind(String(sg[4]), UIKit.TEXT))
+	b.focus_entered.connect(_sign_say.bind(id, String(sg[4])))
+	b.mouse_entered.connect(_sign_say.bind(id, String(sg[4])))
 	holder.add_child(b)
 	var pole := ColorRect.new()
 	pole.color = Color(0.1, 0.06, 0.03, 0.9)
@@ -253,6 +260,10 @@ func _make_sign(sg: Array) -> Control:
 		pole.position = Vector2(-2.0, 0.0)
 		pole.size = Vector2(4.0, 18.0))
 	return holder
+
+## 看板に目をやった。通りの様子は、月によって替わる
+func _sign_say(id: String, base: String) -> void:
+	_say(TownLines.sign_line(id, gs.day, base), UIKit.TEXT)
 
 func _on_sign(id: String) -> void:
 	last_place = id
@@ -380,6 +391,8 @@ func _refresh_top() -> void:
 			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT)
 		party_bar.add_child(l)
 	silver_label.text = "預け金 %d銀貨" % gs.bank_silver
+	var sp := TownLines.special_name(gs.day)
+	date_label.text = "%s  %s%s" % [ZaCalendar.label(gs.day), ZaCalendar.setsu(gs.day), ("  " + sp) if sp != "" else ""]
 
 func _refocus() -> void:
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
@@ -394,7 +407,7 @@ func _go(loc: String) -> void:
 	_parting = ""
 	_walk_log.clear()
 	if loc == "hub":
-		_say(String(LEAVE_LINES.pick_random()) if from != "hub" else HUB_LINE, UIKit.TEXT)
+		_say(TownLines.pick("leave", gs.day, LEAVE_LINES) if from != "hub" else TownLines.pick("hub", gs.day, [HUB_LINE]), UIKit.TEXT)
 	else:
 		last_place = loc
 		_say(String(ENTER_LINES.get(loc, "")), UIKit.TEXT)
@@ -407,7 +420,9 @@ func _build_content() -> void:
 	_build_report()
 	if location == "hub":
 		return
-	place_label.text = String(QUOTES.get(location, ""))      # 店の人の一言(左)
+	place_label.text = String(QUOTES.get(location, ""))      # 店の人の一言(左)。宿の主人は、月と祭りで替わる
+	if location == "inn":
+		place_label.text = TownLines.pick_stable("inn", gs.day, [QUOTES["inn"]])
 	match location:
 		"smith", "general", "magic": _content_shop(location)
 		"temple": _content_temple()
@@ -932,7 +947,7 @@ func _rest(cost: int) -> void:
 	call_deferred("_refocus_content")
 
 func _rumor() -> void:
-	_say("酒場の隅で聞こえた話だ。\n" + String(RUMORS.pick_random()), UIKit.TEXT)
+	_say("酒場の隅で聞こえた話だ。\n" + TownLines.pick("rumors", gs.day, RUMORS), UIKit.TEXT)
 
 func _save() -> void:
 	_say("記録をつけた。" if gs.save() else "記録に失敗した。", UIKit.GOOD)
@@ -943,9 +958,9 @@ func _content_pleasure() -> void:
 	_head("花街「寝息通り」", "縁環区と壁下区の境に伸びる通り。迷宮の「息」に対して、人の寝息の通りと呼ばれる。")
 	content.add_child(UIKit.label("灯火の女神ルシュカの守る通り。ここでは、誰もが肩書きを脱いで歩く。", 14, UIKit.DIM))
 	var r := UIKit.hbox(8)
-	r.add_child(UIKit.button("通りを歩く", func(): _push_walk(String(WALK_LINES.pick_random()))))
-	r.add_child(UIKit.button("灯籠を見上げる", func(): _push_walk(String(LOOK_LINES.pick_random()))))
-	r.add_child(UIKit.button("占い師の屋台", func(): _push_walk(String(FORTUNES.pick_random()))))
+	r.add_child(UIKit.button("通りを歩く", func(): _push_walk(TownLines.pick("walk", gs.day, WALK_LINES))))
+	r.add_child(UIKit.button("灯籠を見上げる", func(): _push_walk(TownLines.pick("look", gs.day, LOOK_LINES))))
+	r.add_child(UIKit.button("占い師の屋台", func(): _push_walk(TownLines.pick("fortune", gs.day, FORTUNES))))
 	content.add_child(r)
 	log_label = UIKit.label("", 16, Color("e8d8e8"))
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
