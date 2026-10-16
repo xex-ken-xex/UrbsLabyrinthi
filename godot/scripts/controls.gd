@@ -5,15 +5,17 @@ extends RefCounted
 ## 移動は、左スティックでもいつでもできる(割り当ての外)。
 
 const PATH := "user://controls.cfg"
-const VERSION := 3      # 2: 攻撃を足し(Space)、構えを Ctrl に移し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
+const VERSION := 4      # 2: 攻撃を足し(Space)、構えを Ctrl に移し、コントローラーのスキルを並べ替え、Esc を持ち物から外した
                         # 3: マウスの枠を足した(左クリックで攻撃、右クリックで構え)
+                        # 4: 構えを無くした。Ctrl でスキルを選び、右クリックで選んだものを使う。スキル5・6を足した
 const MOVE := ["move_up", "move_down", "move_left", "move_right"]
 
 ## [id, 名前]。この順に設定画面へ並ぶ
 const ACTIONS := [
 	["move_up", "上へ"], ["move_down", "下へ"], ["move_left", "左へ"], ["move_right", "右へ"],
-	["attack", "攻撃(正面へ一撃)"], ["guard", "構え(押している間)"], ["dodge", "転がり"],
-	["skill1", "スキル1"], ["skill2", "スキル2"], ["skill3", "スキル3"], ["skill4", "スキル4"],
+	["attack", "攻撃(押し続けると溜め)"], ["dodge", "転がり"],
+	["skill_next", "スキルを選ぶ(順に切り替え)"], ["skill_use", "選んだスキルを使う"],
+	["skill1", "スキル1"], ["skill2", "スキル2"], ["skill3", "スキル3"], ["skill4", "スキル4"], ["skill5", "スキル5"], ["skill6", "スキル6"],
 	["switch", "操作する仲間を替える"], ["interact", "調べる・開ける・拾う"], ["search", "探る(罠と隠し扉)"],
 	["quick_heal", "治療薬を使う"], ["rest", "休む(野営)"], ["zoom_in", "ミニマップを拡大"], ["zoom_out", "ミニマップを縮小"], ["inventory", "持ち物(メニュー)"], ["confirm", "決定(報告を閉じる)"],
 ]
@@ -36,7 +38,7 @@ static func defaults() -> Dictionary:
 	for id in d:
 		d[id]["mouse"] = {}
 	d["attack"]["mouse"] = _m(MOUSE_BUTTON_LEFT)       # マウスの方向へ振る
-	d["guard"]["mouse"] = _m(MOUSE_BUTTON_RIGHT)
+	d["skill_use"]["mouse"] = _m(MOUSE_BUTTON_RIGHT)    # 選んだスキル(0 なら通常攻撃)を、マウスの方向へ
 	return d
 
 static func _default_binds() -> Dictionary:
@@ -46,12 +48,15 @@ static func _default_binds() -> Dictionary:
 		"move_left": {"keys": [_k(KEY_A), _k(KEY_LEFT)], "pad": _b(JOY_BUTTON_DPAD_LEFT)},
 		"move_right": {"keys": [_k(KEY_D), _k(KEY_RIGHT)], "pad": _b(JOY_BUTTON_DPAD_RIGHT)},
 		"attack": {"keys": [_k(KEY_SPACE), _k(KEY_J)], "pad": _b(JOY_BUTTON_X)},
-		"guard": {"keys": [_k(KEY_CTRL), {}], "pad": _b(JOY_BUTTON_LEFT_SHOULDER)},
 		"dodge": {"keys": [_k(KEY_SHIFT), {}], "pad": _b(JOY_BUTTON_B)},
-		"skill1": {"keys": [_k(KEY_1), {}], "pad": _b(JOY_BUTTON_Y)},
+		"skill_next": {"keys": [_k(KEY_CTRL), {}], "pad": _b(JOY_BUTTON_LEFT_SHOULDER)},
+		"skill_use": {"keys": [{}, {}], "pad": _b(JOY_BUTTON_Y)},
+		"skill1": {"keys": [_k(KEY_1), {}], "pad": {}},      # コントローラーは、LB で選んで Y で使う
 		"skill2": {"keys": [_k(KEY_2), {}], "pad": _ax(JOY_AXIS_TRIGGER_RIGHT, 1)},
 		"skill3": {"keys": [_k(KEY_3), {}], "pad": _ax(JOY_AXIS_TRIGGER_LEFT, 1)},
 		"skill4": {"keys": [_k(KEY_4), {}], "pad": _b(JOY_BUTTON_RIGHT_STICK)},
+		"skill5": {"keys": [_k(KEY_5), {}], "pad": {}},
+		"skill6": {"keys": [_k(KEY_6), {}], "pad": {}},
 		"switch": {"keys": [_k(KEY_Q), {}], "pad": _b(JOY_BUTTON_RIGHT_SHOULDER)},
 		"interact": {"keys": [_k(KEY_E), {}], "pad": _b(JOY_BUTTON_A)},
 		"search": {"keys": [_k(KEY_F), {}], "pad": _b(JOY_BUTTON_LEFT_STICK)},
@@ -88,6 +93,8 @@ static func setup() -> void:
 			var d := defaults()
 			for a in ACTIONS:
 				binds[a[0]]["mouse"] = d[a[0]]["mouse"]
+		if int(cf.get_value("meta", "version", 1)) < 4:
+			_migrate_v3(cf)
 	for id in FIXED:
 		if not InputMap.has_action(id):
 			InputMap.add_action(id)
@@ -159,15 +166,31 @@ static func _migrate_v1() -> void:
 	var d := defaults()
 	for id in ["attack", "skill1", "skill2", "skill3", "skill4", "search"]:
 		binds[id]["pad"] = d[id]["pad"]
-	# 攻撃は Space、構えは Ctrl に移した
+	# 攻撃は Space に移した(構えの Space は、版4の移し替えで外す)
 	binds["attack"]["keys"] = d["attack"]["keys"].duplicate(true)
-	for i in (binds["guard"]["keys"] as Array).size():
-		if (binds["guard"]["keys"][i] as Dictionary).get("c", -1) == KEY_SPACE:
-			binds["guard"]["keys"][i] = d["guard"]["keys"][i] if i == 0 else {}
 	var keys: Array = binds["inventory"]["keys"]
 	for i in keys.size():
 		if (keys[i] as Dictionary).get("c", -1) == KEY_ESCAPE:
 			keys[i] = d["inventory"]["keys"][i]
+
+## 版3までの割り当てを、版4の決まりに合わせる。構えに割り当てていた入力(Ctrl・右クリック・LB)は、スキルを選ぶ・使うへ移す
+static func _migrate_v3(cf: ConfigFile) -> void:
+	var d := defaults()
+	var old_guard = cf.get_value("binds", "guard", {})
+	if old_guard is Dictionary:
+		var keys: Array = old_guard.get("keys", [])
+		for i in mini(2, keys.size()):
+			if keys[i] is Dictionary and String((keys[i] as Dictionary).get("t", "")) == "key" and int((keys[i] as Dictionary).get("c", 0)) != KEY_SPACE:
+				binds["skill_next"]["keys"][i] = keys[i]
+		var p = old_guard.get("pad", {})
+		if p is Dictionary and not p.is_empty():
+			binds["skill_next"]["pad"] = p
+		var m = old_guard.get("mouse", {})
+		if m is Dictionary and not m.is_empty():
+			binds["skill_use"]["mouse"] = m
+	# コントローラーの Y は、選んだスキルを使うへ(スキル1 から外す)
+	if binds["skill1"]["pad"] == d["skill_use"]["pad"]:
+		binds["skill1"]["pad"] = {}
 
 static func save() -> void:
 	var cf := ConfigFile.new()

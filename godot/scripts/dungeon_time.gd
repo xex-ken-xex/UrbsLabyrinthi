@@ -3,6 +3,7 @@ extends RefCounted
 ## 迷宮の中の時間。時計は無い世界なので、太陽と月で見せる(Hud)。
 ## 起きている間はゆっくり、休んでいる間は速く進む。10分ごとにワンダリング・モンスターを振る。
 ## 夜になったとき起きていると、吐息に呑まれて、どこかの部屋へ放り出される(暗転はしない)。
+## 吐く夜(層の meta.exhale)は違う。日が落ちると迷宮が魔物を大量に吐き出し、夜明けまで階段が塞がる(呑まれはしない)。
 ## 休むと HP と MP が戻る(迷宮では、ほかに自然には戻らない)。6〜8時間で目を覚ますか、中断で終わる。
 
 var main: Node                 # Main
@@ -53,8 +54,13 @@ func update(delta: float) -> void:
 			rest_end = _next_dawn()
 		else:
 			stop_rest("目を覚ました。%d時間ほど休んだ。" % int(round((minutes - rest_from) / 60.0)))
-	elif not resting and not was_night and is_night():
-		_nightfall()
+	elif not was_night and is_night():
+		if exhaling():
+			_exhale()
+		elif not resting:
+			_nightfall()
+	elif was_night and not is_night() and main.current != null and main.current.exhale:
+		main.log_msg("夜が明けた。階段を塞いでいた吐息が、引いていく。", Color("e8dcb0"))
 
 func _next_dawn() -> float:
 	var day0 := floorf(minutes / 1440.0) * 1440.0
@@ -113,16 +119,18 @@ func _alive_wanderers() -> int:
 ## 寝込みを襲われたら true(休息はそこで終わる)
 func _roll_wander() -> bool:
 	var fl: FloorInstance = main.current
-	if fl == null or fl.arena or _alive_wanderers() >= Balance.WANDER_MAX:
+	if fl == null or fl.arena or _alive_wanderers() >= (Balance.EXHALE_WANDER_MAX if exhaling() else Balance.WANDER_MAX):
 		return false
 	var p := Balance.REST_WANDER_CHANCE if resting else Balance.WANDER_CHANCE
+	if exhaling():
+		p *= Balance.EXHALE_WANDER_MULT
 	if Dice.rng.randf() >= p:
 		return false
 	var ambush := resting
 	return spawn_wanderer(ambush) and ambush
 
 ## ワンダリングの群れを一つ出す。寝込みなら近く(奇襲)、起きていれば見えない離れた所から歩いてくる。出せたら true
-func spawn_wanderer(ambush: bool) -> bool:
+func spawn_wanderer(ambush: bool, quiet: bool = false) -> bool:
 	var fl: FloorInstance = main.current
 	var meta: Dictionary = fl.map.data["meta"]
 	var party_n := 0
@@ -150,7 +158,7 @@ func spawn_wanderer(ambush: bool) -> bool:
 			if not h.down:
 				h.sleep_t = Balance.SURPRISE_TIME
 		main.log_msg("寝込みを襲われた!", Color("ff6a5a"))
-	else:
+	elif not quiet:
 		main.log_msg(["どこかで、足音がした。", "遠くで、何かがうごめく気配がする。", "風向きが変わった。何かが近づいてくる。"][Dice.rng.randi_range(0, 2)], Color(0.85, 0.75, 0.7))
 	return true
 
@@ -172,6 +180,26 @@ func _spawn_cell(fl: FloorInstance, from: Vector2i, lo: int, hi: int) -> Vector2
 	return Vector2i(k % m.w, k / m.w)
 
 # ---------- 夜 ----------
+
+## いま吐く夜の夜の間か(魔物が湧き、階段が塞がっている)
+func exhaling() -> bool:
+	var fl: FloorInstance = main.current
+	return fl != null and not fl.arena and fl.exhale and is_night()
+
+## 階段が使えないか(吐く夜の夜の間)
+func stairs_sealed() -> bool:
+	return exhaling()
+
+## 吐く夜に日が落ちた。迷宮が魔物を吐き出し、階段が塞がる。休んでいても起きていても同じ(呑まれはしない)
+func _exhale() -> void:
+	var fl: FloorInstance = main.current
+	var n := 0
+	for i in Balance.EXHALE_BURST:
+		if spawn_wanderer(false, true):
+			n += 1
+	Sfx.cue(fl, main.leader().position, "exhale")
+	main.log_msg("日が落ちた。今夜は吐く夜だ。迷宮が、魔物を吐き出した。", Color("ff8a6a"))
+	main.log_msg("階段は吐息に塞がれた。夜明けまで、この層から出られない。(%d組が湧いた)" % n, Color("ff9a8a"))
 
 ## 起きたまま夜を迎えた。吐息に呑まれ、夜明けにどこかの部屋で目を覚ます(回復はしない)
 func _nightfall() -> void:

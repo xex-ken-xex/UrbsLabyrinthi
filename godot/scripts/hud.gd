@@ -102,9 +102,9 @@ func _draw() -> void:
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var H := func(id: String) -> String: return Controls.hint(id)
-		var lines := ["移動: %s%s%s%s   攻撃: %s(正面へ一撃)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
-				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("guard"), H.call("dodge"),
-				H.call("skill1"), H.call("skill4"), H.call("switch")],
+		var lines := ["移動: %s%s%s%s   攻撃: %s(押し続けて溜め)   転がり: %s   スキル: %s〜%s(%sで選び、右クリックで使う)   仲間の切替: %s" % [
+				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("dodge"),
+				H.call("skill1"), H.call("skill6"), H.call("skill_next"), H.call("switch")],
 			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   ミニマップ: %s / %s(画面はホイール)   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
 				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal"), H.call("rest"), H.call("zoom_in"), H.call("zoom_out")],
 			"魔物は触れると殴ってくる。敵のHPを削るほど押し込め、こちらのHPが減ると押される。戻る・閉じる: Esc"]
@@ -184,24 +184,30 @@ func _draw_pickups(fl: FloorInstance, size_v: Vector2) -> void:
 		UI.text(self, r.position + Vector2(44, 23), "%s  %s" % [p["name"], q], 14, Color(col.r, col.g, col.b, a), false)
 		y += 40.0
 
+## 下の帯: 通常攻撃(0)とスキル1〜6。Ctrl で選んでいるもの(右クリックで出る)を金の太枠で示す
 func _draw_skillbar(size_v: Vector2) -> void:
 	var heroes: Array = game.heroes
 	if heroes.is_empty():
 		return
 	var h: Hero = heroes[game.active]
-	var w := 138.0
-	var aw := 104.0
-	var x0 := size_v.x / 2.0 - (w * 4.0 + 18.0 + aw + 6.0) / 2.0 + aw + 6.0
+	var n := Character.SLOTS
+	var w := 128.0
+	var aw := 112.0
+	var x0 := size_v.x / 2.0 - (w * n + 6.0 * (n - 1) + aw + 6.0) / 2.0 + aw + 6.0
 	var y0 := size_v.y - 58.0
-	# 通常攻撃: 待ち時間の進み具合を、左から満ちる棒で示す
+	var gold := Color("ffd060")
+	# 通常攻撃: 待ち時間の進み具合を、左から満ちる棒で示す。溜めている間は、溜めの棒
 	var ar := Rect2(x0 - aw - 6.0, y0, aw, 44)
 	draw_rect(ar, Color(0, 0, 0, 0.6))
 	var af := h.attack_ready_frac()
-	draw_rect(Rect2(ar.position, Vector2(ar.size.x * af, ar.size.y)), Color(0.55, 0.42, 0.2, 0.55) if af < 1.0 else Color(0.55, 0.42, 0.2, 0.25))
+	if h.charging():
+		draw_rect(Rect2(ar.position, Vector2(ar.size.x * h.charge_frac(), ar.size.y)), Color(0.85, 0.5, 0.15, 0.6))
+	else:
+		draw_rect(Rect2(ar.position, Vector2(ar.size.x * af, ar.size.y)), Color(0.55, 0.42, 0.2, 0.55) if af < 1.0 else Color(0.55, 0.42, 0.2, 0.25))
 	UI.text(self, ar.position + Vector2(8, 18), "[%s] 攻撃" % Controls.hint("attack"), 14, Color("e8dcb0") if af >= 1.0 else Color(0.7, 0.7, 0.72), false)
-	UI.text(self, ar.position + Vector2(8, 36), "%s 待ち %.1f秒" % [ItemDB.WEAPON_CAT_JP.get(h.ch.weapon_cat(), "素手"), h.attack_cd()], 12, Color(0.7, 0.7, 0.75), false)
-	draw_rect(ar, Color("e8dcb0") if af >= 1.0 else Color(1, 1, 1, 0.18), false, 1.5 if af >= 1.0 else 1.0)
-	for i in 4:
+	UI.text(self, ar.position + Vector2(8, 36), ("溜め %d%%" % int(h.charge_frac() * 100.0)) if h.charging() else "%s 待ち %.1f秒" % [ItemDB.WEAPON_CAT_JP.get(h.ch.weapon_cat(), "素手"), h.attack_cd()], 12, Color(0.7, 0.7, 0.75), false)
+	_frame(ar, h.ch.skill_sel == 0, af >= 1.0, gold)
+	for i in n:
 		var id := String(h.ch.slots[i])
 		var r := Rect2(x0 + i * (w + 6.0), y0, w, 44)
 		draw_rect(r, Color(0, 0, 0, 0.6))
@@ -214,12 +220,27 @@ func _draw_skillbar(size_v: Vector2) -> void:
 			if cd > 0.0 and full > 0.0:
 				draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(cd / full, 0.0, 1.0), r.size.y)), Color(0.3, 0.3, 0.35, 0.7))
 			var nocol := Color("e8dcb0") if ready else Color(0.6, 0.6, 0.65)
-			UI.text(self, r.position + Vector2(8, 18), "[%d] %s" % [i + 1, h.ch.skill_label(id)], 14, nocol, false)
+			UI.text(self, r.position + Vector2(8, 18), "[%d] %s" % [i + 1, h.ch.skill_label(id)], 13, nocol, false)
 			var mp_ok := h.ch.mp >= float(sk["mp"])
 			UI.text(self, r.position + Vector2(8, 36), "MP %d" % int(sk["mp"]), 12, Color("7ab0ff") if mp_ok else Color("ff7a6a"), false)
 		else:
-			UI.text(self, r.position + Vector2(8, 18), "[%d] -" % (i + 1), 14, Color(0.4, 0.4, 0.45), false)
+			UI.text(self, r.position + Vector2(8, 18), "[%d] -" % (i + 1), 13, Color(0.4, 0.4, 0.45), false)
+		_frame(r, h.ch.skill_sel == i + 1, ready, gold)
+
+## 帯の一枠の縁。選んでいるものは金の太枠と、上に「右クリック」
+func _frame(r: Rect2, selected: bool, ready: bool, gold: Color) -> void:
+	if selected:
+		draw_rect(r.grow(1.0), gold, false, 3.0)
+		UI.text(self, r.position + Vector2(4, -5), "▶ %s" % _use_hint(), 11, gold)
+	else:
 		draw_rect(r, Color("e8dcb0") if ready else Color(1, 1, 1, 0.18), false, 1.5 if ready else 1.0)
+
+## 「選んだスキルを使う」の入力の名前(マウスがあればマウス)
+func _use_hint() -> String:
+	var b: Dictionary = Controls.binds.get("skill_use", {})
+	if not (b.get("mouse", {}) as Dictionary).is_empty():
+		return Controls.label(b["mouse"])
+	return Controls.hint("skill_use")
 
 ## 右上の小さな地図。仲間のまわりだけを、決まった大きさの枠に描く(+ / - で拡大・縮小)
 func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
