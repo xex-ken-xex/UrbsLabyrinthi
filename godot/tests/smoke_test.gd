@@ -1153,6 +1153,7 @@ func _test_game() -> void:
 	await _step(3)
 	check(main.phase == "town" and main.gs.party.size() == 4, "つづきからで街へ戻れる")
 	await _test_time(main)
+	await _test_traps(main)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 	main.queue_free()
 	await process_frame
@@ -1248,6 +1249,113 @@ func _test_time(main: Node) -> void:
 	main.return_to_surface()
 	await _step(3)
 	check(main.dtime == null, "街へ戻ると、迷宮の時間は片付く")
+
+# ---------- 罠の前で選ぶ、新しい罠 ----------
+
+func _trap_at(main: Node, fx: String) -> Dictionary:
+	var fl: FloorInstance = main.current
+	var lp: Vector2 = main.leader().position
+	var t: Dictionary = fl.traps[0].duplicate()
+	var c := fl.map.cell_of(lp)
+	t["x"] = c.x + 1
+	t["y"] = c.y
+	t["st"] = "revealed"
+	t["fx"] = fx
+	t["kind"] = "save"
+	t["save"] = {"ability": "敏捷力", "dc": 99}
+	t.erase("damage")
+	t["severity"] = "setback"
+	t["disarm_dc"] = 99
+	t["roomId"] = fl.map.room_at[fl.map.idx(c.x, c.y)]
+	fl.traps.append(t)
+	return t
+
+func _test_traps(main: Node) -> void:
+	print("[traps]")
+	for c in main.gs.party:
+		c.hp = float(c.max_hp())
+	main._on_dive()
+	await _step(3)
+	var fl: FloorInstance = main.current
+	_clear_enemies(fl)
+	var named := false
+	for f in [1, 4, 7]:
+		var inst := FloorInstance.create(main.floor_path(f, 0))
+		for t in inst.traps:
+			if t["fx"] == "pit":
+				named = true
+		inst.free()
+	check(named, "落とし穴の名前の罠は、落ちる罠になる")
+	# 3択が開き、やめると何も起きない
+	var t := _trap_at(main, "")
+	main.interact()
+	check(main.trap_menu != null and main.phase == "menu" and main.leader().process_mode == Node.PROCESS_MODE_DISABLED, "見つけた罠の前で調べると、3択が開いて迷宮が止まる")
+	main.trap_menu._pick("")
+	await _step(2)
+	check(main.trap_menu == null and main.phase == "dungeon" and t["st"] == "revealed", "やめると、罠はそのまま")
+	# わざと発動させる
+	var en := _fake_enemy(fl, fl.map.center_of(Vector2i(int(t["x"]), int(t["y"]))) + Vector2(100, 0), 50)
+	en.state = "idle"
+	main.interact()
+	main.trap_menu._pick("spring")
+	await _step(2)
+	check(t["st"] == "triggered" and en.state == "chase" and main.leader().ch.hp == main.leader().ch.max_hp(), "わざと発動させると、だれも傷つかず、物音で魔物が気づく")
+	_clear_enemies(fl)
+	# 飛び越える: 成功すると踏んでも発動しない
+	t = _trap_at(main, "")
+	var lb: int = main.jump_bonus()
+	t["severity"] = "setback"
+	Dice.rng.seed = 7
+	var ok := false
+	for i in 40:
+		t["st"] = "revealed"
+		t.erase("safe_until")
+		main.jump_trap(t)
+		if t.has("safe_until"):
+			ok = true
+			break
+	check(ok, "飛び越えられる (%+d / 難易度 %d)" % [lb, main.jump_dc(t)])
+	main.leader().position = fl.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	main._check_traps()
+	check(t["st"] == "revealed", "飛び越えている間は、踏んでも発動しない")
+	t["safe_until"] = 0
+	# 落とし穴: 下の階のどこかへ落ちる
+	var f0: int = fl.floor_no
+	t = _trap_at(main, "pit")
+	main._trigger_trap(t, main.leader())
+	await _step(3)
+	check(main.current.floor_no == f0 + 1, "落とし穴で、下の階へ落ちる (%d → %d)" % [f0, main.current.floor_no])
+	var lc: Vector2i = main.current.map.cell_of(main.leader().position)
+	check(lc != main.current.up_cell and main.current.map.room_at[main.current.map.idx(lc.x, lc.y)] >= 0, "落ちた先は、階段ではなくどこかの部屋")
+	check(Sfx.CUES.has("trap"), "罠の擬音がある")
+	# テレポート
+	fl = main.current
+	_clear_enemies(fl)
+	var r0: int = fl.map.room_at[fl.map.idx(lc.x, lc.y)]
+	t = _trap_at(main, "teleport")
+	main._trigger_trap(t, main.leader())
+	await _step(3)
+	var lc2: Vector2i = fl.map.cell_of(main.leader().position)
+	check(main.current == fl and fl.map.room_at[fl.map.idx(lc2.x, lc2.y)] != r0, "水鏡で、同じ層の別の部屋へ引き込まれる")
+	# 落とし格子: 部屋の扉が鍵のかかった格子になる
+	var rid := -1
+	for d in fl.map.doors:
+		if int(d["room"]) >= 0 and d["type"] == "door":
+			rid = int(d["room"])
+			break
+	t = _trap_at(main, "cage")
+	t["roomId"] = rid
+	main._trigger_trap(t, main.leader())
+	var shut := 0
+	var all_locked := true
+	for d in fl.map.doors:
+		if int(d["room"]) == rid and d["type"] != "secret":
+			shut += 1
+			if not (d["type"] == "locked" and not d["unlocked"] and not d["open"]):
+				all_locked = false
+	check(rid >= 0 and shut > 0 and all_locked, "落とし格子で、部屋の扉が閉ざされる (%d枚)" % shut)
+	main.return_to_surface()
+	await _step(3)
 
 # ---------- 闘技場 ----------
 

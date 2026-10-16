@@ -127,6 +127,18 @@ func _run() -> void:
 	main.open_inventory()
 	await shot("dungeon_menu")
 	main.close_inventory()
+	# 罠の前の3択
+	var tt: Dictionary = fl.traps[0].duplicate()
+	var lc: Vector2i = fl.map.cell_of(lead.position)
+	tt["x"] = lc.x + 1
+	tt["y"] = lc.y
+	tt["st"] = "revealed"
+	tt["fx"] = "pit"
+	tt["name"] = "腐れ床の落とし穴"
+	fl.traps.append(tt)
+	main.open_trap_menu(tt)
+	await shot("trap_menu")
+	main._on_trap_choice("")
 	# 迷宮の時間: 夕方、休息中、夜
 	main.dtime.minutes = 17 * 60
 	await shot("sky_dusk")

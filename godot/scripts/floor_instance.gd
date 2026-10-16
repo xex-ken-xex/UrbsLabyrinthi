@@ -28,6 +28,8 @@ var enc_dead := {}
 var light_pos := Vector2.ZERO
 var exhale := false
 var arena := false            # 闘技場(階段は上りだけ。魔物は後から出す)
+## 罠の名前 → 仕掛けの動き(書き出しの kind に加えて)。pit: 下の階へ落ちる、teleport: 同じ層の別の部屋へ、cage: 部屋の扉が閉ざされる
+const TRAP_FX := {"腐れ床の落とし穴": "pit", "立坑の蓋": "pit", "床の口": "pit", "水鏡の引き込み": "teleport", "錆びた落とし格子": "cage"}
 var enc_serial := 5000
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
@@ -112,6 +114,7 @@ func setup(m: FloorMap) -> void:
 	for t in d["traps"]:
 		var tt: Dictionary = t.duplicate()
 		tt["st"] = "hidden"
+		tt["fx"] = String(TRAP_FX.get(String(t.get("name", "")), ""))
 		traps.append(tt)
 	ground.setup(self)
 	ground.spawn_all()
@@ -336,6 +339,11 @@ func _draw() -> void:
 		if map.explored[map.idx(tc.x, tc.y)] == 0:
 			continue
 		var cen := map.center_of(tc)
+		if t.get("fx", "") == "pit" and t["st"] == "triggered":
+			# 開いた穴
+			draw_circle(cen, C * 0.42, Color(0, 0, 0, 0.85))
+			draw_arc(cen, C * 0.42, 0.0, TAU, 20, Color(0.35, 0.28, 0.2, 0.9), 2.0)
+			continue
 		var a := 0.9 if t["st"] == "revealed" else 0.35
 		if tex["trap"] != null:
 			draw_texture_rect(tex["trap"], Rect2(cen - Vector2(C, C) / 2.0, Vector2(C, C)), false, Color(1, 1, 1, a))

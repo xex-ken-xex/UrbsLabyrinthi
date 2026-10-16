@@ -33,6 +33,8 @@ var _prev_phase := ""
 var _menu_cd := 0.0
 var arena: Arena = null            # 闘技場にいるとき
 var arena_panel: ArenaPanel = null
+var trap_menu: TrapMenu = null     # 見つけた罠の前で、どうするかを選んでいる
+var _menu_trap: Dictionary = {}
 var scripted_input := false        # テスト用: true の間は、キー入力を読まない
 
 func _ready() -> void:
@@ -709,6 +711,8 @@ func _check_traps() -> void:
 	for t in current.traps:
 		if t["st"] != "hidden" and t["st"] != "revealed":
 			continue
+		if int(t.get("safe_until", 0)) > Time.get_ticks_msec():
+			continue          # 飛び越えている最中(後ろの仲間も続いて越える)
 		var tc := Vector2i(int(t["x"]), int(t["y"]))
 		for h in heroes:
 			if h.down:
@@ -724,6 +728,7 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 	log_msg("罠！ %s(%s)  %sが踏んだ" % [t["name"], SEVERITY_JP.get(String(t["severity"]), ""), victim.ch.name], Color("ff6a5a"))
 	log_msg(String(t["effect"]), Color(0.85, 0.7, 0.7))
 	var scale := 1.0
+	var failed := true          # 仕掛けの動き(落とし穴など)が働くか
 	var kind := String(t["kind"])
 	if kind == "save":
 		var sv: Dictionary = t["save"]
@@ -735,6 +740,7 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 			Color("9be29b") if ok else Color("ff8a7a"))
 		if ok:
 			scale = 0.5 if t.get("half_on_success", false) else 0.0
+			failed = false
 	elif kind == "attack":
 		var roll2 := Dice.d20()
 		var hit := roll2 != 1 and (roll2 == 20 or roll2 + int(t["attack_bonus"]) >= victim.ch.armor_class())
@@ -742,6 +748,7 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 			Color("ff8a7a") if hit else Color("9be29b"))
 		if not hit:
 			scale = 0.0
+			failed = false
 	elif kind == "alarm":
 		current.alert_radius(victim.position, 14.0)
 		log_msg("音が響いた。近くの魔物がこちらへ向かう", Color("ffb070"))
@@ -750,6 +757,11 @@ func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 		var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * (1.0 - victim.ch.skill_fx("survival")))
 		log_msg("%sダメージ %d" % [t.get("damage_type", ""), int(round(dealt))], Color("ff6a5a"))
 		victim.damage(dealt, victim.position + Vector2(0, 1), true)
+	if failed:
+		match String(t.get("fx", "")):
+			"pit": call_deferred("_fall_down")
+			"teleport": call_deferred("_trap_teleport")
+			"cage": _drop_cage(t)
 
 # ---------- 操作 ----------
 
@@ -775,7 +787,7 @@ func _update_hint() -> void:
 	if _nearest_locked_door() != null:
 		h = "E: 解錠を試みる"
 	elif _nearest_trap_to_disarm() != null:
-		h = "E: 罠を解除する"
+		h = "%s: 罠をどうする?" % Controls.hint("interact")
 	elif arena != null:
 		h = "E: 闘技場を出る" if _near(current.up_cell, 1.4) else ""
 	elif _near(current.down_cell, 1.4):
@@ -793,7 +805,7 @@ func interact() -> void:
 		return
 	var trap: Variant = _nearest_trap_to_disarm()
 	if trap != null:
-		_disarm(trap)
+		open_trap_menu(trap)
 		return
 	if arena != null:
 		if _near(current.up_cell, 1.4):
@@ -942,17 +954,163 @@ func open_inventory() -> void:
 	if phase == "dungeon":
 		phase = "menu"
 		hud.hint = ""
-		get_tree().paused = false
-		for h in heroes:
-			h.process_mode = Node.PROCESS_MODE_DISABLED
-		if current != null:
-			current.process_mode = Node.PROCESS_MODE_DISABLED
-			for e in current.enemies:
-				e.process_mode = Node.PROCESS_MODE_DISABLED
+		_freeze_world(true)
 	inventory = InventoryScreen.new()
 	inventory.closed.connect(close_inventory)
 	ui_layer.add_child(inventory)
 	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable())
+
+## 迷宮を止める・動かす(持ち物や罠の選択を開いている間)
+func _freeze_world(on: bool) -> void:
+	var m := Node.PROCESS_MODE_DISABLED if on else Node.PROCESS_MODE_INHERIT
+	get_tree().paused = false
+	for h in heroes:
+		h.process_mode = m
+	if current != null:
+		current.process_mode = m
+		for e in current.enemies:
+			e.process_mode = m
+
+# ---------- 罠の前で選ぶ(解除する / わざと発動させる / 飛び越える) ----------
+
+const JUMP_DC := {"setback": 10, "dangerous": 13, "deadly": 16}
+
+func jump_dc(t: Dictionary) -> int:
+	return int(JUMP_DC.get(String(t.get("severity", "")), 12))
+
+## 飛び越える判定は、操作している仲間の〈軽業〉か〈運動〉の高いほう
+func jump_bonus() -> int:
+	var c: Character = leader().ch
+	return maxi(c.skill_bonus("acrobatics"), c.skill_bonus("athletics"))
+
+func open_trap_menu(t: Dictionary) -> void:
+	if trap_menu != null or phase != "dungeon":
+		return
+	_menu_trap = t
+	phase = "menu"
+	hud.hint = ""
+	_freeze_world(true)
+	var who := party_best_char("lock")
+	var fx_note := {"pit": "踏むと床が抜けて、下の階へ落ちる。", "teleport": "踏むと、同じ層のどこかへ引き込まれる。", "cage": "踏むと格子が落ち、部屋の出口が閉ざされる。"}
+	var note := "%s(%s)。%s%s" % [String(t["trigger"]) if t.has("trigger") else "", SEVERITY_JP.get(String(t["severity"]), ""), String(fx_note.get(String(t.get("fx", "")), "")), String(t.get("effect", ""))]
+	trap_menu = TrapMenu.new()
+	trap_menu.setup("罠: %s" % t["name"], note, [
+		["disarm", "解除する", "%sの盗賊道具 %+d / 難易度 %d。大きく外すと発動する。" % [who.name, who.lock_bonus(), int(t["disarm_dc"])]],
+		["spring", "わざと発動させる", "石を投げて空撃ちさせる。確実だが、音で近くの魔物が気づく。"],
+		["jump", "飛び越える", "%sの〈軽業〉か〈運動〉 %+d / 難易度 %d。罠は残る。失敗すると踏む。" % [leader().ch.name, jump_bonus(), jump_dc(t)]],
+	])
+	trap_menu.chosen.connect(_on_trap_choice)
+	ui_layer.add_child(trap_menu)
+
+func _on_trap_choice(a: String) -> void:
+	if trap_menu != null:
+		trap_menu.queue_free()
+		trap_menu = null
+	phase = "dungeon"
+	_freeze_world(false)
+	_menu_cd = 0.3
+	var t := _menu_trap
+	_menu_trap = {}
+	if t.is_empty() or t["st"] != "revealed":
+		return
+	match a:
+		"disarm": _disarm(t)
+		"spring": spring_trap(t)
+		"jump": jump_trap(t)
+
+## 石を投げて、わざと発動させる。だれも傷つかないが、音が立つ
+func spring_trap(t: Dictionary) -> void:
+	t["st"] = "triggered"
+	var pos := current.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	Sfx.cue(current, pos, "trap_alarm" if String(t["kind"]) == "alarm" else "trap")
+	log_msg("石を投げた。%sが空を切った" % t["name"], Color("e8dcb0"))
+	var loud := 14.0 if String(t["kind"]) == "alarm" else 8.0
+	current.alert_radius(pos, loud)
+	log_msg("物音が響いた。近くの魔物が気づいたかもしれない" if loud < 10.0 else "音が響いた。近くの魔物がこちらへ向かう", Color("ffb070"))
+	current.queue_redraw()
+
+## 飛び越える。成功すると、しばらくの間、一行はこの罠を踏まずに越えられる(罠は残る)
+func jump_trap(t: Dictionary) -> void:
+	var roll := leader().ch.roll_d20()
+	var b := jump_bonus()
+	var ok := roll == 20 or (roll != 1 and roll + b >= jump_dc(t))
+	log_msg("飛び越える %d%+d / 難易度%d → %s" % [roll, b, jump_dc(t), "成功" if ok else "失敗"], Color("9be29b") if ok else Color("ff8a7a"))
+	if ok:
+		t["safe_until"] = Time.get_ticks_msec() + 6000
+		current.spawn_text(leader().position + Vector2(0, -26), "ひらり", Color("9be29b"))
+	else:
+		_trigger_trap(t, leader())
+
+## 落とし穴: 一行ごと下の階へ落ちる(どこかの部屋)。いちばん下の階では、浅い穴で済む
+func _fall_down() -> void:
+	if phase != "dungeon" or current == null or arena != null:
+		return
+	if current.floor_no >= Balance.MAX_FLOOR:
+		log_msg("穴は浅かった。這い上がった。", Color(0.8, 0.8, 0.85))
+		return
+	log_msg("床が抜けた! 一行は下の階へ落ちた", Color("ff9a7a"))
+	enter_floor(current.floor_no + 1, "up")
+	var at := random_room_pos(current, -1)
+	if at.x < INF:
+		place_party(at)
+	for h in heroes:
+		if not h.down:
+			h.damage(maxf(1.0, Dice.roll("1d6") * Balance.TRAP_DMG_SCALE), h.position + Vector2(0, 1), true)
+
+## 水鏡など: 同じ層の別の部屋へ
+func _trap_teleport() -> void:
+	if phase != "dungeon" or current == null or arena != null:
+		return
+	var m := current.map
+	var pc := m.cell_of(leader().position)
+	var at := random_room_pos(current, m.room_at[m.idx(pc.x, pc.y)])
+	if at.x >= INF:
+		return
+	place_party(at)
+	log_msg("引き込まれ、見知らぬ部屋に出た。", Color("b8a8e8"))
+
+## 落とし格子: 罠のある部屋の扉が、すべて鍵のかかった格子になる。物音で魔物が来る
+func _drop_cage(t: Dictionary) -> void:
+	var rid := int(t.get("roomId", -1))
+	var n := 0
+	for d in current.map.doors:
+		if int(d.get("room", -1)) != rid or rid < 0 or (d["type"] == "secret" and not d["found"]):
+			continue
+		d["open"] = false
+		d["type"] = "locked"
+		d["unlocked"] = false
+		d["lock_dc"] = maxi(int(d["lock_dc"]), int(t.get("disarm_dc", 12)))
+		n += 1
+	var pos := current.map.center_of(Vector2i(int(t["x"]), int(t["y"])))
+	current.alert_radius(pos, 14.0)
+	if n > 0:
+		log_msg("格子が落ちた! 部屋の出口が閉ざされた(扉の前で %s: 解錠)" % Controls.hint("interact"), Color("ff9a7a"))
+	else:
+		log_msg("格子が落ちる轟音が響いた", Color("ffb070"))
+	current.map_changed()
+	_refresh_view()
+
+## 層の中の、ほかの部屋(避ける部屋 avoid と、魔物のいる部屋を除く)の床を一つ。無ければ (INF, INF)
+func random_room_pos(fl: FloorInstance, avoid: int) -> Vector2:
+	var m := fl.map
+	var rooms: Array = []
+	for r in m.rooms:
+		var rid := int(r["id"])
+		if rid == avoid or not m.room_cells.has(rid) or (m.room_cells[rid] as Array).is_empty():
+			continue
+		var occupied := false
+		for e in fl.enemies:
+			var ec := m.cell_of(e.position)
+			if not e.dead and m.in_bounds(ec.x, ec.y) and m.room_at[m.idx(ec.x, ec.y)] == rid:
+				occupied = true
+				break
+		if not occupied:
+			rooms.append(rid)
+	if rooms.is_empty():
+		return Vector2(INF, INF)
+	var cells: Array = m.room_cells[rooms[Dice.rng.randi_range(0, rooms.size() - 1)]]
+	var c: int = cells[cells.size() / 2]
+	return m.center_of(Vector2i(c % m.w, c / m.w))
 
 func _rest_from_menu() -> void:
 	pending_rest = true
@@ -969,14 +1127,10 @@ func close_inventory() -> void:
 		screen.call_deferred("focus_default")   # 持ち物を閉じたら、コントローラーの焦点を街へ戻す
 	if _prev_phase == "dungeon":
 		phase = "dungeon"
+		_freeze_world(false)
 		for h in heroes:
-			h.process_mode = Node.PROCESS_MODE_INHERIT
 			if h.down and h.ch.hp > 0.0:
 				h.revive(h.ch.hp / float(h.ch.max_hp()))
-		if current != null:
-			current.process_mode = Node.PROCESS_MODE_INHERIT
-			for e in current.enemies:
-				e.process_mode = Node.PROCESS_MODE_INHERIT
 		if pending_return:
 			pending_return = false
 			return_to_surface()
