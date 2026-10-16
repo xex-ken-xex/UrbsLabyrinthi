@@ -225,6 +225,7 @@ func show_recruit() -> void:
 func _on_recruited(chars: Array) -> void:
 	for c in chars:
 		if gs.party.size() < Balance.MAX_PARTY:
+			c.hired = true
 			gs.party.append(c)
 	_back_to_inn("%sが仲間に加わった。" % chars[0].name if not chars.is_empty() else "")
 

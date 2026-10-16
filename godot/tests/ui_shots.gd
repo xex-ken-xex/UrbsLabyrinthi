@@ -46,6 +46,13 @@ func _run() -> void:
 	await process_frame
 	var town: TownScreen = main.screen
 	await shot("town")
+	town.report = ["査定: 燐晶 低0.70kg 高0.60kg → 77銀貨(税 23銀貨)", "預け金 377銀貨"]
+	town._go("hub")
+	await shot("hub_report")
+	town.report = []
+	town._go("hub")
+	(town.signs.find_child("sign_inn", true, false) as Button).grab_focus()
+	await shot("hub")
 	town._go("smith")
 	town.sel_id = "longsword"
 	town._fill_shop()
@@ -60,6 +67,12 @@ func _run() -> void:
 	await shot("temple")
 	town._go("inn")
 	await shot("inn")
+	var gone: Character = main.gs.party[3]
+	town._part(gone)
+	await shot("inn_part")
+	town._part(gone)
+	await shot("inn_parted")
+	main.gs.party.append(gone)      # 後の写真のために戻す
 	town._go("pleasure")
 	town._push_walk(TownScreen.WALK_LINES[0])
 	town._push_walk(TownScreen.FORTUNES[1])
