@@ -5,6 +5,9 @@ extends Control
 
 signal closed
 
+const SLOTS := ["k0", "k1", "mouse", "pad"]
+const SLOT_WHAT := {"k0": "キー", "k1": "キー", "mouse": "マウスのボタン", "pad": "コントローラーの入力"}
+
 var slots := {}            # "id:slot" → Button
 var msg: Label
 var _capture := ""         # 待っている枠("id:slot")。空なら待っていない
@@ -60,21 +63,21 @@ func _ready() -> void:
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	panel.add_child(sc)
 	var grid := GridContainer.new()
-	grid.columns = 4
+	grid.columns = 5
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 3)
 	sc.add_child(grid)
-	for h in ["操作", "キー1", "キー2", "コントローラー"]:
+	for h in ["操作", "キー1", "キー2", "マウス", "コントローラー"]:
 		grid.add_child(UIKit.label(h, 15, UIKit.DIM))
 	for a in Controls.ACTIONS:
 		var id: String = a[0]
 		var nm := UIKit.label(String(a[1]), 15)
 		nm.custom_minimum_size = Vector2(250, 0)
 		grid.add_child(nm)
-		for s in ["k0", "k1", "pad"]:
-			var b := UIKit.button("", _on_slot.bind(id, s), 230)
-			b.custom_minimum_size = Vector2(230, 30)
+		for s in SLOTS:
+			var b := UIKit.button("", _on_slot.bind(id, s), 190)
+			b.custom_minimum_size = Vector2(190, 30)
 			b.add_theme_font_size_override("font_size", 15)
 			grid.add_child(b)
 			slots["%s:%s" % [id, s]] = b
@@ -118,8 +121,8 @@ func _refresh() -> void:
 	for a in Controls.ACTIONS:
 		var id: String = a[0]
 		var b: Dictionary = Controls.binds[id]
-		for s in ["k0", "k1", "pad"]:
-			var d: Dictionary = b["pad"] if s == "pad" else b["keys"][int(s.substr(1))]
+		for s in SLOTS:
+			var d: Dictionary = b.get(s, {}) if s == "pad" or s == "mouse" else b["keys"][int(s.substr(1))]
 			var btn: Button = slots["%s:%s" % [id, s]]
 			var key := "%s:%s" % [id, s]
 			if key == _capture:
@@ -133,7 +136,7 @@ func _refresh() -> void:
 func _on_slot(id: String, s: String) -> void:
 	_capture = "%s:%s" % [id, s]
 	_arm_t = 0.25
-	msg.text = "「%s」に割り当てる%sを押す(Esc でやめる、Delete で空にする)" % [Controls.action_name(id), "コントローラーの入力" if s == "pad" else "キー"]
+	msg.text = "「%s」に割り当てる%sを押す(Esc でやめる、Delete で空にする)" % [Controls.action_name(id), SLOT_WHAT[s]]
 	msg.add_theme_color_override("font_color", UIKit.GOLD)
 	_refresh()
 
@@ -164,9 +167,9 @@ func _input(e: InputEvent) -> void:
 	var d := Controls.from_event(e)
 	if d.is_empty():
 		return
-	var want_pad := s == "pad"
-	if (String(d["t"]) == "key") == want_pad:
-		msg.text = "この枠には%sを押す" % ("コントローラーの入力" if want_pad else "キーボードのキー")
+	var kind: String = {"key": "k", "btn": "pad", "axis": "pad", "mouse": "mouse"}.get(String(d["t"]), "")
+	if kind != (s if s != "k0" and s != "k1" else "k"):
+		msg.text = "この枠には%sを押す" % SLOT_WHAT[s]
 		msg.add_theme_color_override("font_color", UIKit.BAD)
 		return
 	Controls.set_bind(id, s, d)

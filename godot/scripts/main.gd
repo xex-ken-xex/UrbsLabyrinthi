@@ -534,7 +534,16 @@ func _read_input() -> void:
 	if Input.is_action_just_pressed("dodge"):
 		lead.cmd["dodge"] = true
 	if Input.is_action_pressed("attack"):
-		lead.attack()      # 押し続けると、待ち時間ごとに振る
+		var mb: Dictionary = Controls.binds.get("attack", {}).get("mouse", {})
+		var by_mouse := not mb.is_empty() and Input.is_mouse_button_pressed(int(mb["m"]))
+		if by_mouse and _menu_cd > 0.0:
+			pass               # 画面のボタンを押した、そのクリックでは振らない
+		else:
+			if by_mouse:
+				var to := lead.get_global_mouse_position() - lead.position
+				if to.length() > 4.0:
+					lead.facing = to.normalized()      # マウスの方向へ振る
+			lead.attack()      # 押し続けると、待ち時間ごとに振る
 	for i in 4:
 		if Input.is_action_just_pressed("skill%d" % (i + 1)):
 			lead.cast_slot(i)
