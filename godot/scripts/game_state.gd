@@ -13,6 +13,7 @@ var blessed := false           # 神殿の加護。次に潜るとき一度だ�
 var insured := false           # 坑口館の帰還積立。次に潜るとき一度だけ効く(全滅しても、灯手隊が装備と持ち物の半分を拾ってくる)
 var quests: Array = []         # 坑口館で受けた依頼 {"id", "n", "reward", "client"}
 var food: Array = []           # 作った料理 {"id", "q"(出来ばえ), "until"(傷む時刻), "n"}。Cooking
+var home := {}                 # 自宅(Home)。空なら、まだ無い
 var clock := float(Balance.DIVE_START_MIN)   # 世界の時刻(通しの分)。潜った夜の数×24時間 + 迷宮の中の時刻。戻ることはない
 
 ## 坑口館の掲示板に出る依頼。[品物, 依頼主, 最少, 最多, 一言]
@@ -48,6 +49,7 @@ func new_game(chars: Array) -> void:
 	insured = false
 	quests = []
 	food = []
+	home = {}
 	clock = float(Balance.DIVE_START_MIN)
 	Cooking.clock = clock
 
@@ -268,6 +270,13 @@ func use_item(id: String, ch: Character) -> String:
 			ch.mp = minf(ch.max_mp(), ch.mp + ch.max_mp() * float(it["v"]))
 			remove_item(id)
 			return "%sのMPが回復した" % ch.name
+		"elixir":
+			if ch.hp <= 0.0 or (ch.hp >= ch.max_hp() and ch.mp >= ch.max_mp()):
+				return ""
+			ch.hp = ch.max_hp()
+			ch.mp = ch.max_mp()
+			remove_item(id)
+			return "%sのHPとMPが全快した" % ch.name
 		"revive":
 			if ch.hp > 0.0:
 				return ""
@@ -344,7 +353,7 @@ func to_dict() -> Dictionary:
 	for c in party:
 		chars.append(c.to_dict())
 	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
-		"food": food, "clock": clock}
+		"food": food, "clock": clock, "home": home}
 
 func save() -> bool:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -384,6 +393,7 @@ func load_save() -> bool:
 	for f in parsed.get("food", []):
 		if typeof(f) == TYPE_DICTIONARY and not Cooking.recipe(String(f.get("id", ""))).is_empty():
 			food.append({"id": String(f["id"]), "q": int(f.get("q", 1)), "until": float(f.get("until", 0.0)), "n": int(f.get("n", 1))})
+	home = Home.sanitize(parsed.get("home", {}))
 	clock = 0.0
 	set_clock(maxf(float(parsed.get("clock", 0.0)), town_clock()))
 	return not party.is_empty()

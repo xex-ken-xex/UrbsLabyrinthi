@@ -32,6 +32,8 @@ func _run() -> void:
 	await _test_dive_save()
 	_test_cooking_state()
 	await _test_cooking_dive()
+	_test_home_state()
+	await _test_home_town()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -516,6 +518,165 @@ func _test_cooking_dive() -> void:
 		if n is Sfx and (n as Sfx).text == "ぐぅ〜":
 			growl = true
 	check(growl, "空腹だと、頭上で「ぐぅ〜」と鳴る")
+	main.queue_free()
+	await _step(2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
+
+func _test_home_state() -> void:
+	print("[自宅と魔法実験]")
+	var gs := GameState.new()
+	var party: Array = []
+	for cls in ["wizard", "fighter"]:
+		party.append(Character.create(cls, "human", cls, Jobs.auto_stats(cls)))
+	gs.new_game(party)
+	var bad: Array = []
+	for r in Home.alchemy():
+		if not ItemDB.ITEMS.has(String(r["out"])):
+			bad.append(r["out"])
+		for k in r["in"]:
+			if not ItemDB.ITEMS.has(String(k)):
+				bad.append(k)
+		if not ItemIcons.has_icon(String(r["out"])):
+			bad.append("icon:" + String(r["out"]))
+	check(Home.alchemy().size() >= 12 and bad.is_empty(), "魔法実験のレシピの材料・できるもの・絵が全部ある %s" % str(bad))
+	gs.bank_silver = 100
+	check(Home.buy_house(gs) != "" and not Home.owned(gs), "銀貨が足りないと、家は買えない")
+	gs.bank_silver = 5000
+	check(Home.buy_house(gs) == "" and Home.owned(gs) and gs.bank_silver == 3000, "家を買える(-2000)")
+	check(Home.has_room(gs, "kitchen") and Home.has_room(gs, "bed") and not Home.has_room(gs, "lab"), "はじめは台所と寝床だけ")
+	check(Home.build(gs, "forge") != "", "鍛冶場はまだ作れない")
+	for id in ["pantry", "storage", "lab"]:
+		check(Home.build(gs, id) == "", "%sを増築できる" % Home.ROOMS[id]["name"])
+	check(gs.bank_silver == 3000 - 600 - 400 - 1500, "増築の代金を払う")
+	# 台所では、台所の料理も作れる
+	var hr := Cooking.recipe("haimugi_pan")
+	for k in hr["in"]:
+		var key := String(k)
+		gs.add_item(String(Cooking.tag_ids(key.substr(4))[0]) if key.begins_with("tag:") else key, int(hr["in"][k]))
+	check(bool(Cooking.cook(gs, "haimugi_pan", 12)["ok"]), "台所の料理(%s)も、材料があれば作れる" % hr["name"])
+	# 食料庫: 傷む速さが4分の1
+	gs.food = []
+	gs.add_food("niku_kushi", 1, gs.clock + 120.0, 2)
+	Home.store_food(gs, 0)
+	gs.set_clock(gs.clock + 240.0)
+	var ps := Home.pantry_stack(gs.home["pantry"][0], gs.clock)
+	check(not Cooking.rotten(ps, gs.clock) and absf(float(ps["until"]) - gs.clock - 60.0) < 0.5, "食料庫の料理は、傷む速さが4分の1")
+	Home.take_food(gs, 0)
+	check(gs.food_count() == 2 and (gs.home["pantry"] as Array).is_empty(), "食料庫から持ち物へ出せる")
+	# 物置: 全滅しても失わない
+	gs.add_item("potion", 3)
+	var p0 := gs.count("potion")
+	Home.deposit(gs, "potion", 2)
+	check(gs.count("potion") == p0 - 2 and int(gs.home["storage"]["potion"]) == 2, "物置に預けられる")
+	gs.lose_everything()
+	check(int(gs.home["storage"].get("potion", 0)) == 2, "物置のものは、全滅しても失わない")
+	Home.withdraw(gs, "potion", 99)
+	check(gs.count("potion") == 2 and not gs.home["storage"].has("potion"), "物置から出せる")
+	# 魔法実験
+	var ar := Home.alchemy_recipe("antidote")
+	for k in ar["in"]:
+		gs.add_item(String(k), int(ar["in"][k]) * 3)
+	check(not bool(Home.brew(gs, "antidote", 15)["ok"]), "燃料が無いと実験できない")
+	gs.add_item("takigi", 5)
+	var a0 := gs.count("antidote")
+	var b1 := Home.brew(gs, "antidote", 20)
+	check(String(b1["kind"]) == "pop" and gs.count("antidote") == a0 + int(ar["n"]) + 1 and gs.count("takigi") == 4, "すぐできる調合。上出来は1つ多い(燃料を1つ使う)")
+	var b2 := Home.brew(gs, "antidote", 2)
+	check(String(b2["kind"]) == "fail" and gs.count("murky") == 1, "難しさに届かないと、濁った薬")
+	var b3 := Home.brew(gs, "antidote", 1)
+	check(String(b3["kind"]) == "boom" and Home.lab_closed(gs) and not bool(Home.brew(gs, "antidote", 15)["ok"]), "出目1はボフン!その夜は実験室が使えない")
+	gs.day += 1
+	var rr := Home.alchemy_recipe("regen_elixir")
+	for k in rr["in"]:
+		gs.add_item(String(k), int(rr["in"][k]))
+	var b4 := Home.brew(gs, "regen_elixir", 15)
+	check(String(b4["kind"]) == "set" and (gs.home["pots"] as Array).size() == 1 and Home.ready_pots(gs).is_empty(), "熟成は釜に仕込む(%d夜)" % int(rr["nights"]))
+	check(Home.collect(gs, 0) == "", "仕上がる前は取り出せない")
+	gs.day += int(rr["nights"])
+	check(Home.ready_pots(gs).size() == 1, "夜がたつと、釜が仕上がる")
+	var e0 := gs.count("regen_elixir")
+	check(Home.collect(gs, 0) != "" and gs.count("regen_elixir") > e0 and (gs.home["pots"] as Array).is_empty(), "仕上がった釜から取り出す")
+	# 新しい薬を使う
+	var w: Character = party[0]
+	w.mp = 0.0
+	gs.add_item("hi_ether", 1)
+	gs.use_item("hi_ether", w)
+	check(w.mp >= w.max_mp() * 0.99, "上級魔力水で MP が満ちる")
+	var c: Character = party[1]
+	gs.add_item("marrow_elixir", 1)
+	var mhp := c.max_hp()
+	c.hp = 1.0
+	gs.use_item("marrow_elixir", c)
+	check(c.hp >= c.max_hp() * 0.99 and gs.count("marrow_elixir") == 0, "髄蜜の霊薬で全快する (%d / %d)" % [int(c.hp), mhp])
+	# 記録に残る
+	var gs2 := GameState.new()
+	FileAccess.open(GameState.SAVE_PATH, FileAccess.WRITE).store_string(JSON.stringify(gs.to_dict()))
+	gs2.load_save()
+	check(Home.has_room(gs2, "lab") and (gs2.home["rooms"] as Array).size() == 5, "家と部屋が記録に残る")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
+	var none := GameState.new()
+	none.new_game(party)
+	check(not Home.owned(none) and Home.sanitize(null).is_empty(), "新しく始めると、家は無い")
+
+func _test_home_town() -> void:
+	print("[自宅(街)]")
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await _step(3)
+	main.show_make()
+	await _step(3)
+	main.screen._on_start()
+	await _step(5)
+	var town: TownScreen = main.screen
+	var gs: GameState = main.gs
+	var hs := town.signs.find_child("sign_home", true, false) as Control
+	check(hs != null and not hs.get_parent().visible, "家が無いうちは、広場に「我が家」の看板が無い")
+	town._go("guild")
+	await _step(2)
+	gs.bank_silver = 4000
+	town._buy_house()
+	await _step(2)
+	check(Home.owned(gs) and gs.bank_silver == 2000, "坑口館の空き家の札で家を買える")
+	town._go("hub")
+	await _step(2)
+	check(hs.get_parent().visible, "家を買うと、広場に「我が家」の看板が出る")
+	town._go("home")
+	await _step(3)
+	var hp := town.content.find_children("*", "HomePanel", true, false)
+	check(hp.size() == 1, "我が家に入ると、部屋の札と一覧が出る")
+	var c: Character = gs.party[0]
+	c.hp = 1.0
+	var panel: HomePanel = hp[0]
+	panel._set_room("bed")
+	await _step(2)
+	var sleep_b: Button = null
+	for b in panel.actions.get_children():
+		if b is Button and (b as Button).text.begins_with("眠る"):
+			sleep_b = b
+	check(sleep_b != null, "寝床に「眠る」がある")
+	if sleep_b != null:
+		sleep_b.pressed.emit()
+		await _step(2)
+	check(c.hp >= c.max_hp(), "寝床で眠ると全快する")
+	# 実験室の薬を、迷宮で使う
+	main._on_dive()
+	await _step(5)
+	main.scripted_input = true
+	var fl: FloorInstance = main.current
+	var lead: Hero = main.leader()
+	var en: Enemy = null
+	for e in fl.enemies:
+		e.state = "idle"
+		if en == null and not e.dead:
+			en = e
+	if en != null:
+		en.position = lead.position + Vector2(Balance.CELL * 2.0, 0)
+		main.phase = "menu"
+		check(main.use_special("sleep_bottle", lead.ch) and en.stun_t > 0.0, "眠り薬の瓶を割ると、近くの魔物が眠る")
+		lead.poison_t = 5.0
+		check(main.use_special("antidote", lead.ch) and lead.poison_t == 0.0, "毒消しで毒が抜ける")
+		check(not main.use_special("antidote", lead.ch), "毒が無ければ、毒消しは使わない")
+		main.phase = "dungeon"
 	main.queue_free()
 	await _step(2)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))

@@ -153,6 +153,25 @@ static func _consume(gs: GameState, r: Dictionary) -> void:
 			if n <= 0:
 				break
 
+## レシピの説明(材料と持っている数、人数、日持ち、効き目、料理番)。持ち物の画面と、自宅の台所で使う
+static func recipe_text(gs: GameState, r: Dictionary) -> String:
+	var t := "[b][color=#e8dcb0]%s[/color][/b]  %s\n%s\n\n" % [r["name"], "[自宅の台所]" if bool(r["home"]) else "[野営でも作れる]", r["desc"]]
+	var need: Dictionary = r["in"]
+	for k in need:
+		var have := have_count(gs, String(k))
+		var col := "#9be29b" if have >= int(need[k]) else "#ff8a7a"
+		t += "[color=%s]%s %d[/color](持っている %d)   " % [col, need_label(String(k)), int(need[k]), have]
+	t += "\n%d人分   日持ち %s   満腹 +%d   難しさ %d\n%s" % [int(r["n"]), life_text(float(r["life"])), int(r["belly"]), int(r["dc"]),
+		buff_text(String(r["buff"]), float(r["v"])) + ("(%d時間)" % int(r["hours"]) if String(r["buff"]) != "" else "")]
+	var ck := cook_of(gs)
+	if ck != null:
+		t += "\n\n料理番: %s(〈生存〉%+d)。難しさ +5 で上出来(効き目の時間 1.5倍)、足りないと焦げる。" % [ck.name, ck.skill_bonus("survival")]
+	for k in need:
+		if String(k).begins_with("tag:"):
+			var names: Array = tag_ids(String(k).substr(4)).map(func(x): return ItemDB.item_name(String(x)))
+			t += "\n[color=#8a90a0]%s: %s のどれでも[/color]" % [need_label(String(k)), "・".join(names)]
+	return t
+
 # ---------- 作る ----------
 
 ## 料理番(倒れていない仲間のうち、〈生存〉がいちばん高い人)

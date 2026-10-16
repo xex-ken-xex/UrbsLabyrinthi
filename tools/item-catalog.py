@@ -27,6 +27,17 @@ EXISTING = [
     ("revive_charm", "charm", dict(col="f0d878")),
     ("lamp_oil", "bottle", dict(liquid="f0e060", flask=True)),
     ("return_scroll", "scroll", dict(col="e8dcb0")),
+    # 魔法実験で作る薬(data/alchemy.json。店には無い)
+    ("antidote", "bottle", dict(liquid="7ad870")),
+    ("sleep_bottle", "bottle", dict(liquid="a890d8", flask=True)),
+    ("shriek_bottle", "bottle", dict(liquid="e8a040", flask=True, glow=True)),
+    ("power_draught", "bottle", dict(liquid="e85a30", big=True)),
+    ("stone_draught", "bottle", dict(liquid="8a8a96", big=True)),
+    ("wind_draught", "bottle", dict(liquid="a8e8e0", big=True)),
+    ("hi_ether", "bottle", dict(liquid="6ab0ff", big=True, glow=True)),
+    ("regen_elixir", "bottle", dict(liquid="f0f0d0", big=True, glow=True)),
+    ("marrow_elixir", "bottle", dict(liquid="f8d870", big=True, glow=True)),
+    ("murky", "bottle", dict(liquid="5a5040")),
 ]
 
 # ---- 迷宮に自生するもの(税がかからない) ----

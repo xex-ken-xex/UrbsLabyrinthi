@@ -576,23 +576,9 @@ func _food_detail(c: Character) -> String:
 	elif sel_id.begins_with("r:"):
 		var r := Cooking.recipe(sel_id.substr(2))
 		if not r.is_empty():
-			t = "[b][color=#e8dcb0]%s[/color][/b]  %s\n%s\n\n" % [r["name"], "[自宅の台所]" if bool(r["home"]) else "[野営でも作れる]", r["desc"]]
-			var need: Dictionary = r["in"]
-			for k in need:
-				var have := Cooking.have_count(gs, String(k))
-				var col := "#9be29b" if have >= int(need[k]) else "#ff8a7a"
-				t += "[color=%s]%s %d[/color](持っている %d)   " % [col, Cooking.need_label(String(k)), int(need[k]), have]
-			t += "\n%d人分   日持ち %s   満腹 +%d   難しさ %d\n%s" % [int(r["n"]), Cooking.life_text(float(r["life"])), int(r["belly"]), int(r["dc"]),
-				Cooking.buff_text(String(r["buff"]), float(r["v"])) + ("(%d時間)" % int(r["hours"]) if String(r["buff"]) != "" else "")]
-			var ck := Cooking.cook_of(gs)
-			if ck != null:
-				t += "\n\n料理番: %s(〈生存〉%+d)。難しさ +5 で上出来(効き目の時間 1.5倍)、足りないと焦げる。" % [ck.name, ck.skill_bonus("survival")]
-			for k in need:
-				if String(k).begins_with("tag:"):
-					var names: Array = Cooking.tag_ids(String(k).substr(4)).map(func(x): return ItemDB.item_name(String(x)))
-					t += "\n[color=#8a90a0]%s: %s のどれでも[/color]" % [Cooking.need_label(String(k)), "・".join(names)]
+			t = Cooking.recipe_text(gs, r)
 			if bool(r["home"]):
-				t += "\n\n[color=#c8b890]自宅の台所で作る(自宅はまだ無い)。[/color]"
+				t += "\n\n[color=#c8b890]自宅の台所で作る(自宅は、坑口館の空き家の札で買える)。[/color]"
 			elif cook_handler.is_valid():
 				t += "\n\n[color=#8a90a0]野営で作る: 20分かかる。燃料(焚き木束・焼け石・白蝋)1つで、火が1時間もつ。[/color]"
 				var b := UIKit.button("作る", _cook_sel)
@@ -639,7 +625,7 @@ func _use_sel() -> void:
 	var c := _ch()
 	var it: Dictionary = ItemDB.ITEMS[sel_id]
 	var r := ""
-	if String(it["kind"]) == "consumable" and special_handler.is_valid() and ["light", "return", "buff"].has(String(it["use"])):
+	if String(it["kind"]) == "consumable" and special_handler.is_valid() and ["light", "return", "buff", "cure", "sleep_throw", "shriek"].has(String(it["use"])):
 		if special_handler.call(sel_id, c):
 			gs.remove_item(sel_id)
 			r = "%sを使った" % it["name"]

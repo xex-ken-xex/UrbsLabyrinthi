@@ -82,6 +82,37 @@ func _run() -> void:
 	town._fill_shop()
 	town._show_shop_detail()
 	await shot("market")
+	# 自宅(生産系②)
+	var gsh: GameState = main.gs
+	gsh.bank_silver += 8000
+	Home.buy_house(gsh)
+	for rid in ["pantry", "storage", "lab"]:
+		Home.build(gsh, rid)
+	town._go("hub")
+	town._refresh_all()
+	await shot("hub_home")
+	for id in ["haimugi", "suzumame", "iwa_jio", "kemono_niku", "takigi", "kuro_take", "hai_goke"]:
+		if ItemDB.ITEMS.has(id):
+			gsh.add_item(id, 4)
+	town._go("home")
+	var hpn: HomePanel = town.content.find_children("*", "HomePanel", true, false)[0]
+	hpn.sel = "haimugi_pan"
+	hpn._fill()
+	await shot("home_kitchen")
+	for r in Home.alchemy():
+		for k in r["in"]:
+			gsh.add_item(String(k), int(r["in"][k]))
+	Home.brew(gsh, "regen_elixir", 15)
+	Home.brew(gsh, "hi_potion", 15)
+	(gsh.home["pots"][1] as Dictionary)["ready"] = gsh.day
+	hpn._set_room("lab")
+	hpn.sel = "power_draught"
+	hpn._fill()
+	await shot("home_lab")
+	hpn._set_room("build")
+	hpn.sel = "forge"
+	hpn._fill()
+	await shot("home_build")
 	town._go("general")
 	await shot("general")
 	# 暦: 灯祭の夜(灯火の月15夜)の広場と寝息通り
