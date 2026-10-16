@@ -28,12 +28,12 @@ func _run() -> void:
 	var make: CharaMake = main.screen
 	make._select(1)
 	await shot("make2")
-	make._on_method("roll")
+	make._on_roll_stats()
 	await create_timer(0.35).timeout
 	await shot("make_rolling")
 	await create_timer(1.2).timeout
 	await shot("make_rolled")
-	make._on_method("buy")
+	make._on_auto()
 	make._on_start()
 	await process_frame
 	(main.screen as TownScreen)._go("inn")
