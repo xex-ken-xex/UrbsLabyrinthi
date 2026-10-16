@@ -10,6 +10,28 @@ var bank_silver := 300
 var day := 0
 var visited_town := false
 var blessed := false           # 神殿の加護。次に潜るとき一度だけ効く
+var insured := false           # 坑口館の帰還積立。次に潜るとき一度だけ効く(全滅しても、灯手隊が装備と持ち物の半分を拾ってくる)
+var quests: Array = []         # 坑口館で受けた依頼 {"id", "n", "reward", "client"}
+
+## 坑口館の掲示板に出る依頼。[品物, 依頼主, 最少, 最多, 一言]
+const REQUESTS := [
+	["sakebi_take", "薬師組", 2, 4, "鳴子の材料にする。"],
+	["doku_take", "薬師組", 2, 4, "毒消しを作る。"],
+	["nemuri_take", "癒院", 2, 3, "眠り薬にする。"],
+	["hikari_goke", "星録の書院", 3, 5, "夜の写本の灯りにする。"],
+	["komori_fun", "川沿いの農家", 3, 5, "畑の肥料にする。"],
+	["sabi_goke", "鍛冶組", 2, 4, "焼き入れに使う。"],
+	["iwa_jio", "止まり木亭", 2, 4, "塩が切れた。"],
+	["kemono_niku", "止まり木亭", 3, 5, "胃袋スープの具にする。"],
+	["kemono_kawa", "鍛冶組", 2, 3, "鎧の裏打ちにする。"],
+	["kiba", "細工師", 2, 4, "飾りを彫る。"],
+	["nenneki", "灯守の店", 2, 4, "磨き粉にする。"],
+	["honekuzu", "川沿いの農家", 3, 5, "骨粉にして、畑に撒く。"],
+	["hakatsuchi", "静寂派の神殿", 2, 3, "清めて、弔いに使う。"],
+	["tetsukuzu", "鍛冶組", 2, 4, "溶かして使う。"],
+	["ma_ha", "薬師組", 2, 4, "薬草より効く薬にする。"],
+]
+const MAX_QUESTS := 3
 
 static func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
@@ -21,6 +43,8 @@ func new_game(chars: Array) -> void:
 	day = 0
 	visited_town = false
 	blessed = false
+	insured = false
+	quests = []
 
 # ---------- 持ち物 ----------
 
@@ -72,6 +96,69 @@ func lose_everything() -> int:
 				c.equip[slot] = ""
 		c.clamp_resources()
 	return n
+
+## 帰還積立に入っていて全滅したとき。装備は着けたまま戻り、持ち物は品ごとに半分(切り捨て)を失う。失った数を返す
+func lose_half() -> int:
+	var n := 0
+	for id in inventory.keys():
+		var lost := int(inventory[id]) - int(floor(int(inventory[id]) / 2.0))
+		n += lost
+		remove_item(id, lost)
+	return n
+
+# ---------- 坑口館 ----------
+
+## 帰還積立の掛け金(仲間のレベルの合計で決まる)
+func insurance_cost() -> int:
+	var lv := 0
+	for c in party:
+		lv += c.level
+	return 20 + 10 * lv
+
+## その日の掲示板に出る依頼(日ごとに3つ。受けた品は出ない)
+func offered_quests() -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("quests%d" % day)
+	var pool := REQUESTS.duplicate()
+	var out: Array = []
+	while out.size() < 3 and not pool.is_empty():
+		var r: Array = pool.pop_at(rng.randi_range(0, pool.size() - 1))
+		var n := rng.randi_range(int(r[2]), int(r[3]))
+		var reward := int(ceil(int(ItemDB.ITEMS[r[0]]["price"]) * n * 2.0 / 5.0)) * 5 + 20
+		if has_quest(String(r[0])):
+			continue
+		out.append({"id": r[0], "n": n, "reward": reward, "client": r[1], "line": r[4]})
+	return out
+
+func has_quest(id: String) -> bool:
+	for q in quests:
+		if String(q["id"]) == id:
+			return true
+	return false
+
+func accept_quest(q: Dictionary) -> String:
+	if quests.size() >= MAX_QUESTS:
+		return "受けられる依頼は%d件まで" % MAX_QUESTS
+	if has_quest(String(q["id"])):
+		return "同じ品の依頼を、もう受けている"
+	quests.append({"id": q["id"], "n": q["n"], "reward": q["reward"], "client": q["client"]})
+	save()
+	return ""
+
+## 納品する。報酬を返す(足りなければ -1)
+func deliver_quest(i: int) -> int:
+	var q: Dictionary = quests[i]
+	if count(String(q["id"])) < int(q["n"]):
+		return -1
+	remove_item(String(q["id"]), int(q["n"]))
+	bank_silver += int(q["reward"])
+	quests.remove_at(i)
+	save()
+	return int(q["reward"])
+
+func drop_quest(i: int) -> void:
+	quests.remove_at(i)
+	save()
 
 # ---------- 装備 ----------
 
@@ -200,7 +287,7 @@ func to_dict() -> Dictionary:
 	var chars: Array = []
 	for c in party:
 		chars.append(c.to_dict())
-	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed}
+	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests}
 
 func save() -> bool:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -231,4 +318,9 @@ func load_save() -> bool:
 	day = int(parsed.get("day", 0))
 	visited_town = bool(parsed.get("visited_town", true))
 	blessed = bool(parsed.get("blessed", false))
+	insured = bool(parsed.get("insured", false))
+	quests = []
+	for q in parsed.get("quests", []):
+		if typeof(q) == TYPE_DICTIONARY and ItemDB.ITEMS.has(String(q.get("id", ""))):
+			quests.append({"id": String(q["id"]), "n": int(q.get("n", 1)), "reward": int(q.get("reward", 0)), "client": String(q.get("client", ""))})
 	return not party.is_empty()

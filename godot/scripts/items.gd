@@ -79,6 +79,8 @@ const SHOPS := {
 	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash"],
 }
 
+## 坑口館の遺品課でしか引き取らない遺品(店では売れない)
+const GUILD_ONLY := ["relic_tag", "relic_gear"]
 const RARE_WEAPONS := ["shadow_dagger", "miner_pick", "comet_spear"]
 const WEAPON_CAT_JP := {"sword": "剣", "dagger": "短剣", "blunt": "鈍器", "axe": "斧", "spear": "槍", "staff": "杖", "bow": "弓"}
 const ARMOR_TYPE_JP := {"none": "布", "light": "軽装", "medium": "中装", "heavy": "重装"}
@@ -126,6 +128,8 @@ static func detail(id: String) -> String:
 	if it.get("free", false):
 		s += "
 迷宮に自生するもの・魔物の素材。燐晶ではないので、税がかからない。"
+	if GUILD_ONLY.has(id):
+		s += "\n店では売れない。坑口館(冒険者ギルド)の遺品課が引き取り、謝礼を出す。"
 	match String(it["kind"]):
 		"weapon":
 			s += "\n種類: %s   体当たり +%.1f" % [WEAPON_CAT_JP[it["cat"]], float(it["power"])]

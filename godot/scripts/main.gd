@@ -5,6 +5,7 @@ extends Node2D
 const SEVERITY_JP := {"setback": "軽度", "dangerous": "危険", "deadly": "致命的"}
 
 var gs := GameState.new()
+var dive_insured := false          # この潜行は帰還積立に入っている
 var heroes: Array = []             # Hero(迷宮の中の体)
 var active := 0                    # 操作している仲間の番号
 var camera: Camera2D
@@ -381,6 +382,8 @@ func start_day() -> void:
 			active = i
 			break
 	_apply_control()
+	dive_insured = gs.insured     # 帰還積立は、この潜行一回ぶん
+	gs.insured = false
 	if gs.blessed:
 		gs.blessed = false
 		for h in heroes:
@@ -674,7 +677,13 @@ func _check_wipe() -> void:
 		return
 	var lost := bag_value()
 	_clear_bag()
-	var lost_items := gs.lose_everything()     # 持ち物も装備も、全部失う(ken 10/16)
+	# 持ち物も装備も、全部失う(ken 10/16)。帰還積立に入っていれば、装備は戻り、持ち物は半分
+	var lost_items := gs.lose_half() if dive_insured else gs.lose_everything()
+	var lost_line := "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items
+	var rescue_line := "灯手隊が、倒れた仲間を担ぎ出してくれた。"
+	if dive_insured:
+		lost_line = "持ち物 %d点を失った。装備は無事だった" % lost_items
+		rescue_line = "帰還積立のおかげで、灯手隊が装備と持ち物の半分を拾ってきてくれた。"
 	phase = "overlay"
 	overlay_kind = "wipe"
 	hud.hint = ""
@@ -682,8 +691,8 @@ func _check_wipe() -> void:
 		{"text": "全滅した…", "size": 30, "color": Color("ff6a5a")},
 		{"text": "", "size": 8},
 		{"text": "未査定の燐晶 %d銀貨相当 を失った" % lost, "size": 16},
-		{"text": "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items, "size": 16, "color": Color("ff9a8a")},
-		{"text": "灯手隊が、倒れた仲間を担ぎ出してくれた。", "size": 16, "color": Color("f1d98a")},
+		{"text": lost_line, "size": 16, "color": Color("ff9a8a")},
+		{"text": rescue_line, "size": 16, "color": Color("f1d98a")},
 		{"text": "", "size": 8},
 		{"text": "%s: 街へ" % Controls.hint("confirm"), "size": 18, "color": Color("9ad8ff")},
 	]
@@ -693,7 +702,10 @@ func _after_overlay() -> void:
 	if overlay_kind == "wipe":
 		gs.day += 1
 		phase = "transition"
-		call_deferred("go_town", ["全滅した。未査定の燐晶も、持ち物も装備も、すべて迷宮に残してきた。預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせ、鍛冶屋で装備を整え直そう。"])
+		if dive_insured:
+			call_deferred("go_town", ["全滅した。未査定の燐晶と、持ち物の半分を迷宮に残してきた。帰還積立のおかげで、装備は戻った。預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせよう。"])
+		else:
+			call_deferred("go_town", ["全滅した。未査定の燐晶も、持ち物も装備も、すべて迷宮に残してきた。預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせ、鍛冶屋で装備を整え直そう。"])
 
 # ---------- 部屋、扉、罠 ----------
 
@@ -1134,7 +1146,12 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 		return
 	var id := String(e["id"])
 	var qty := int(e.get("qty", 1))
+	var had := gs.count(id)
 	gs.add_item(id, qty)
+	for q in gs.quests:      # 坑口館の依頼の数が揃った
+		if String(q["id"]) == id and had < int(q["n"]) and gs.count(id) >= int(q["n"]):
+			log_msg("依頼の品が揃った: %s %d/%d(%s)" % [ItemDB.item_name(id), int(q["n"]), int(q["n"]), q["client"]], Color("f1d98a"))
+			h.game_floor.spawn_text(h.position + Vector2(0, -34), "依頼の品が揃った", Color("f1d98a"))
 	var it := ItemDB.get_item(id)
 	var rare := int(it.get("price", 0)) >= 40 or String(it.get("kind", "")) in ["weapon", "armor", "acc"]
 	var icol := Color("d8f0d8") if not rare else Color("ffe9a8")

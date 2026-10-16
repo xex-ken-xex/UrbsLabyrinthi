@@ -1,7 +1,7 @@
 class_name TownArt
 extends Control
 ## 街の背景絵。画像素材は使わず、コードで描く(解像度に依存しない)。ゆっくり動く。
-## style: town(大穴と城壁の夜景) / smith / general / magic / temple / inn / pleasure(寝息通り)
+## style: town(大穴と城壁の夜景) / smith / general / magic / temple / inn / pleasure(寝息通り) / guild(坑口館)
 
 var style := "town"
 var asset_key := ""         # 差し替え画像のキー(無ければ bg_<style>)
@@ -95,6 +95,7 @@ func _draw_procedural() -> void:
 		"temple": _draw_temple()
 		"inn": _draw_inn()
 		"pleasure": _draw_pleasure()
+		"guild": _draw_guild()
 		_: _grad(Rect2(Vector2.ZERO, size), Color("101018"), Color("202030"))
 
 func _draw_vignette() -> void:
@@ -422,3 +423,70 @@ func _draw_pleasure() -> void:
 	draw_polygon(PackedVector2Array([Vector2(W * 0.38, H * 0.62), Vector2(W * 0.62, H * 0.62), Vector2(W, H), Vector2(0, H)]),
 		PackedColorArray([Color("1a0c1c"), Color("1a0c1c"), Color("3a1a30"), Color("3a1a30")]))
 	_grad(Rect2(0, H * 0.55, W, H * 0.25), Color(0.8, 0.5, 0.7, 0.0), Color(0.8, 0.5, 0.7, 0.12))
+
+## 坑口館(冒険者ギルド)。石の広間、格子の窓口、掲示板、大窓の向こうに大穴の光
+func _draw_guild() -> void:
+	var W := _w()
+	var H := _h()
+	_grad(Rect2(0, 0, W, H), Color("10141c"), Color("262a34"))
+	# 大窓と、大穴から昇る光
+	var wn := _p(0.36, 0.08)
+	var ww := W * 0.28
+	var wh := H * 0.42
+	draw_rect(Rect2(wn.x, wn.y, ww, wh), Color("08121e"))
+	var beam := 0.22 + 0.06 * sin(t * 0.7)
+	draw_colored_polygon(PackedVector2Array([wn + Vector2(ww * 0.35, wh), wn + Vector2(ww * 0.65, wh), wn + Vector2(ww * 0.58, 0), wn + Vector2(ww * 0.42, 0)]), Color(0.45, 0.8, 1.0, beam))
+	_glow(wn + Vector2(ww * 0.5, wh), ww * 0.5, Color("6ad0ff"), 0.35, 8)
+	for m in motes:
+		var k := fmod(t * m[2] * 0.5 + m[3], 1.0)
+		var mp := wn + Vector2(ww * (0.3 + 0.4 * m[0]), wh * (1.0 - k))
+		draw_circle(mp, 1.2, Color(0.7, 0.92, 1.0, 0.6 * (1.0 - k)))
+	for i in 3:
+		draw_line(wn + Vector2(ww * (i + 1) / 4.0, 0), wn + Vector2(ww * (i + 1) / 4.0, wh), Color("2a2e38"), 4.0)
+	draw_line(wn + Vector2(0, wh * 0.45), wn + Vector2(ww, wh * 0.45), Color("2a2e38"), 4.0)
+	draw_rect(Rect2(wn.x, wn.y, ww, wh), Color("3a3e48"), false, 8.0)
+	# 石の柱
+	for x in [0.08, 0.3, 0.7, 0.92]:
+		draw_rect(Rect2(W * x - W * 0.025, 0, W * 0.05, H * 0.78), Color("1c2028"))
+		draw_rect(Rect2(W * x - W * 0.03, H * 0.05, W * 0.06, H * 0.02), Color("2e323c"))
+	# 掲示板(右)
+	var bd := _p(0.72, 0.18)
+	draw_rect(Rect2(bd.x, bd.y, W * 0.18, H * 0.3), Color("4a3420"))
+	draw_rect(Rect2(bd.x, bd.y, W * 0.18, H * 0.3), Color("2a1c10"), false, 5.0)
+	_rng.seed = 77
+	for i in 9:
+		var px := bd.x + W * (0.01 + (i % 3) * 0.058) + _rng.randf_range(-4, 4)
+		var py := bd.y + H * (0.02 + int(i / 3.0) * 0.092) + _rng.randf_range(-3, 3)
+		var pw := W * 0.045
+		var ph := H * 0.07
+		draw_rect(Rect2(px, py, pw, ph), Color(0.86, 0.8, 0.66, 0.9))
+		for j in 3:
+			draw_line(Vector2(px + 4, py + 8 + j * 7), Vector2(px + pw - 6, py + 8 + j * 7), Color(0.3, 0.25, 0.2, 0.6), 1.0)
+		draw_circle(Vector2(px + pw / 2.0, py + 3), 2.0, Color("a03020"))
+	# 窓口の長い台と格子
+	var cy := H * 0.62
+	draw_rect(Rect2(0, cy, W, H * 0.06), Color("3a2a1a"))
+	draw_rect(Rect2(0, cy + H * 0.06, W, H * 0.3), Color("22180e"))
+	for i in 4:
+		var gx := W * (0.12 + i * 0.22)
+		draw_rect(Rect2(gx, cy - H * 0.16, W * 0.14, H * 0.16), Color(0.05, 0.05, 0.07, 0.6))
+		for j in 6:
+			draw_line(Vector2(gx + W * 0.14 * j / 5.0, cy - H * 0.16), Vector2(gx + W * 0.14 * j / 5.0, cy), Color("6a5a40"), 2.0)
+		draw_rect(Rect2(gx, cy - H * 0.16, W * 0.14, H * 0.16), Color("6a5a40"), false, 3.0)
+		_glow(Vector2(gx + W * 0.07, cy - H * 0.04), 30.0 * _flick(float(i) * 1.7, 6.0), Color("ffd080"), 0.4, 6)
+	# 査定の秤(左の窓口の上)
+	var sc := Vector2(W * 0.19, cy - 4)
+	var tilt := sin(t * 1.3) * 4.0
+	draw_line(sc, sc + Vector2(0, -H * 0.1), Color("c8a860"), 3.0)
+	draw_line(sc + Vector2(-W * 0.04, -H * 0.1 + tilt), sc + Vector2(W * 0.04, -H * 0.1 - tilt), Color("c8a860"), 3.0)
+	for sx in [-1.0, 1.0]:
+		var e := sc + Vector2(W * 0.04 * sx, -H * 0.1 - tilt * sx + 14)
+		draw_line(e + Vector2(0, -14), e, Color("c8a860"), 1.0)
+		draw_rect(Rect2(e.x - 10, e.y, 20, 4), Color("c8a860"))
+	draw_circle(sc + Vector2(-W * 0.04, -H * 0.1 + tilt + 10), 4.0, Color(0.5, 0.9, 1.0, 0.9))
+	# 吊り灯
+	for i in 3:
+		var lx := W * (0.2 + i * 0.3)
+		draw_line(Vector2(lx, 0), Vector2(lx, H * 0.12), Color("1a1a1a"), 2.0)
+		_glow(Vector2(lx, H * 0.14), 36.0 * _flick(float(i) * 2.3), Color("ffc060"), 0.45, 7)
+		draw_circle(Vector2(lx, H * 0.14), 5.0, Color("ffe0a0"))

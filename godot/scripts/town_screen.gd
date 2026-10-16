@@ -18,6 +18,7 @@ const LOCATIONS := {
 	"temple": {"name": "静寂派の神殿・癒院", "art": "temple"},
 	"inn": {"name": "宿「止まり木亭」", "art": "inn"},
 	"pleasure": {"name": "寝息通り", "art": "pleasure"},
+	"guild": {"name": "坑口館・冒険者ギルド", "art": "guild"},
 }
 const QUOTES := {
 	"smith": "「炉火の神ヘルグの槌は、嘘をつかねえ。いい鋼を持っていきな。」",
@@ -25,6 +26,7 @@ const QUOTES := {
 	"magic": "「写本は、読まれるために在る。迷宮もまた、読まれるべき書物だ。」",
 	"temple": "「眠りは誰にも訪れる。静寂の母が、あなたの夜を守りますように。」",
 	"inn": "「あいよ、湯と寝床だ。今夜も、何人戻ってきたかね。」",
+	"guild": "「おかえり。戻ってきた者は、まずここで名を書く。遺品があれば、遺品課の窓口へ。」",
 	"pleasure": "縁環区と壁下区の境に伸びる通り。迷宮の「息」に対して、人の寝息の通りと呼ばれる。",
 }
 const RUMORS := [
@@ -67,6 +69,7 @@ const SIGNS := [
 	["smith", "炉火の槌", "武器・防具", Vector2(0.15, 0.50), "鉄を打つ音が、広場の端まで響いている。"],
 	["pleasure", "寝息通り", "花街", Vector2(0.86, 0.47), "紅の提灯が、通りの奥まで連なっている。三味線に似た音がする。"],
 	["general", "灯守の店", "雑貨・薬", Vector2(0.30, 0.66), "軒先に、灯具と薬瓶がずらりと吊られている。"],
+	["guild", "坑口館", "冒険者ギルド", Vector2(0.64, 0.42), "大穴の縁に、ギルドの本部が建っている。窓口の灯は、夜通し消えない。"],
 	["inn", "止まり木亭", "宿・酒場・仲間", Vector2(0.70, 0.66), "笑い声と、焼いた肉の匂いが漏れてくる。"],
 	["temple", "静寂派の神殿", "癒し・蘇り", Vector2(0.12, 0.76), "鐘は鳴らない。静寂の母の神殿は、いつも静かだ。"],
 	["dive", "坑口", "迷宮へ降りる", Vector2(0.50, 0.80), "大穴から、青白い光が昇っている。今夜の通路は、どう組み替わっただろう。"],
@@ -79,7 +82,21 @@ const ENTER_LINES := {
 	"temple": "神殿の中は、外の喧騒が嘘のように静かだ。",
 	"inn": "止まり木亭の扉を開けると、暖かい空気と話し声に包まれた。",
 	"pleasure": "広場の東から、提灯の続く通りへ入った。",
+	"guild": "坑口館の扉を押した。査定課の秤の音と、帰還を書き込む筆の音がする。",
 }
+## 坑口館の掲示板(入るたびに2枚)
+const NOTICES := [
+	"【捜索の依頼】第3層で消息を絶った三人組。認識票だけでも届けてほしい。遺族より謝礼あり。",
+	"【告示】帰還の期日を過ぎた者は、灯手隊が出る。帰還積立に入っていない者は、派遣料を払うこと。",
+	"【求む】叫び茸の輪の位置。鳴子の材料にする。薬師組。",
+	"【注意】鏡の層で、自分と同じ顔の者に声をかけられても、返事をしないこと。",
+	"【講習】新人講習は、毎朝、二の鐘から。罠の見つけ方と、扉の聞き耳。",
+	"【遺品課より】引き取り手のない遺品は、一年を過ぎると競りに出す。",
+	"【告示】坑口守護官より。大穴の光が揺らいだ夜は、深く潜らないこと。",
+	"【求む】腕のいい盗賊。鍵のかかった宝物庫の前で、三日も足止めを食っている。",
+]
+## 遺品課が引き取るもの。[品物, 謝礼の割合(買い値に対して)]。認識票と遺品の装備は、ここでしか引き取らない
+const RELIC_RATE := {"relic_tag": 1.0, "relic_gear": 1.0, "relic_tools": 0.6, "relic_coins": 1.0}
 const LEAVE_LINES := ["広場へ戻った。夜風が冷たい。", "広場へ戻った。坑口の光が、今夜も昇っている。", "広場へ戻った。どこかで、帰還を祝う声がする。"]
 
 var gs: GameState
@@ -91,6 +108,8 @@ var shop_mode := "buy"
 var sel_id := ""
 var shop_ids: Array = []
 var report: Array = []
+var last_report: Array = []        # 坑口館の査定課で、もう一度読める
+var notices: Array = []
 var party_bar: HBoxContainer
 var silver_label: Label
 var signs: Control                 # 広場の看板(画面の上に置く)
@@ -394,6 +413,7 @@ func _build_content() -> void:
 		"temple": _content_temple()
 		"inn": _content_inn()
 		"pleasure": _content_pleasure()
+		"guild": _content_guild()
 
 ## 中身の見出し(店の人の一言は、左の札に出す)
 func _head(title: String, _quote: String = "") -> void:
@@ -408,6 +428,7 @@ func _build_report() -> void:
 	report_box.visible = location == "hub" and not report.is_empty()
 	if not report_box.visible:
 		return
+	last_report = report.duplicate()
 	var v := UIKit.vbox(6)
 	v.add_child(UIKit.label("ギルドの査定報告", 18, UIKit.ACCENT))
 	for l in report:
@@ -488,6 +509,8 @@ func _fill_shop() -> void:
 				shop_list.set_item_custom_fg_color(shop_list.item_count - 1, Color(0.55, 0.45, 0.45))
 	else:
 		for id in gs.item_ids():
+			if ItemDB.GUILD_ONLY.has(id):
+				continue      # 認識票と遺品の装備は、坑口館の遺品課へ
 			shop_ids.append(id)
 			shop_list.add_item("%s ×%d   %d銀" % [ItemDB.item_name(id), gs.count(id), gs.sell_price(id)], ItemIcons.texture(id))
 		if shop_ids.is_empty():
@@ -635,6 +658,180 @@ func _bless() -> void:
 
 func _pray() -> void:
 	_say("膝をつき、目を閉じた。聖堂の奥で、誰も座っていない十二番目の座が、静かに光っている。", UIKit.TEXT)
+
+# ---------- 坑口館(冒険者ギルド) ----------
+
+func _relic_reward(id: String) -> int:
+	return int(round(int(ItemDB.ITEMS[id]["price"]) * float(RELIC_RATE[id])))
+
+func _content_guild() -> void:
+	_head(String(LOCATIONS["guild"]["name"]), String(QUOTES["guild"]))
+	content.add_child(UIKit.label("大穴の縁に建つ、潜行者組合の本部。窓口の向こうで、査定課の秤が鳴っている。", 14, UIKit.DIM))
+	var cols := UIKit.hbox(16)
+	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(cols)
+	var lc := UIKit.vbox(6)
+	lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(lc)
+	var rc := UIKit.vbox(6)
+	rc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(rc)
+	_guild_relics(lc)
+	_guild_insurance(lc)
+	_guild_report(lc)
+	_guild_board(rc)
+
+func _wrap(t: String, sz: int, col: Color = UIKit.TEXT) -> Label:
+	var lb := UIKit.label(t, sz, col)
+	lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return lb
+
+## 遺品課: 遺品を引き取り、謝礼を出す
+func _guild_relics(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("遺品課  遺品の引き取り", 18, UIKit.ACCENT))
+	var any := false
+	var total := 0
+	for id in RELIC_RATE:
+		var n := gs.count(id)
+		if n <= 0:
+			continue
+		any = true
+		total += _relic_reward(id) * n
+		var row := UIKit.hbox(6)
+		var ic := TextureRect.new()
+		ic.texture = ItemIcons.texture(id)
+		ic.custom_minimum_size = Vector2(26, 26)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		row.add_child(ic)
+		row.add_child(_wrap("%s ×%d  謝礼 %d銀/1つ" % [ItemDB.item_name(id), n, _relic_reward(id)], 15))
+		row.add_child(UIKit.button("1つ渡す", _hand_relic.bind(id, 1), 92))
+		if n > 1:
+			row.add_child(UIKit.button("全部", _hand_relic.bind(id, n), 64))
+		else:
+			var gap := Control.new()
+			gap.custom_minimum_size = Vector2(64, 0)
+			row.add_child(gap)
+		box.add_child(row)
+	if any:
+		box.add_child(UIKit.button("遺品をまとめて渡す(謝礼 %d銀貨)" % total, _hand_all_relics))
+	else:
+		box.add_child(_wrap("届ける遺品はない。迷宮で遺体を調べると、認識票や遺品が見つかることがある。", 14, UIKit.DIM))
+	box.add_child(_wrap("認識票と遺品の装備は、ここでしか引き取らない(店では売れない)。", 13, UIKit.DIM))
+
+## 帰還積立: 次の潜行で全滅しても、灯手隊が装備と持ち物の半分を拾ってくる
+func _guild_insurance(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("帰還記録課  帰還積立", 18, UIKit.ACCENT))
+	if gs.insured:
+		box.add_child(_wrap("次の潜行は、帰還積立に入っている。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。", 14, UIKit.GOOD))
+		return
+	var cost := gs.insurance_cost()
+	var b := UIKit.button("帰還積立に入る(%d銀貨)" % cost, _insure)
+	b.disabled = gs.bank_silver < cost
+	box.add_child(b)
+	box.add_child(_wrap("次の潜行一回ぶん。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。掛け金は仲間のレベルで決まる。", 13, UIKit.DIM))
+
+func _guild_report(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("査定課  前回の査定", 18, UIKit.ACCENT))
+	if last_report.is_empty():
+		box.add_child(_wrap("今夜の査定の記録は、まだない。", 14, UIKit.DIM))
+		return
+	for l in last_report:
+		box.add_child(_wrap(String(l), 14))
+
+## 掲示板: 受けた依頼と、今日の依頼、告示
+func _guild_board(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("掲示板  依頼(受けられるのは%d件まで)" % GameState.MAX_QUESTS, 18, UIKit.ACCENT))
+	for i in gs.quests.size():
+		var q: Dictionary = gs.quests[i]
+		var have := gs.count(String(q["id"]))
+		var ok := have >= int(q["n"])
+		var row := UIKit.hbox(6)
+		row.add_child(_wrap("受けている: %s %s %d/%d  報酬 %d銀" % [q["client"], ItemDB.item_name(String(q["id"])), mini(have, int(q["n"])), int(q["n"]), int(q["reward"])], 15,
+			UIKit.GOOD if ok else UIKit.TEXT))
+		var d := UIKit.button("納品する", _deliver.bind(i), 92)
+		d.disabled = not ok
+		row.add_child(d)
+		row.add_child(UIKit.button("やめる", _drop_quest.bind(i), 64))
+		box.add_child(row)
+	var offers := gs.offered_quests()
+	for q2 in offers:
+		var row2 := UIKit.hbox(6)
+		row2.add_child(_wrap("【依頼】%s「%s」%s ×%d  報酬 %d銀" % [q2["client"], q2["line"], ItemDB.item_name(String(q2["id"])), int(q2["n"]), int(q2["reward"])], 15, Color("e8dcb0")))
+		var a := UIKit.button("受ける", _accept.bind(q2), 72)
+		a.disabled = gs.quests.size() >= GameState.MAX_QUESTS
+		row2.add_child(a)
+		box.add_child(row2)
+	box.add_child(_wrap("依頼の品は、迷宮で拾うか、魔物から取る。掲示板の依頼は、日ごとに貼り替わる。", 13, UIKit.DIM))
+	box.add_child(Control.new())
+	if notices.is_empty():
+		notices = [NOTICES.pick_random()]
+	for n2 in notices:
+		box.add_child(_wrap(String(n2), 14, UIKit.DIM))
+
+func _after_guild(line: String, col: Color) -> void:
+	_say(line, col)
+	_refresh_top()
+	_build_content()
+	call_deferred("_refocus_content")
+
+func _insure() -> void:
+	var cost := gs.insurance_cost()
+	if gs.bank_silver < cost or gs.insured:
+		return
+	gs.bank_silver -= cost
+	gs.insured = true
+	gs.save()
+	_after_guild("帰還記録課の帳面に、仲間の名を書き込んだ。「無事に戻れば、それが一番だがね。」(-%d銀貨)" % cost, UIKit.GOOD)
+
+func _accept(q: Dictionary) -> void:
+	var r := gs.accept_quest(q)
+	if r != "":
+		_say(r, UIKit.BAD)
+		return
+	_after_guild("掲示板から%sの依頼書を剥がして、受付に出した。「%s ×%d。頼んだよ。」" % [q["client"], ItemDB.item_name(String(q["id"])), int(q["n"])], UIKit.TEXT)
+
+func _deliver(i: int) -> void:
+	var q: Dictionary = gs.quests[i]
+	var got := gs.deliver_quest(i)
+	if got < 0:
+		_say("まだ数が足りない", UIKit.BAD)
+		return
+	_after_guild("%sを納めた。受付が%sからの報酬を数えて渡した。(+%d銀貨)" % [ItemDB.item_name(String(q["id"])), q["client"], got], UIKit.GOOD)
+
+func _drop_quest(i: int) -> void:
+	var q: Dictionary = gs.quests[i]
+	gs.drop_quest(i)
+	_after_guild("%sの依頼をやめた。依頼書は、また掲示板に貼り戻された。" % q["client"], UIKit.TEXT)
+
+func _hand_relic(id: String, n: int) -> void:
+	var got := 0
+	for i in mini(n, gs.count(id)):
+		gs.remove_item(id)
+		got += _relic_reward(id)
+	gs.bank_silver += got
+	var line := "遺品課の係が、%sを受け取った。「……届けておく。ありがとう。」(謝礼 +%d銀貨)" % [ItemDB.item_name(id), got]
+	if id == "relic_tag":
+		line = "係は認識票の名を、帳面と見比べた。「……この人の家族に、知らせておく。」(謝礼 +%d銀貨)" % got
+	_say(line, UIKit.GOOD)
+	gs.save()
+	_refresh_top()
+	_build_content()
+	call_deferred("_refocus_content")
+
+func _hand_all_relics() -> void:
+	var got := 0
+	for id in RELIC_RATE:
+		while gs.count(id) > 0:
+			gs.remove_item(id)
+			got += _relic_reward(id)
+	gs.bank_silver += got
+	_say("遺品をまとめて窓口に置いた。係は一つずつ帳面に書き込んだ。(謝礼 +%d銀貨)" % got, UIKit.GOOD)
+	gs.save()
+	_refresh_top()
+	_build_content()
+	call_deferred("_refocus_content")
 
 # ---------- 宿屋 ----------
 
