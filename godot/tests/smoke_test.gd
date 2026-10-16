@@ -1033,6 +1033,14 @@ func _test_game() -> void:
 	check(GameSettings.zoom_index == 0 and is_equal_approx(main.camera.zoom.x, GameSettings.ZOOMS[0][1]), "－で画面が広くなる (×%.1f)" % main.camera.zoom.x)
 	GameSettings.set_zoom(z0)
 	main.camera.zoom = Vector2.ONE * GameSettings.zoom()
+	# ミニマップ(+ / -)
+	var m0: int = GameSettings.minimap_index
+	main.minimap_step(1)
+	check(GameSettings.minimap_index == mini(m0 + 1, GameSettings.MINIMAPS.size() - 1) and is_equal_approx(main.camera.zoom.x, GameSettings.zoom()), "+ はミニマップを拡大し、画面の倍率は変えない")
+	main.minimap_step(-9)
+	main.minimap_step(-1)
+	check(GameSettings.minimap_index == 0, "- でミニマップを縮小する")
+	GameSettings.set_minimap(m0)
 	# 擬音
 	var nk := fl.get_child_count()
 	Sfx.cue(fl, main.leader().position, "door")
@@ -1154,6 +1162,7 @@ func _test_game() -> void:
 	check(main.phase == "town" and main.gs.party.size() == 4, "つづきからで街へ戻れる")
 	await _test_time(main)
 	await _test_traps(main)
+	await _test_corpses(main)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 	main.queue_free()
 	await process_frame
@@ -1249,6 +1258,39 @@ func _test_time(main: Node) -> void:
 	main.return_to_surface()
 	await _step(3)
 	check(main.dtime == null, "街へ戻ると、迷宮の時間は片付く")
+
+# ---------- 遺体 ----------
+
+func _test_corpses(main: Node) -> void:
+	print("[corpses]")
+	check(GroundItems.corpse_look("beast") == "bones" and GroundItems.corpse_look("humanoid") == "hang" and GroundItems.corpse_look("fiend") == "hang" \
+		and GroundItems.corpse_look("undead") == "sit" and GroundItems.corpse_look("undead", "ghoul") == "bones" and GroundItems.corpse_look("swarm of rats") == "bones", "遺体の見た目は、原因の魔物の種類で決まる")
+	for c in main.gs.party:
+		c.hp = float(c.max_hp())
+	main._on_dive()
+	await _step(3)
+	var fl: FloorInstance = main.current
+	var bodies: Array = fl.ground.entries.filter(func(e): return e["kind"] == "corpse")
+	check(not bodies.is_empty() and bodies.all(func(e): return not (e["cause"] as Dictionary).is_empty() and ["bones", "sit", "hang"].has(e["look"]) and ItemIcons.texture(String(e["id"])) != null), "遺体には原因の魔物と、3つの見た目のどれかがある (%d体)" % bodies.size())
+	_clear_enemies(fl)
+	var body: Dictionary = bodies[0]
+	main.leader().position = body["pos"]
+	for h in main.heroes:
+		h.position = body["pos"]
+	await _step(20)
+	check(not body["searched"] and fl.ground.entries.has(body), "遺体は、触れても調べない(拾わない)")
+	main._update_hint()
+	check(main.hud.hint.contains("遺体"), "遺体のそばでは、E で調べると出る (%s)" % main.hud.hint)
+	var n0: int = fl.ground.entries.size()
+	main.interact()
+	var nm := String(body["cause"]["mon"].get("name_ja", ""))
+	check(body["searched"] and fl.enemies.size() > 0 and fl.enemies[0].mon.get("name_ja", "") == nm, "E で遺体を調べると、遺体をこうした魔物が湧く (%s ×%d)" % [nm, fl.enemies.size()])
+	check(fl.ground.entries.size() > n0 and fl.ground.entries.has(body), "中身が散らばり、遺体はそのまま残る")
+	var ne: int = fl.enemies.size()
+	main.interact()
+	check(fl.enemies.size() == ne, "調べた遺体は、もう一度は湧かない")
+	main.return_to_surface()
+	await _step(3)
 
 # ---------- 罠の前で選ぶ、新しい罠 ----------
 

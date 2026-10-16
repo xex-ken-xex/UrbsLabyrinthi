@@ -18,6 +18,8 @@ const CUES := {
 	"stairs": ["コツ、コツ…", Color(0.85, 0.85, 0.9)],
 	"search": ["ペタペタ", Color(0.75, 0.8, 0.85)],
 	"rest": ["パチパチ…", Color(1.0, 0.75, 0.45)],
+	"crystal": ["キラッ", Color(0.75, 0.95, 1.0)],
+	"crystal_big": ["ゴロッ", Color(0.75, 0.95, 1.0)],
 }
 const LIFE := 0.9
 

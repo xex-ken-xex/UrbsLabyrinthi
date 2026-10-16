@@ -10,7 +10,7 @@ pair: godot/assets/OVERRIDE.md(差し替えのしかた)、tools/make-items.py(�
 
 ## 1. シートの形
 
-- **16列 × 5行**(全72マス)。1マス 32×32。シート全体は **512×160 ピクセル**。透明な背景。
+- **16列 × 5行**(全75マス)。1マス 32×32。シート全体は **512×160 ピクセル**。透明な背景。
 - マスの並びは、下の表の「マス」の番号(0から。左上が0、右へ数え、行が替わる)。**この並びは変えない**(ゲームが、`data/item-icons.json` の番号で切り出す)。
 - 解像度を上げたいときは、同じ並びのまま、横幅を 16 の倍数にする(例: 1マス 64×64 なら 1024×320)。ゲームは、横幅÷16 を1マスの大きさとして切る。
 - 1つだけ差し替えたいときは、`item_<id>.png`(例: `item_kuro_take.png`)を `assets/` に置く。シートより優先される。
@@ -124,3 +124,6 @@ ICON LIST (cell number: id — description)
 | 69 | `relic_tag` | 認識票 | a grey metal guild identification tag on a thin chain |
 | 70 | `relic_coins` | 古い銀貨 | a small pile of four old silver coins |
 | 71 | `corpse` | 遺体(地面に置く絵) | (drawn on the ground) the body of a fallen adventurer lying sideways, blue tunic, brown boots |
+| 72 | `corpse_bones` | 遺体: 食い荒らされた骨 | (drawn on the ground) gnawed remains: scattered bones, a skull, ribs and torn blue cloth in a dark blood stain |
+| 73 | `corpse_sit` | 遺体: 座って息絶えた | (drawn on the ground) an adventurer who died sitting against the wall, head drooped, legs stretched out, a dropped dagger |
+| 74 | `corpse_hang` | 遺体: 吊るされた | (drawn on the ground, tall) a body hanged from a wooden beam by a rope, dark red clothes, a stain on the floor below |

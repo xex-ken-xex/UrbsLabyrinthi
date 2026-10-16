@@ -35,6 +35,7 @@ var arena: Arena = null            # 闘技場にいるとき
 var arena_panel: ArenaPanel = null
 var trap_menu: TrapMenu = null     # 見つけた罠の前で、どうするかを選んでいる
 var _menu_trap: Dictionary = {}
+var _crystal_cue_ms := -10000
 var scripted_input := false        # テスト用: true の間は、キー入力を読まない
 
 func _ready() -> void:
@@ -294,7 +295,7 @@ func start_arena() -> void:
 	move_child(current, 0)
 	current.heroes = heroes
 	current.leader = leader()
-	current.message.connect(log_msg)
+	current.message.connect(_on_floor_message)
 	current.enemy_killed.connect(_on_enemy_killed)
 	current.ground_picked.connect(_on_ground_picked)
 	var center := current.map.center_of(current.up_cell)
@@ -364,7 +365,7 @@ func enter_floor(n: int, arrive: String) -> void:
 		if fl == null:
 			push_error("層を読めない: %d" % n)
 			return
-		fl.message.connect(log_msg)
+		fl.message.connect(_on_floor_message)
 		fl.enemy_killed.connect(_on_enemy_killed)
 		fl.ground_picked.connect(_on_ground_picked)
 		floors[n] = fl
@@ -425,6 +426,10 @@ func _refresh_view() -> void:
 	current.update_flow(pc)
 	current.light_pos = leader().position
 	current.queue_redraw()
+
+## 層からの知らせ(kind: info / danger)
+func _on_floor_message(text: String, kind: String) -> void:
+	log_msg(text, Color("ff6a5a") if kind == "danger" else Color(0.85, 0.85, 0.8))
 
 func log_msg(text: String, color: Color = Color.WHITE) -> void:
 	var s := text
@@ -520,13 +525,21 @@ func _read_input() -> void:
 	if Input.is_action_just_pressed("rest"):
 		start_rest()
 	if Input.is_action_just_pressed("zoom_in"):
-		zoom_step(1)
+		minimap_step(1)
 	if Input.is_action_just_pressed("zoom_out"):
-		zoom_step(-1)
+		minimap_step(-1)
 	if Input.is_action_just_pressed("inventory") and _menu_cd <= 0.0:
 		open_inventory()
 
-## 迷宮の画面を3段階で拡大・縮小する(闘技場は固定)。段は保存する
+## ミニマップ(仲間のまわり)を拡大・縮小する。段は保存する
+func minimap_step(d: int) -> void:
+	var i := clampi(GameSettings.minimap_index + d, 0, GameSettings.MINIMAPS.size() - 1)
+	if i == GameSettings.minimap_index:
+		return
+	GameSettings.set_minimap(i)
+	log_msg("ミニマップ: %s" % GameSettings.minimap_name(), Color(0.7, 0.85, 1.0))
+
+## 迷宮の画面を3段階で拡大・縮小する(マウスのホイール。闘技場は固定)。段は保存する
 func zoom_step(d: int) -> void:
 	if arena != null or phase != "dungeon":
 		return
@@ -782,12 +795,16 @@ func _nearest_trap_to_disarm() -> Variant:
 			return t
 	return null
 
+const CORPSE_REACH := 30.0     # 遺体を調べられる距離(画素)
+
 func _update_hint() -> void:
 	var h := ""
 	if _nearest_locked_door() != null:
 		h = "E: 解錠を試みる"
 	elif _nearest_trap_to_disarm() != null:
 		h = "%s: 罠をどうする?" % Controls.hint("interact")
+	elif arena == null and not current.ground.corpse_near(leader().position, CORPSE_REACH).is_empty():
+		h = "%s: 遺体を調べる" % Controls.hint("interact")
 	elif arena != null:
 		h = "E: 闘技場を出る" if _near(current.up_cell, 1.4) else ""
 	elif _near(current.down_cell, 1.4):
@@ -806,6 +823,12 @@ func interact() -> void:
 	var trap: Variant = _nearest_trap_to_disarm()
 	if trap != null:
 		open_trap_menu(trap)
+		return
+	var body := current.ground.corpse_near(leader().position, CORPSE_REACH)
+	if not body.is_empty():
+		current.ground.search_corpse(body)
+		current.queue_redraw()
+		_update_hint()
 		return
 	if arena != null:
 		if _near(current.up_cell, 1.4):
@@ -835,6 +858,9 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 		var ccol: Color = Crystal.COLORS.get(pid, Color.WHITE)
 		var ctex := ItemIcons.texture(Crystal.icon_id(pid, kg))
 		h.game_floor.add_child(PickupPop.make(ctex, "%s %.2fkg" % [Crystal.jp(pid), kg], ccol, e["pos"], h))
+		if Time.get_ticks_msec() - _crystal_cue_ms > 400:      # まとめて拾ったときは、擬音を重ねない
+			_crystal_cue_ms = Time.get_ticks_msec()
+			Sfx.cue(h.game_floor, h.position, "crystal_big" if kg >= 0.3 else "crystal")
 		hud.add_pickup("crystal_" + pid, ctex, Crystal.jp(pid), ccol, kg, "kg")
 		return
 	var id := String(e["id"])

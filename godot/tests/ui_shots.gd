@@ -127,6 +127,15 @@ func _run() -> void:
 	main.open_inventory()
 	await shot("dungeon_menu")
 	main.close_inventory()
+	# 遺体の3タイプ
+	for k in 3:
+		var look: String = ["bones", "sit", "hang"][k]
+		fl.ground.entries.append({"kind": "corpse", "id": "corpse_" + look, "look": look, "cause": {}, "searched": k == 2,
+			"pos": lead.position + Vector2(-60 + k * 60, 70), "vel": Vector2.ZERO, "t": 0.0, "ph": 0.3})
+	for i in 5:
+		await physics_frame
+	fl.queue_redraw()
+	await shot("corpses")
 	# 罠の前の3択
 	var tt: Dictionary = fl.traps[0].duplicate()
 	var lc: Vector2i = fl.map.cell_of(lead.position)

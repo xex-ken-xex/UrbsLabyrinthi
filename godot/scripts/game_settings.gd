@@ -16,7 +16,13 @@ const DEFAULT_ENEMY_SPEED := 1
 const ZOOMS := [["広く", 1.2], ["普通", 1.7], ["近く", 2.3]]
 const DEFAULT_ZOOM := 1
 
+## ミニマップ(右上。仲間のまわりだけ)の1マスの画素数。+ / - で替える
+const MINIMAPS := [["広く", 2.0], ["普通", 3.0], ["近く", 4.0], ["もっと近く", 6.0]]
+const DEFAULT_MINIMAP := 1
+const MINIMAP_SIZE := Vector2(230, 160)
+
 static var speed_index := DEFAULT_SPEED
+static var minimap_index := DEFAULT_MINIMAP
 static var zoom_index := DEFAULT_ZOOM
 static var enemy_speed_index := DEFAULT_ENEMY_SPEED
 
@@ -25,7 +31,9 @@ static func load_settings() -> void:
 	speed_index = DEFAULT_SPEED
 	enemy_speed_index = DEFAULT_ENEMY_SPEED
 	zoom_index = DEFAULT_ZOOM
+	minimap_index = DEFAULT_MINIMAP
 	if cf.load(PATH) == OK:
+		minimap_index = clampi(int(cf.get_value("game", "minimap", DEFAULT_MINIMAP)), 0, MINIMAPS.size() - 1)
 		zoom_index = clampi(int(cf.get_value("game", "zoom", DEFAULT_ZOOM)), 0, ZOOMS.size() - 1)
 		speed_index = clampi(int(cf.get_value("game", "speed", DEFAULT_SPEED)), 0, SPEEDS.size() - 1)
 		enemy_speed_index = clampi(int(cf.get_value("game", "enemy_speed", DEFAULT_ENEMY_SPEED)), 0, ENEMY_SPEEDS.size() - 1)
@@ -36,6 +44,7 @@ static func save() -> void:
 	cf.set_value("game", "speed", speed_index)
 	cf.set_value("game", "enemy_speed", enemy_speed_index)
 	cf.set_value("game", "zoom", zoom_index)
+	cf.set_value("game", "minimap", minimap_index)
 	cf.save(PATH)
 
 static func set_speed(i: int) -> void:
@@ -61,6 +70,16 @@ static func set_zoom(i: int) -> void:
 
 static func zoom() -> float:
 	return float(ZOOMS[zoom_index][1])
+
+static func set_minimap(i: int) -> void:
+	minimap_index = clampi(i, 0, MINIMAPS.size() - 1)
+	save()
+
+static func minimap_scale() -> float:
+	return float(MINIMAPS[minimap_index][1])
+
+static func minimap_name() -> String:
+	return String(MINIMAPS[minimap_index][0])
 
 static func zoom_name() -> String:
 	return String(ZOOMS[zoom_index][0])

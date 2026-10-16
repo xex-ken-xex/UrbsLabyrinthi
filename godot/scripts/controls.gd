@@ -14,7 +14,7 @@ const ACTIONS := [
 	["attack", "攻撃(正面へ一撃)"], ["guard", "構え(押している間)"], ["dodge", "転がり"],
 	["skill1", "スキル1"], ["skill2", "スキル2"], ["skill3", "スキル3"], ["skill4", "スキル4"],
 	["switch", "操作する仲間を替える"], ["interact", "調べる・開ける・拾う"], ["search", "探る(罠と隠し扉)"],
-	["quick_heal", "治療薬を使う"], ["rest", "休む(野営)"], ["zoom_in", "画面を近く(拡大)"], ["zoom_out", "画面を広く(縮小)"], ["inventory", "持ち物(メニュー)"], ["confirm", "決定(報告を閉じる)"],
+	["quick_heal", "治療薬を使う"], ["rest", "休む(野営)"], ["zoom_in", "ミニマップを拡大"], ["zoom_out", "ミニマップを縮小"], ["inventory", "持ち物(メニュー)"], ["confirm", "決定(報告を閉じる)"],
 ]
 ## 割り当てを変えられない操作
 const FIXED := {"reload_assets": [KEY_F6], "credits": [KEY_F1]}
