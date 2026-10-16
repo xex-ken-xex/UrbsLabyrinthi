@@ -1,7 +1,7 @@
 class_name UnlockFx
 extends Node2D
 ## 扉の解錠の演出。成功: 錠前の弓が外れて跳ね、金の光が散る。失敗: 錠前が揺れて赤く光る。
-## 擬音(カチリ/ガチャ…)は CueText で描く。
+## 擬音(カチリ/ガチャガチャッ。Sfx.CUES の unlock / unlock_fail)は CueText で描く。
 
 var ok := true
 var age := 0.0
@@ -52,6 +52,6 @@ func _draw() -> void:
 				var dir := Vector2.from_angle(TAU * i / 8.0 + 0.2)
 				draw_line(c + dir * (8.0 + 14.0 * g), c + dir * (12.0 + 22.0 * g), Color(1.0, 0.92, 0.6, (1.0 - g)), 2.0)
 			draw_arc(c, 10.0 + 26.0 * g, 0.0, TAU, 28, Color(1.0, 0.9, 0.55, (1.0 - g) * 0.8), 2.0)
-		CueText.draw_word(self, CueText.split("カチリ"), "pop", age, 99.0, 14.0, Color(1.0, 0.92, 0.6, a), 0.0, false, Vector2(0, -30.0))
+		CueText.draw_word(self, CueText.split(String(Sfx.CUES["unlock"][0])), "pop", age, 99.0, 14.0, Color(1.0, 0.92, 0.6, a), 0.0, false, Vector2(0, -30.0))
 	else:
-		CueText.draw_word(self, CueText.split("ガチャ…"), "shake", age, 99.0, 13.0, Color(1.0, 0.6, 0.55, a), 0.0, false, Vector2(0, -30.0))
+		CueText.draw_word(self, CueText.split(String(Sfx.CUES["unlock_fail"][0])), "shake", age, 99.0, 13.0, Color(1.0, 0.6, 0.55, a), 0.0, false, Vector2(0, -30.0))

@@ -25,6 +25,7 @@ var trail: Array = []
 var light_t := 0.0                 # 燐晶の灯油の残り秒
 var pending_return := false
 var fire_until := -1.0            # 野営の火が消える時刻(迷宮の時刻、分)。燃料1つで1時間
+var _kill_cue_ms := -1000            # 魔物が倒れた擬音を、最後に出した時刻(間引く)
 var _menu_fx: Array = []           # 持ち物の画面で起きた手ごたえ(料理、食べる)。閉じたら出す [擬音, Hero]
 var pending_rest := false         # 持ち物の「休む」を押した(閉じたら休み始める)
 var dtime: DungeonTime = null      # 迷宮の中の時間(闘技場では使わない)
@@ -1565,10 +1566,11 @@ func close_inventory() -> void:
 	for fx in _menu_fx:
 		var h: Hero = fx[1]
 		if current != null and is_instance_valid(h):
+			var off: Vector2 = fx[2] if fx.size() > 2 else Vector2.ZERO
 			if String(fx[0]).begins_with("@"):
-				current.spawn_text(h.position + Vector2(0, -36), String(fx[0]).substr(1), Color("ffe08a"))
+				current.spawn_text(h.position + Vector2(0, -36) + off, String(fx[0]).substr(1), Color("ffe08a"))
 			else:
-				Sfx.cue(current, h.position, String(fx[0]))
+				Sfx.cue(current, h.position + off, String(fx[0]))
 	_menu_fx.clear()
 	if phase == "town" and screen is TownScreen:
 		(screen as TownScreen).refresh_top()
@@ -1663,6 +1665,7 @@ func use_special(id: String, _c: Character) -> bool:
 		"light":
 			light_t = maxf(light_t, float(ItemDB.ITEMS[id].get("t", 180.0)))
 			_refresh_view()
+			_menu_fx.append(["ignite", leader()])
 			return true
 		"buff":
 			var it: Dictionary = ItemDB.ITEMS[id]
@@ -1677,6 +1680,7 @@ func use_special(id: String, _c: Character) -> bool:
 			return false
 		"return":
 			pending_return = true
+			_menu_fx.append(["recall", leader()])
 			return true
 		"cure":
 			var hc := _hero_of(_c)
@@ -1694,6 +1698,7 @@ func use_special(id: String, _c: Character) -> bool:
 				if not e.dead and e.position.distance_to(lead.position) <= r * Balance.CELL:
 					e.apply_stun(float(it2["v"]))
 					n += 1
+			_menu_fx.append(["glass", lead, Vector2(0, 22)])
 			if String(it2["use"]) == "shriek":
 				current.alert_radius(lead.position, 14.0)
 				_menu_fx.append(["trap_alarm", lead])
@@ -1709,6 +1714,11 @@ func _on_enemy_killed(en: Enemy) -> void:
 	if arena != null:
 		return          # 闘技場では、経験点も落とし物もない
 	en.game_floor.ground.drop_from_enemy(en)
+	# 倒れる音。まとめて倒したときは重ねない(0.25秒に一つ)
+	var now := Time.get_ticks_msec()
+	if now - _kill_cue_ms > 250:
+		_kill_cue_ms = now
+		Sfx.cue(en.game_floor, en.position + Vector2(0, 14), "kill")
 	var alive: Array = []
 	for h in heroes:
 		if not h.down:
@@ -1723,6 +1733,7 @@ func _on_enemy_killed(en: Enemy) -> void:
 			if h.ch.pending().size() > before:
 				log_msg("%sは、能力値上昇か特技を選べる(%s →「技能・特技」)" % [h.ch.name, Controls.hint("inventory")], Color("ffe9a8"))
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
+			Sfx.cue(h.game_floor, h.position + Vector2(0, 16), "levelup")
 
 func return_to_surface() -> void:
 	_trace("return_to_surface 第%d層から" % (current.floor_no if current != null else 0))

@@ -1673,6 +1673,11 @@ func _test_game() -> void:
 		if not Sfx.STYLE.has(id) or not ["pop", "slam", "bounce", "shake", "stretch", "soft", "snap", "wave"].has(String(Sfx.STYLE[id])):
 			unstyled.append(id)
 	check(unstyled.is_empty() and UI.cue_font() != UI.font(), "どの擬音にも動き方があり、擬音用のフォントで描く %s" % str(unstyled))
+	var no_cue: Array = []
+	for sid in Jobs.SKILLS:
+		if not Sfx.SKILL_CUE.has(sid) or not Sfx.CUES.has(String(Sfx.SKILL_CUE[sid])):
+			no_cue.append(sid)
+	check(no_cue.is_empty(), "どのスキルにも擬音がある %s" % str(no_cue))
 	# スキル
 	var casts := 0
 	for h in main.heroes:

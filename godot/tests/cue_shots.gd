@@ -3,8 +3,8 @@ extends SceneTree
 ##   xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- 出力先
 ## 動き方ごとに1列。上から下へ、出てから 0.04 / 0.12 / 0.25 / 0.5 秒
 
-const SAMPLES := [["pop", "unlock"], ["slam", "trap"], ["bounce", "munch"], ["shake", "grind"],
-	["stretch", "door"], ["soft", "warp"], ["snap", "dart"], ["wave", "growl"]]
+const SAMPLES := [["pop", "revive"], ["slam", "sk_fire"], ["bounce", "munch"], ["shake", "sk_thunder"],
+	["stretch", "levelup"], ["soft", "sk_heal"], ["snap", "sk_arrow"], ["wave", "growl_hard"]]
 const TIMES := [0.04, 0.12, 0.25, 0.5]
 
 func _initialize() -> void:
