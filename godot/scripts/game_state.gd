@@ -49,6 +49,17 @@ func _order(id: String) -> String:
 	return String(rank.get(String(it.get("kind", "")), "9")) + id
 
 ## 全滅したときに失う。持ち物と、仲間が着けている装備を全部(武器・防具も)。失った数を返す
+## 酒場で加えた仲間と別れる。装備は外して、持ち物へ戻す(ただし作ったときの二人とは別れない)
+func dismiss(ch: Character) -> bool:
+	if not ch.hired or not party.has(ch):
+		return false
+	for slot in ["weapon", "armor", "acc"]:
+		if String(ch.equip.get(slot, "")) != "":
+			unequip(ch, slot)
+	party.erase(ch)
+	save()
+	return true
+
 func lose_everything() -> int:
 	var n := 0
 	for id in inventory:
@@ -205,8 +216,13 @@ func load_save() -> bool:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
 	party = []
+	var has_hired := false
 	for d in parsed.get("party", []):
 		party.append(Character.from_dict(d))
+		has_hired = has_hired or (d as Dictionary).has("hired")
+	if not has_hired:
+		for i in range(2, party.size()):
+			party[i].hired = true      # 別れる操作より前の記録: 3人目からは酒場で加えた仲間
 	inventory = {}
 	for k in parsed.get("inventory", {}):
 		if ItemDB.ITEMS.has(String(k)):

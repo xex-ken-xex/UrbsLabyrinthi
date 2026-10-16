@@ -19,6 +19,7 @@ var mp := 0.0
 var equip := {"weapon": "", "armor": "", "acc": ""}
 var skills: Array = []              # 覚えているスキルのid
 var slots: Array = ["", "", "", "", "", ""] # スキル 1〜6(数字キー。Ctrl で選んで右クリックでも使う)。0 番目(スキル1)は武器の技
+var hired := false                  # 酒場で加えた仲間(3人目と4人目)。宿で別れられる。作ったときの二人(主人公と相棒)は別れない
 var skill_sel := 0                  # Ctrl で選んでいるスキル(0 = 通常攻撃、1〜6 = slots の 0〜5)。記録しない
 const SLOTS := 6
 const WEAPON_SKILL := "@weapon"     # 武器の技。skills と slots には、この名前で入る(中身は装備している武器で決まる)
@@ -475,7 +476,7 @@ func clamp_resources() -> void:
 # ---------- 保存 ----------
 
 func to_dict() -> Dictionary:
-	return {"name": name, "race": race, "cls": cls, "look": look, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
+	return {"hired": hired, "name": name, "race": race, "cls": cls, "look": look, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
 		"equip": equip, "skills": skills, "slots": slots, "base_stats": base_stats, "profs": profs, "choices": choices, "birth": birth}
 
 static func from_dict(d: Dictionary) -> Character:
@@ -484,6 +485,7 @@ static func from_dict(d: Dictionary) -> Character:
 	c.race = String(d.get("race", "human"))
 	c.cls = String(d.get("cls", "fighter"))
 	c.look = String(d.get("look", "M"))
+	c.hired = bool(d.get("hired", false))
 	c.birth = Birth.sanitize(d.get("birth", {}))
 	c.level = int(d.get("level", 1))
 	c.xp = int(d.get("xp", 0))

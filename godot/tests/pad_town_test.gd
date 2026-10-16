@@ -34,10 +34,14 @@ func _run() -> void:
 	for i in 5:
 		await process_frame
 	var town: TownScreen = main.screen
-	check(_focus() is Button and _focus().text == "坑口広場", "街に着くと、焦点が坑口広場にある")
-	await _press(JOY_BUTTON_DPAD_DOWN)
+	check(_focus() is Button and _focus().text == "報告を閉じる", "街に着くと、まず報告を読む(焦点は「報告を閉じる」)")
 	await _press(JOY_BUTTON_A)
-	check(town.location == "smith", "A で武器・防具の店へ入る")
+	check(_focus() is Button and _focus().name == "sign_dive", "報告を閉じると、焦点が坑口の看板にある")
+	await _press(JOY_BUTTON_DPAD_LEFT)
+	check(_focus() is Button and String(_focus().name).begins_with("sign_") and _focus().name != "sign_dive", "十字キーで、ほかの看板へ移る (%s)" % _focus().name)
+	(town.signs.find_child("sign_smith", true, false) as Button).grab_focus()
+	await _press(JOY_BUTTON_A)
+	check(town.location == "smith", "A で看板の店(炉火の槌)へ入る")
 	check(_focus() == town.shop_list, "店に入ると、品物の一覧を操れる")
 	await _press(JOY_BUTTON_DPAD_DOWN)
 	check(town.sel_id != "", "十字キーで品物を選ぶと説明が出る")
@@ -51,12 +55,12 @@ func _run() -> void:
 		await _press(JOY_BUTTON_B)
 		check(_focus() == town.shop_list, "B で品物の一覧へ戻る")
 	await _press(JOY_BUTTON_B)
-	check(_focus() is Button and _focus().text == "武器・防具", "B で左の行き先へ戻る")
+	check(town.location == "hub" and _focus() is Button and _focus().name == "sign_smith", "B で広場へ出て、焦点はいま出てきた店の看板")
 	await _press(JOY_BUTTON_START)
 	check(main.inventory != null, "Start で持ち物を開く")
 	await _press(JOY_BUTTON_B)
 	await process_frame
 	check(main.inventory == null, "B で持ち物を閉じる")
-	check(_focus() is Button and _focus().text == "武器・防具", "持ち物を閉じると、焦点が街に戻る")
+	check(_focus() is Button and _focus().name == "sign_smith", "持ち物を閉じると、焦点が街に戻る")
 	print("==== ALL PASSED" if fails == 0 else "==== %d FAILED" % fails)
 	quit(1 if fails > 0 else 0)

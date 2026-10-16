@@ -25,6 +25,7 @@ const QUOTES := {
 	"magic": "「写本は、読まれるために在る。迷宮もまた、読まれるべき書物だ。」",
 	"temple": "「眠りは誰にも訪れる。静寂の母が、あなたの夜を守りますように。」",
 	"inn": "「あいよ、湯と寝床だ。今夜も、何人戻ってきたかね。」",
+	"pleasure": "縁環区と壁下区の境に伸びる通り。迷宮の「息」に対して、人の寝息の通りと呼ばれる。",
 }
 const RUMORS := [
 	"第1層の奥で、子どもの足跡を見たって話だ。許可証を持てる歳じゃねえ。",
@@ -60,17 +61,43 @@ const FORTUNES := [
 	"占い師「仲間のうち一人が、今夜は誰より前に出たがる。止めなくてよい。支えなさい。」",
 ]
 
+## 広場の看板: [行き先, 名前, 何の店か, 画面の中の位置(割合), 看板に目をやったときの一行]
+const SIGNS := [
+	["magic", "星録の書院", "魔法屋・写本", Vector2(0.33, 0.33), "丘の上の書院の窓に、遅くまで灯りがともっている。"],
+	["smith", "炉火の槌", "武器・防具", Vector2(0.15, 0.50), "鉄を打つ音が、広場の端まで響いている。"],
+	["pleasure", "寝息通り", "花街", Vector2(0.86, 0.47), "紅の提灯が、通りの奥まで連なっている。三味線に似た音がする。"],
+	["general", "灯守の店", "雑貨・薬", Vector2(0.30, 0.66), "軒先に、灯具と薬瓶がずらりと吊られている。"],
+	["inn", "止まり木亭", "宿・酒場・仲間", Vector2(0.70, 0.66), "笑い声と、焼いた肉の匂いが漏れてくる。"],
+	["temple", "静寂派の神殿", "癒し・蘇り", Vector2(0.12, 0.76), "鐘は鳴らない。静寂の母の神殿は、いつも静かだ。"],
+	["dive", "坑口", "迷宮へ降りる", Vector2(0.50, 0.80), "大穴から、青白い光が昇っている。今夜の通路は、どう組み替わっただろう。"],
+]
+const HUB_LINE := "縁環区・坑口広場。大穴の縁に立つ坑口館の前は、夜でも燐晶の灯が絶えない。"
+const ENTER_LINES := {
+	"smith": "広場を横切り、煤けた戸をくぐった。炉の熱が顔に当たる。",
+	"general": "戸の鈴が鳴った。灯油と乾いた薬草のにおいがする。",
+	"magic": "丘の石段を上り、書院の重い扉を押した。紙とインクのにおいがする。",
+	"temple": "神殿の中は、外の喧騒が嘘のように静かだ。",
+	"inn": "止まり木亭の扉を開けると、暖かい空気と話し声に包まれた。",
+	"pleasure": "広場の東から、提灯の続く通りへ入った。",
+}
+const LEAVE_LINES := ["広場へ戻った。夜風が冷たい。", "広場へ戻った。坑口の光が、今夜も昇っている。", "広場へ戻った。どこかで、帰還を祝う声がする。"]
+
 var gs: GameState
 var content_panel: PanelContainer
 var art: TownArt
 var location := "hub"
+var last_place := "dive"           # 広場へ戻ったとき、焦点を置く看板
 var shop_mode := "buy"
 var sel_id := ""
 var shop_ids: Array = []
 var report: Array = []
 var party_bar: HBoxContainer
 var silver_label: Label
-var menu_box: VBoxContainer
+var signs: Control                 # 広場の看板(画面の上に置く)
+var report_box: PanelContainer     # 地上へ戻ったときの、ギルドの査定報告
+var place_box: HBoxContainer       # 店の中: 左に戻るボタン、右に中身
+var back_btn: Button
+var place_label: Label
 var content: VBoxContainer
 var msg: Label
 var shop_list: ItemList
@@ -78,6 +105,7 @@ var shop_detail: RichTextLabel
 var shop_actions: VBoxContainer
 var log_label: Label
 var _walk_log: Array = []
+var _parting := ""                 # 別れるかを確かめている仲間の名前
 
 func setup(state: GameState) -> void:
 	gs = state
@@ -86,7 +114,7 @@ func arrive(lines: Array) -> void:
 	report = lines
 	location = "hub"
 	sel_id = ""
-	_say("")
+	_say(HUB_LINE, UIKit.TEXT)
 	_refresh_all()
 
 func _ready() -> void:
@@ -96,10 +124,12 @@ func _ready() -> void:
 	add_child(art)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for k in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + k, 22)
 	add_child(margin)
 	var root := UIKit.vbox(8)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(root)
 	var top := _glass(UIKit.panel())
 	var th := UIKit.hbox(10)
@@ -110,24 +140,107 @@ func _ready() -> void:
 	silver_label = UIKit.label("", 20, Color("f1d98a"))
 	th.add_child(silver_label)
 	root.add_child(top)
-	var row := UIKit.hbox(10)
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(row)
-	var left := _glass(UIKit.panel())
-	left.custom_minimum_size = Vector2(236, 0)
-	menu_box = UIKit.vbox(6)
-	left.add_child(menu_box)
-	row.add_child(left)
-	var cp := _glass(UIKit.panel(), 0.7)
+	# 真ん中: 広場では背景の絵だけ(看板は別の層)。店の中では、左に戻るボタン、右に中身
+	var stage := Control.new()
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(stage)
+	place_box = UIKit.hbox(14)
+	place_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	place_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stage.add_child(place_box)
+	var left := UIKit.vbox(8)
+	left.custom_minimum_size = Vector2(250, 0)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	place_box.add_child(left)
+	back_btn = UIKit.button("◀ 広場へ戻る (Esc)", func(): _go("hub"))
+	left.add_child(back_btn)
+	place_label = UIKit.label("", 15, UIKit.GOLD)
+	place_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var lp := _glass(UIKit.panel(), 0.5)
+	lp.add_child(place_label)
+	left.add_child(lp)
+	var cp := _glass(UIKit.panel(), 0.72)
 	content_panel = cp
 	cp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content = UIKit.vbox(8)
 	cp.add_child(content)
-	row.add_child(cp)
+	place_box.add_child(cp)
+	# 下: 一行の語り(看板に目をやると、その店のようすが出る)と、身の回りのこと
+	var bottom := _glass(UIKit.panel())
+	var bh := UIKit.hbox(8)
+	bottom.add_child(bh)
 	msg = UIKit.label("", 16, UIKit.GOLD)
-	var mp := _glass(UIKit.panel())
-	mp.add_child(msg)
-	root.add_child(mp)
+	msg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bh.add_child(msg)
+	for it in [["持ち物 (%s)" % Controls.hint("inventory"), func(): open_inventory.emit()], ["操作の設定", func(): key_config.emit()],
+			["闘技場", func(): arena_requested.emit()], ["タイトルへ", func(): to_title.emit()]]:
+		var sb := UIKit.button(it[0], it[1])
+		sb.add_theme_font_size_override("font_size", 13)
+		sb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bh.add_child(sb)
+	root.add_child(bottom)
+	# 広場の看板。絵の建物の上に、画面の割合で置く
+	signs = Control.new()
+	signs.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	signs.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(signs)
+	for sg in SIGNS:
+		signs.add_child(_make_sign(sg))
+	# 査定報告は、看板の上に重ねる(読んで閉じるまで)
+	report_box = _glass(UIKit.panel(), 0.9)
+	report_box.anchor_left = 0.5
+	report_box.anchor_right = 0.5
+	report_box.offset_left = -300
+	report_box.offset_right = 300
+	report_box.offset_top = 104
+	add_child(report_box)
+
+## 看板一枚(木の板に名前と、何の店か。下に柱)
+func _make_sign(sg: Array) -> Control:
+	var id: String = sg[0]
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var at: Vector2 = sg[3]
+	holder.anchor_left = at.x
+	holder.anchor_right = at.x
+	holder.anchor_top = at.y
+	holder.anchor_bottom = at.y
+	var b := Button.new()
+	b.text = "%s\n%s" % [sg[1], sg[2]]
+	b.name = "sign_" + id
+	b.set_meta("place", id)
+	b.add_theme_font_size_override("font_size", 17 if id != "dive" else 19)
+	var wood := Color(0.17, 0.10, 0.05, 0.9) if id != "dive" else Color(0.05, 0.16, 0.24, 0.92)
+	var edge := Color(0.78, 0.56, 0.30) if id != "dive" else UIKit.ACCENT
+	b.add_theme_stylebox_override("normal", UIKit.box(wood, edge, 2, 6))
+	b.add_theme_stylebox_override("hover", UIKit.box(wood.lightened(0.15), Color("ffe2a0"), 2, 6))
+	b.add_theme_stylebox_override("focus", UIKit.box(wood.lightened(0.2), Color("fff0c0"), 3, 6))
+	b.add_theme_stylebox_override("pressed", UIKit.box(wood.lightened(0.25), Color("fff0c0"), 3, 6))
+	b.add_theme_color_override("font_color", Color("f3e2b8") if id != "dive" else Color("d8f6ff"))
+	b.custom_minimum_size = Vector2(150, 0)
+	b.pressed.connect(_on_sign.bind(id))
+	b.focus_entered.connect(_say.bind(String(sg[4]), UIKit.TEXT))
+	b.mouse_entered.connect(_say.bind(String(sg[4]), UIKit.TEXT))
+	holder.add_child(b)
+	var pole := ColorRect.new()
+	pole.color = Color(0.1, 0.06, 0.03, 0.9)
+	pole.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(pole)
+	# 大きさが決まってから、看板の真ん中を置き場に合わせる
+	b.resized.connect(func():
+		b.position = Vector2(-b.size.x / 2.0, -b.size.y)
+		pole.position = Vector2(-2.0, 0.0)
+		pole.size = Vector2(4.0, 18.0))
+	return holder
+
+func _on_sign(id: String) -> void:
+	last_place = id
+	if id == "dive":
+		dive.emit()
+	else:
+		_go(id)
 
 ## 背景の絵が透けて見えるパネル
 func _glass(p: PanelContainer, a: float = 0.62) -> PanelContainer:
@@ -141,41 +254,52 @@ func _unhandled_input(e: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		open_inventory.emit()
 		return
-	# コントローラー: 左の行き先と、右の中身のあいだを行き来する
 	var f := get_viewport().gui_get_focus_owner()
 	if f == null:
 		if e.is_action_pressed("ui_up") or e.is_action_pressed("ui_down") or e.is_action_pressed("ui_left") or e.is_action_pressed("ui_right") or e.is_action_pressed("ui_accept"):
 			get_viewport().set_input_as_handled()
 			focus_default()
 		return
-	if menu_box.is_ancestor_of(f) and e.is_action_pressed("ui_right"):
-		if _focus_content():
-			get_viewport().set_input_as_handled()
-	elif content.is_ancestor_of(f) and (e.is_action_pressed("ui_left") or e.is_action_pressed("ui_cancel")):
+	# 店の中: 戻る(Esc / B)で、操作 → 品物の一覧 → 広場、と一つずつ戻る
+	if location != "hub" and e.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		if f is Button and shop_actions != null and is_instance_valid(shop_actions) and shop_actions.is_ancestor_of(f):
-			shop_list.grab_focus()   # 品物の操作から、品物の一覧へ戻る
+			shop_list.grab_focus()
 		else:
-			focus_default()
+			_go("hub")
+	elif location != "hub" and f == back_btn and e.is_action_pressed("ui_right"):
+		if _focus_content():
+			get_viewport().set_input_as_handled()
+	elif location != "hub" and content.is_ancestor_of(f) and e.is_action_pressed("ui_left") and not (f is ItemList) \
+			and not (f.get_parent() != null and f.get_parent().has_meta("modes")):
+		get_viewport().set_input_as_handled()
+		back_btn.grab_focus()
 
-## コントローラーで操れるよう、いまの場所のボタンに焦点を置く
+## コントローラーで操れるよう、焦点を置く。広場では最後に入った店の看板、店の中では中身
 func focus_default() -> void:
-	if menu_box == null:
+	if signs == null:
 		return
-	for b in menu_box.get_children():
-		if b is Button and not (b as Button).is_queued_for_deletion() and b.has_meta("here"):
-			(b as Button).grab_focus()
+	if location == "hub":
+		if report_box.visible and _focus_content_of(report_box):
 			return
+		var b := signs.find_child("sign_" + last_place, true, false)
+		if b != null:
+			(b as Button).grab_focus()
+	elif not _focus_content():
+		back_btn.grab_focus()
 
-## 右の中身で、最初に操れるものに焦点を置く。無ければ false
-func _focus_content() -> bool:
-	if content == null:
-		return false
-	var c := _first_focusable(content)
+func _focus_content_of(n: Node) -> bool:
+	var c := _first_focusable(n)
 	if c == null:
 		return false
 	c.grab_focus()
 	return true
+
+## 店の中身で、最初に操れるものに焦点を置く。無ければ false
+func _focus_content() -> bool:
+	if content == null or location == "hub":
+		return false
+	return _focus_content_of(content)
 
 func _first_focusable(n: Node) -> Control:
 	var all: Array = []
@@ -202,12 +326,11 @@ func _can_focus(c: Control) -> bool:
 		return false
 	return true
 
-## 中身を作り直したあと、焦点が消えていれば中身の最初へ置く
+## 中身を作り直したあと、焦点が消えていれば置き直す
 func _refocus_content() -> void:
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
 	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion():
-		if not _focus_content():
-			focus_default()
+		focus_default()
 
 func _say(text: String, color: Color = UIKit.GOLD) -> void:
 	if msg == null:
@@ -216,94 +339,88 @@ func _say(text: String, color: Color = UIKit.GOLD) -> void:
 	msg.add_theme_color_override("font_color", color)
 
 func _refresh_all() -> void:
-	if gs == null or menu_box == null:
+	if gs == null or signs == null:
 		return
 	_refresh_top()
-	_refresh_menu()
 	art.set_style(String(LOCATIONS[location]["art"]))
+	var hub := location == "hub"
+	signs.visible = hub
+	place_box.visible = not hub
 	_build_content()
+	call_deferred("_refocus")
 
 func refresh_top() -> void:
 	_refresh_top()
 
 func _refresh_top() -> void:
 	UIKit.clear(party_bar)
-	for c in gs.party:
-		var l := UIKit.label("%s  Lv%d %s\nHP %d/%d  MP %d/%d" % [c.name, c.level, Jobs.CLASSES[c.cls]["name"], int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp()], 14,
+	for i in gs.party.size():
+		var c: Character = gs.party[i]
+		var tag := "  (相棒)" if i == 1 and not c.hired else ""
+		var l := UIKit.label("%s  Lv%d %s%s\nHP %d/%d  MP %d/%d" % [c.name, c.level, Jobs.CLASSES[c.cls]["name"], tag, int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp()], 14,
 			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT)
 		party_bar.add_child(l)
 	silver_label.text = "預け金 %d銀貨" % gs.bank_silver
 
-func _refresh_menu() -> void:
-	UIKit.clear(menu_box)
-	menu_box.add_child(UIKit.label(String(LOCATIONS[location]["name"]), 15, UIKit.DIM))
-	var items := [["hub", "坑口広場"], ["smith", "武器・防具"], ["general", "雑貨屋"], ["magic", "魔法屋"], ["temple", "神殿"], ["inn", "宿屋"], ["pleasure", "花街(寝息通り)"]]
-	for it in items:
-		var id: String = it[0]
-		var b := UIKit.button(it[1], _go.bind(id), 0)
-		if id == location:
-			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
-			b.set_meta("here", true)
-		menu_box.add_child(b)
-	menu_box.add_child(Control.new())
-	menu_box.add_child(UIKit.button("持ち物・装備 (%s)" % Controls.hint("inventory"), func(): open_inventory.emit()))
-	var dive_btn := UIKit.button("迷宮へ潜る", func(): dive.emit())
-	dive_btn.add_theme_stylebox_override("normal", UIKit.box(Color(0.1, 0.22, 0.3, 1.0), UIKit.ACCENT, 2))
-	menu_box.add_child(dive_btn)
-	menu_box.add_child(UIKit.button("闘技場(調整用)", func(): arena_requested.emit()))
-	menu_box.add_child(UIKit.button("操作の設定", func(): key_config.emit()))
-	menu_box.add_child(UIKit.button("タイトルへ", func(): to_title.emit()))
-	# 作り直したボタンは焦点を失うので、焦点が無ければ、いまの場所に置く
-	call_deferred("_refocus")
-
 func _refocus() -> void:
 	var f := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
-	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion():
+	if f == null or not is_instance_valid(f) or f.is_queued_for_deletion() or not f.is_visible_in_tree():
 		focus_default()
 
 func _go(loc: String) -> void:
+	var from := location
 	location = loc
 	shop_mode = "buy"
 	sel_id = ""
+	_parting = ""
 	_walk_log.clear()
-	_say("")
+	if loc == "hub":
+		_say(String(LEAVE_LINES.pick_random()) if from != "hub" else HUB_LINE, UIKit.TEXT)
+	else:
+		last_place = loc
+		_say(String(ENTER_LINES.get(loc, "")), UIKit.TEXT)
 	_refresh_all()
-	# 行き先を選んだら、そのまま中身を操れるようにする(広場のように中身が無ければ、左に残る)
-	call_deferred("_enter_content")
-
-func _enter_content() -> void:
-	if not _focus_content():
-		focus_default()
+	# 行き先を選んだら、そのまま中身を操れるようにする
+	call_deferred("focus_default")
 
 func _build_content() -> void:
 	UIKit.clear(content)
-	# 広場では内容の高さだけにして、背景の絵を見せる
-	content_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN if location == "hub" else Control.SIZE_FILL
+	_build_report()
+	if location == "hub":
+		return
+	place_label.text = String(QUOTES.get(location, ""))      # 店の人の一言(左)
 	match location:
-		"hub": _content_hub()
 		"smith", "general", "magic": _content_shop(location)
 		"temple": _content_temple()
 		"inn": _content_inn()
 		"pleasure": _content_pleasure()
 
-func _head(title: String, quote: String = "") -> void:
+## 中身の見出し(店の人の一言は、左の札に出す)
+func _head(title: String, _quote: String = "") -> void:
 	content.add_child(UIKit.label(title, 24, UIKit.GOLD))
-	if quote != "":
-		content.add_child(UIKit.label(quote, 15, Color("b8c4d8")))
 
 # ---------- 広場 ----------
 
-func _content_hub() -> void:
-	_head("縁環区・坑口広場", "大穴の縁に立つ坑口館の前。夜でも、燐晶の灯が絶えない。")
-	if not report.is_empty():
-		content.add_child(UIKit.label("ギルドの査定報告", 18, UIKit.ACCENT))
-		for l in report:
-			content.add_child(UIKit.label(String(l), 16))
-	else:
-		content.add_child(UIKit.label("ここから、各店と迷宮の口へ向かえる。", 16))
-	content.add_child(Control.new())
-	var tip := UIKit.label("装備と呪文書を整え、傷を癒やしてから潜ろう。通路は毎夜、組み替わる。\n倒れた仲間は、神殿でなければ蘇らない。", 14, UIKit.DIM)
-	content.add_child(tip)
+## 地上へ戻ったときの、ギルドの査定報告(広場の上に紙を一枚)。読んだら閉じる
+func _build_report() -> void:
+	for ch in report_box.get_children():
+		ch.queue_free()
+	report_box.visible = location == "hub" and not report.is_empty()
+	if not report_box.visible:
+		return
+	var v := UIKit.vbox(6)
+	v.add_child(UIKit.label("ギルドの査定報告", 18, UIKit.ACCENT))
+	for l in report:
+		var lb := UIKit.label(String(l), 16)
+		lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(lb)
+	var close := UIKit.button("報告を閉じる", func():
+		report = []
+		_build_report()
+		focus_default())
+	close.set_meta("pref", true)
+	v.add_child(close)
+	report_box.add_child(v)
 
 # ---------- 店 ----------
 
@@ -551,9 +668,44 @@ func _content_inn() -> void:
 		dn.custom_minimum_size = Vector2(40, 32)
 		dn.disabled = i == gs.party.size() - 1
 		row.add_child(dn)
-		row.add_child(UIKit.label("%d. %s  %s・%s  Lv%d" % [i + 1, c.name, Jobs.RACES[c.race]["name"], Jobs.CLASSES[c.cls]["name"], c.level], 16,
-			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT))
+		var who := "相棒" if not c.hired and i > 0 else ("" if not c.hired else "酒場で加えた仲間")
+		var nl := UIKit.label("%d. %s  %s・%s  Lv%d%s" % [i + 1, c.name, Jobs.RACES[c.race]["name"], Jobs.CLASSES[c.cls]["name"], c.level, ("  [%s]" % who) if who != "" else ""], 16,
+			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT)
+		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(nl)
+		if c.hired:
+			var sure := _parting == c.name
+			var pb := UIKit.button("本当に別れる" if sure else "別れる", _part.bind(c), 130)
+			if sure:
+				pb.add_theme_stylebox_override("normal", UIKit.box(Color(0.35, 0.1, 0.08, 1.0), UIKit.BAD, 2))
+			row.add_child(pb)
 		content.add_child(row)
+	if gs.party.size() > 2:
+		content.add_child(UIKit.label("酒場で加えた仲間とは、ここで別れられる(装備は外して、持ち物に残る)。主人公と相棒は別れない。", 14, UIKit.DIM))
+
+## 酒場で加えた仲間と別れる。一度目は確かめ、二度目で別れる
+func _part(c: Character) -> void:
+	if _parting != c.name:
+		_parting = c.name
+		_say("%sと別れる? もう一度押すと別れる。装備は外して、持ち物に残る。" % c.name, UIKit.GOLD)
+		_build_content()
+		call_deferred("_refocus_part", c.name)
+		return
+	_parting = ""
+	if gs.dismiss(c):
+		_say("%sと別れた。「縁があったら、また坑口で会おう。」" % c.name, UIKit.TEXT)
+	_refresh_top()
+	_build_content()
+	call_deferred("_refocus_content")
+
+func _refocus_part(nm: String) -> void:
+	var all: Array = []
+	_collect_focusable(content, all)
+	for b in all:
+		if b is Button and (b as Button).text == "本当に別れる":
+			(b as Button).grab_focus()
+			return
+	_refocus_content()
 
 ## 並び順を一つ動かす(先頭が、迷宮で最初に操作する仲間で、隊列の先頭)
 func _move_member(i: int, d: int) -> void:
