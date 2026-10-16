@@ -569,7 +569,6 @@ func _draw() -> void:
 			_draw_sprite(tex, Color(0.35, 0.35, 0.4, 0.8), facing.x)
 			draw_line(Vector2(-6, -6), Vector2(6, 6), Color(0.8, 0.2, 0.2), 3.0)
 			draw_line(Vector2(-6, 6), Vector2(6, -6), Color(0.8, 0.2, 0.2), 3.0)
-			UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.6))
 			return
 		for k in buffs:
 			if BUFF_COLORS.has(k):
@@ -583,14 +582,12 @@ func _draw() -> void:
 		if controlled:
 			var my := -radius - (30.0 if _is_sheet else 14.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
-		UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.85))
 		_draw_attack()
 		return
 	if down:
 		draw_circle(Vector2.ZERO, radius, Color(0.35, 0.35, 0.38, 0.8))
 		draw_line(Vector2(-6, -6), Vector2(6, 6), Color(0.8, 0.2, 0.2), 3.0)
 		draw_line(Vector2(-6, 6), Vector2(6, -6), Color(0.8, 0.2, 0.2), 3.0)
-		UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.6))
 		return
 	var c := col if flash <= 0.0 else Color("ff7a6a")
 	if roll_t > 0.0:
@@ -606,5 +603,4 @@ func _draw() -> void:
 	UI.text_center(self, 0.0, 4.0, Jobs.class_initial(ch.cls), 11, Color(0.05, 0.05, 0.08), false)
 	if controlled:
 		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 12), Vector2(5, -radius - 20), Vector2(-5, -radius - 20)]), Color("ffe9a8"))
-	UI.text_center(self, 0.0, radius + 14.0, ch.name, 11, Color(1, 1, 1, 0.85))
 	_draw_attack()

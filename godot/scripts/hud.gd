@@ -103,8 +103,8 @@ func _draw() -> void:
 		var lines := ["移動: %s%s%s%s   攻撃: %s(正面へ一撃)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
 				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("guard"), H.call("dodge"),
 				H.call("skill1"), H.call("skill4"), H.call("switch")],
-			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
-				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal")],
+			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   画面の拡大: %s / %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
+				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal"), H.call("zoom_in"), H.call("zoom_out")],
 			"魔物は触れると殴ってくる。敵のHPを削るほど押し込め、こちらのHPが減ると押される。戻る・閉じる: Esc"]
 		for i in lines.size():
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))

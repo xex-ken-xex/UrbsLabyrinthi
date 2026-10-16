@@ -1,0 +1,55 @@
+class_name Sfx
+extends Node2D
+## 効果音の代わりの、ベタな擬音の文字(「ギィ…」「バチン!」)。その場で少し浮いて消える。
+## 音はまだ無い(#22)。音を入れたら、音ありの設定のときは cue() で鳴らし、文字は出さない。
+
+const CUES := {
+	"door": ["ギィ…", Color(0.9, 0.85, 0.75)],
+	"door_secret": ["ゴゴゴ…", Color(0.85, 0.8, 1.0)],
+	"unlock": ["カチリ", Color(1.0, 0.92, 0.6)],
+	"unlock_fail": ["ガチャ…", Color(1.0, 0.6, 0.55)],
+	"trap": ["バチン!", Color(1.0, 0.45, 0.4)],
+	"trap_alarm": ["キィィィ!", Color(1.0, 0.7, 0.4)],
+	"trap_found": ["おや?", Color(1.0, 0.85, 0.5)],
+	"disarm": ["カチッ", Color(0.6, 0.9, 0.6)],
+	"disarm_fail": ["ガキッ", Color(1.0, 0.65, 0.5)],
+	"corpse": ["ゴソゴソ", Color(0.8, 0.8, 0.75)],
+	"drink": ["ゴクリ", Color(0.6, 0.9, 0.7)],
+	"stairs": ["コツ、コツ…", Color(0.85, 0.85, 0.9)],
+	"search": ["ペタペタ", Color(0.75, 0.8, 0.85)],
+	"rest": ["パチパチ…", Color(1.0, 0.75, 0.45)],
+}
+const LIFE := 0.9
+
+var text := ""
+var color := Color.WHITE
+var age := 0.0
+
+## 音を鳴らす設定か(音を入れるまでは、いつも false)
+static func sound_on() -> bool:
+	return false
+
+## 擬音を出す(音ありなら、音を鳴らす)。parent は層(FloorInstance)など、pos はその中の位置
+static func cue(parent: Node, pos: Vector2, id: String) -> void:
+	if parent == null or not CUES.has(id):
+		return
+	if sound_on():
+		return       # ここで音を鳴らす(#22)
+	var f := Sfx.new()
+	f.text = String(CUES[id][0])
+	f.color = CUES[id][1]
+	f.position = pos + Vector2(0, -22)
+	f.z_index = 21
+	parent.add_child(f)
+
+func _process(delta: float) -> void:
+	age += delta
+	if age >= LIFE:
+		queue_free()
+		return
+	queue_redraw()
+
+func _draw() -> void:
+	var a := 1.0 - clampf((age - 0.5) / 0.4, 0.0, 1.0)
+	var pop := 1.0 + 0.25 * (1.0 - clampf(age / 0.12, 0.0, 1.0))
+	UI.text_center(self, 0.0, -age * 14.0, text, int(14 * pop), Color(color.r, color.g, color.b, a))

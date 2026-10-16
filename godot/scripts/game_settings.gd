@@ -1,6 +1,6 @@
 class_name GameSettings
 extends RefCounted
-## 遊び方の設定(user://settings.cfg)。ゲームの速さと、魔物の速さ。
+## 遊び方の設定(user://settings.cfg)。ゲームの速さ、魔物の速さ、迷宮の画面の拡大。
 ## ゲームの速さは、迷宮の中だけ Engine.time_scale にかける(街やメニューは等速)。
 
 const PATH := "user://settings.cfg"
@@ -12,14 +12,21 @@ const DEFAULT_SPEED := 1
 const ENEMY_SPEEDS := [["遅い", 0.8], ["普通", 1.0], ["早い", 1.15], ["超早い", 1.3]]
 const DEFAULT_ENEMY_SPEED := 1
 
+## 迷宮の画面の拡大(カメラの倍率)。[名前, 倍率]
+const ZOOMS := [["広く", 1.2], ["普通", 1.7], ["近く", 2.3]]
+const DEFAULT_ZOOM := 1
+
 static var speed_index := DEFAULT_SPEED
+static var zoom_index := DEFAULT_ZOOM
 static var enemy_speed_index := DEFAULT_ENEMY_SPEED
 
 static func load_settings() -> void:
 	var cf := ConfigFile.new()
 	speed_index = DEFAULT_SPEED
 	enemy_speed_index = DEFAULT_ENEMY_SPEED
+	zoom_index = DEFAULT_ZOOM
 	if cf.load(PATH) == OK:
+		zoom_index = clampi(int(cf.get_value("game", "zoom", DEFAULT_ZOOM)), 0, ZOOMS.size() - 1)
 		speed_index = clampi(int(cf.get_value("game", "speed", DEFAULT_SPEED)), 0, SPEEDS.size() - 1)
 		enemy_speed_index = clampi(int(cf.get_value("game", "enemy_speed", DEFAULT_ENEMY_SPEED)), 0, ENEMY_SPEEDS.size() - 1)
 
@@ -28,6 +35,7 @@ static func save() -> void:
 	cf.load(PATH)
 	cf.set_value("game", "speed", speed_index)
 	cf.set_value("game", "enemy_speed", enemy_speed_index)
+	cf.set_value("game", "zoom", zoom_index)
 	cf.save(PATH)
 
 static func set_speed(i: int) -> void:
@@ -46,6 +54,16 @@ static func set_enemy_speed(i: int) -> void:
 
 static func enemy_speed() -> float:
 	return float(ENEMY_SPEEDS[enemy_speed_index][1])
+
+static func set_zoom(i: int) -> void:
+	zoom_index = clampi(i, 0, ZOOMS.size() - 1)
+	save()
+
+static func zoom() -> float:
+	return float(ZOOMS[zoom_index][1])
+
+static func zoom_name() -> String:
+	return String(ZOOMS[zoom_index][0])
 
 static func enemy_speed_name() -> String:
 	return String(ENEMY_SPEEDS[enemy_speed_index][0])
