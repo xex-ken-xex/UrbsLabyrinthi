@@ -32,6 +32,7 @@ var birth_opts := {}         # 生まれ表の key → OptionButton
 var msg: Label
 var start_btn: Button
 var form: VBoxContainer
+var look_view: HeroPreview
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -79,8 +80,16 @@ func _build() -> void:
 	var left := UIKit.panel()
 	left.custom_minimum_size = Vector2(230, 0)
 	row.add_child(left)
+	var lv := UIKit.vbox(8)
+	left.add_child(lv)
 	slot_box = UIKit.vbox(8)
-	left.add_child(slot_box)
+	lv.add_child(slot_box)
+	var sp := Control.new()
+	sp.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lv.add_child(sp)
+	look_view = HeroPreview.new()
+	look_view.custom_minimum_size = Vector2(0, 180)
+	lv.add_child(look_view)
 	# 中: フォーム
 	var mid := UIKit.panel()
 	mid.custom_minimum_size = Vector2(430, 0)
@@ -306,6 +315,8 @@ func _refresh_picks() -> void:
 
 func _refresh_preview() -> void:
 	var s := _cur()
+	look_view.visible = s["use"]
+	look_view.set_look(String(s["name"]), String(s["cls"]), String(s["race"]), String(s["look"]))
 	if not s["use"]:
 		preview.text = "[color=#8a90a0]この枠は使わない。[/color]"
 		return

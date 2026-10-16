@@ -1010,7 +1010,16 @@ func open_inventory() -> void:
 	inventory = InventoryScreen.new()
 	inventory.closed.connect(close_inventory)
 	ui_layer.add_child(inventory)
-	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable())
+	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
+
+## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま
+func sync_hero_order() -> void:
+	if heroes.is_empty():
+		return
+	var cur := leader()
+	heroes.sort_custom(func(a, b): return gs.party.find(a.ch) < gs.party.find(b.ch))
+	active = maxi(0, heroes.find(cur))
+	trail = [leader().position] if leader() != null else []
 
 ## 迷宮を止める・動かす(持ち物や罠の選択を開いている間)
 func _freeze_world(on: bool) -> void:

@@ -919,6 +919,9 @@ func _test_game() -> void:
 	make._on_start()
 	check(main.phase != "town" and make.msg.text.contains("技能"), "技能を選び終えていないと、始められない")
 	make._on_auto_picks()
+	check(make.look_view != null and make.look_view.visible and make.look_view.cls == String(make._cur()["cls"]), "作成画面に、選んだ見た目が出る")
+	make._on_race(CharaMake.RACE_IDS.find("dwarf"))
+	check(make.look_view.race == "dwarf", "種族を替えると、見た目も替わる")
 	check(make.slots.size() == Balance.START_PARTY, "始めは%d人の枠" % Balance.START_PARTY)
 	make._select(1)
 	make._on_use(false)
@@ -1089,6 +1092,19 @@ func _test_game() -> void:
 	var a0: int = main.active
 	main._switch_next()
 	check(main.active != a0 and main.heroes[main.active].controlled and not main.heroes[a0].controlled, "操作する仲間を切り替えられる")
+	# 迷宮の中で、持ち物から隊列を入れ替える
+	var ctl: Hero = main.leader()
+	main.open_inventory()
+	var iv: InventoryScreen = main.inventory
+	iv.member = 3
+	iv._move_member(-1)
+	var order_ok := true
+	for i in main.heroes.size():
+		if main.heroes[i].ch != main.gs.party[i]:
+			order_ok = false
+	check(iv.member == 2 and order_ok and main.leader() == ctl and ctl.controlled, "迷宮で持ち物から隊列を入れ替えると、仲間の並びも替わり、操作中の仲間はそのまま")
+	iv._move_member(1)
+	main.close_inventory()
 	# AI の仲間が戦う
 	for e in fl.enemies.duplicate():
 		e.dead = true
