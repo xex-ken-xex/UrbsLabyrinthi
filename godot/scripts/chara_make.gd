@@ -130,37 +130,39 @@ func _build() -> void:
 	look_opt.item_selected.connect(_on_look)
 	rr.add_child(look_opt)
 	form.add_child(rr)
-	var hd := UIKit.hbox(6)
-	for c in [["能力値", 54], ["割り振り", 118], ["種族", 56], ["合計", 56], ["補正", 56]]:
+	# 表(グリッド)にして、見出しと数字の縦列を揃える: 能力値 | − 割り振り ＋ | ＋種族 | ＝合計 | 補正
+	var stat_grid := GridContainer.new()
+	stat_grid.columns = 7
+	stat_grid.add_theme_constant_override("h_separation", 6)
+	stat_grid.add_theme_constant_override("v_separation", 4)
+	for c in [["能力値", 54], ["", 36], ["割り振り", 62], ["", 36], ["＋種族", 64], ["＝合計", 64], ["補正", 64]]:
 		var hl := UIKit.label(String(c[0]), 13, UIKit.DIM)
 		hl.custom_minimum_size = Vector2(int(c[1]), 0)
 		hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if c[0] == "能力値" else HORIZONTAL_ALIGNMENT_CENTER
-		hd.add_child(hl)
-	form.add_child(hd)
+		stat_grid.add_child(hl)
 	for a in Jobs.ABILS:
-		var r := UIKit.hbox(6)
 		var nm := UIKit.label(String(Jobs.ABIL_JP[a]), 16)
 		nm.custom_minimum_size = Vector2(54, 0)
-		r.add_child(nm)
+		stat_grid.add_child(nm)
 		var minus := UIKit.button("−", _on_stat.bind(a, -1))
 		minus.custom_minimum_size = Vector2(36, 32)
-		r.add_child(minus)
+		stat_grid.add_child(minus)
 		var val := UIKit.label("10", 18, UIKit.GOLD)
-		val.custom_minimum_size = Vector2(34, 0)
+		val.custom_minimum_size = Vector2(62, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		r.add_child(val)
+		stat_grid.add_child(val)
 		var plus := UIKit.button("＋", _on_stat.bind(a, 1))
 		plus.custom_minimum_size = Vector2(36, 32)
-		r.add_child(plus)
+		stat_grid.add_child(plus)
 		var cols := {}
 		for k in ["race", "total", "mod"]:
 			var l := UIKit.label("", 17 if k != "race" else 16, UIKit.TEXT)
-			l.custom_minimum_size = Vector2(56, 0)
+			l.custom_minimum_size = Vector2(64, 0)
 			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			r.add_child(l)
+			stat_grid.add_child(l)
 			cols[k] = l
-		form.add_child(r)
 		stat_rows[a] = {"val": val, "race": cols["race"], "total": cols["total"], "mod": cols["mod"], "minus": minus, "plus": plus}
+	form.add_child(stat_grid)
 	points_label = UIKit.label("", 16, UIKit.GOOD)
 	form.add_child(points_label)
 	var br := UIKit.hbox(8)
@@ -294,8 +296,8 @@ func _refresh_form() -> void:
 		(row["val"] as Label).text = str(v)
 		var b := int(bonus.get(a, 0))
 		var rl: Label = row["race"]
-		rl.text = ("▲%d" % b) if b > 0 else (("▼%d" % -b) if b < 0 else "")
-		rl.add_theme_color_override("font_color", UIKit.GOOD if b > 0 else UIKit.BAD)
+		rl.text = ("▲%d" % b) if b > 0 else (("▼%d" % -b) if b < 0 else "・")
+		rl.add_theme_color_override("font_color", UIKit.GOOD if b > 0 else (UIKit.BAD if b < 0 else UIKit.DIM))
 		var total := v + b
 		var tl: Label = row["total"]
 		tl.text = str(total)
