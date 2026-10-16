@@ -50,6 +50,10 @@ var slow_t := 0.0
 var slow_v := 0.5
 var stun_t := 0.0
 var sunder_t := 0.0          # 守りを割られている秒(受けるダメージが Balance.SUNDER_MULT 倍)
+var poison_t := 0.0          # 罠の毒(毎秒 poison_dps)
+var poison_dps := 0.0
+var _poison_tick := 1.0
+var trap_cell := Vector2i(-1, -1)   # 最後にいたマス。マスを移ったときだけ、罠を踏んだか調べる
 var target: Hero = null
 var _tex: Texture2D = null
 var _is_sheet := false
@@ -85,6 +89,7 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	_pick_attack()
 	hits = 2 if m.get("multiattack", false) else 1
 	state = "neutral" if attitude == "交渉の余地あり" else "idle"
+	trap_cell = fl.map.cell_of(pos)     # 置かれたマスの罠は、踏んだことにしない
 
 func _pick_attack() -> void:
 	var rr := RegEx.new()
@@ -178,6 +183,19 @@ func apply_stun(secs: float) -> void:
 func apply_sunder(secs: float) -> void:
 	sunder_t = maxf(sunder_t, secs)
 
+func poison(secs: float, dps: float) -> void:
+	poison_dps = maxf(poison_dps if poison_t > 0.0 else 0.0, dps)
+	poison_t = maxf(poison_t, secs)
+
+## 落とし穴に落ちて、この層からいなくなる(経験点も落とし物もない)
+func fall_away() -> void:
+	if dead:
+		return
+	dead = true
+	game_floor.spawn_text(position + Vector2(0, -radius - 16), "落ちた", Color("d0d0d0"))
+	game_floor.enemy_gone(self)
+	queue_free()
+
 func _die() -> void:
 	dead = true
 	game_floor.spawn_text(position + Vector2(0, -radius - 16), "+%dXP" % xp, Color("9ad8ff"))
@@ -254,6 +272,14 @@ func _physics_process(delta: float) -> void:
 	slow_t = maxf(0.0, slow_t - delta)
 	stun_t = maxf(0.0, stun_t - delta)
 	sunder_t = maxf(0.0, sunder_t - delta)
+	if poison_t > 0.0:
+		poison_t -= delta
+		_poison_tick -= delta
+		if _poison_tick <= 0.0:
+			_poison_tick = 1.0
+			take_damage(poison_dps, Vector2.ZERO, null)
+			if dead:
+				return
 	pop_update(delta)
 	apply_knock(delta)
 	var c := game_floor.map.cell_of(position)
@@ -393,6 +419,8 @@ func _draw() -> void:
 func _draw_overlays(dy: float = 0.0) -> void:
 	if slow_t > 0.0:
 		draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 20, Color(0.5, 0.8, 1.0, 0.8), 2.0)
+	if poison_t > 0.0:
+		draw_arc(Vector2.ZERO, radius + 1.5, 0.0, TAU, 20, Color(0.55, 0.9, 0.35, 0.7), 2.0)
 	if stun_t > 0.0:
 		UI.text_center(self, 0.0, -radius - 16.0 + dy, "zzz", 12, Color(0.8, 0.9, 1.0))
 	if hp < max_hp:

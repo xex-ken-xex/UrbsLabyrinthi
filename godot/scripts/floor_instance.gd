@@ -6,6 +6,7 @@ extends Node2D
 signal message(text: String, kind: String)
 signal enemy_killed(enemy: Enemy)
 signal ground_picked(entry: Dictionary, hero: Hero)   # 落ちているものを拾った
+signal shake(strength: float)                         # 画面を揺らす(爆発の罠など)
 
 var map: FloorMap
 var style: Dictionary
@@ -18,6 +19,7 @@ var leader: Hero = null
 var enemies: Array = []
 var ground := GroundItems.new()   # 光る燐晶、自生物、遺体、落とし物
 var traps: Array = []         # 書き出しの罠 + st(hidden / revealed / triggered / disarmed)
+var trap_at := {}             # マス(Vector2i) → 罠
 var up_cell := Vector2i.ZERO
 var down_cell := Vector2i.ZERO
 var flow := PackedInt32Array()
@@ -28,8 +30,6 @@ var enc_dead := {}
 var light_pos := Vector2.ZERO
 var exhale := false
 var arena := false            # 闘技場(階段は上りだけ。魔物は後から出す)
-## 罠の名前 → 仕掛けの動き(書き出しの kind に加えて)。pit: 下の階へ落ちる、teleport: 同じ層の別の部屋へ、cage: 部屋の扉が閉ざされる
-const TRAP_FX := {"腐れ床の落とし穴": "pit", "立坑の蓋": "pit", "床の口": "pit", "水鏡の引き込み": "teleport", "錆びた落とし格子": "cage"}
 var enc_serial := 5000
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
@@ -113,9 +113,13 @@ func setup(m: FloorMap) -> void:
 	down_cell = Vector2i(int(d["stairs"]["down"]["x"]), int(d["stairs"]["down"]["y"]))
 	for t in d["traps"]:
 		var tt: Dictionary = t.duplicate()
-		tt["st"] = "hidden"
-		tt["fx"] = String(TRAP_FX.get(String(t.get("name", "")), ""))
+		# 仕掛けの動き(fx)は、生成器の罠表が決める。振り子と噴き口は隠れていない(state: found)
+		tt["st"] = "revealed" if String(t.get("state", "")) == "found" else "hidden"
+		tt["fx"] = String(t.get("fx", ""))
 		traps.append(tt)
+		trap_at[Vector2i(int(t["x"]), int(t["y"]))] = tt
+		if TrapFx.PERIODIC.has(tt["fx"]):
+			add_child(TrapFx.make(self, tt, null))
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
@@ -139,6 +143,11 @@ func _on_enemy_died(en: Enemy) -> void:
 	enc_dead[en.enc_id] = int(enc_dead.get(en.enc_id, 0)) + 1
 	enemies.erase(en)
 	enemy_killed.emit(en)
+
+## 倒されずに、層からいなくなった(落とし穴)
+func enemy_gone(en: Enemy) -> void:
+	enc_dead[en.enc_id] = int(enc_dead.get(en.enc_id, 0)) + 1
+	enemies.erase(en)
 
 # ---------- 魔物を束ねる ----------
 
@@ -339,6 +348,8 @@ func _draw() -> void:
 		if map.explored[map.idx(tc.x, tc.y)] == 0:
 			continue
 		var cen := map.center_of(tc)
+		if TrapFx.PERIODIC.has(t.get("fx", "")):
+			continue          # 振り子と噴き口は、TrapFx が描く
 		if t.get("fx", "") == "pit" and t["st"] == "triggered":
 			# 開いた穴
 			draw_circle(cen, C * 0.42, Color(0, 0, 0, 0.85))

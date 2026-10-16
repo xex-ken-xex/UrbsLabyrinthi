@@ -47,6 +47,16 @@ var _tex_ver := -1
 var walk_t := 0.0             # 歩きの絵を送る時間(スプライトシート用)
 var moving := false
 var sleep_t := 0.0            # 眠っている(休息中)、または寝込みを襲われて動けない残り秒
+# 罠の効き目(TrapFx、Main._trap_effect)
+var stuck_t := 0.0            # 動けない残り秒(網、眠りの煙、転倒、閉じる歯列、逆さの重み)
+var stuck_kind := ""          # net / teeth / sleep / prone / lift
+var poison_t := 0.0
+var poison_dps := 0.0
+var _poison_tick := 1.0
+var blind_t := 0.0            # 灯りが届かない(操作している一人なら、見える範囲が狭まる)
+var fear_t := 0.0             # 怯えて攻撃できない
+var confuse_t := 0.0          # 前後左右が逆になる
+var rust := 0                 # 錆びた鎧。この潜行の間、守りが下がる(1につき防御1点)
 
 func setup(fl: FloorInstance, character: Character) -> void:
 	game_floor = fl
@@ -79,7 +89,7 @@ func body_speed() -> float:
 	return _speed_now()
 
 func _speed_now() -> float:
-	var s := ch.speed() * buff("speed")
+	var s := ch.speed() * buff("speed") * buff("mire") * buff("chill")
 	if charging():
 		s *= Balance.CHARGE_SPEED
 	return s
@@ -100,7 +110,7 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		return
 	var n := amount * buff("guard") * ch.taken_mult(src_type)
 	if not ignore_armor:
-		n *= 1.0 - ch.damage_reduction()
+		n *= 1.0 - maxf(0.0, ch.damage_reduction() - rust * Balance.AC_REDUCTION)
 	if charging() and ch.has_feat("shield_master"):
 		n *= 0.5
 	n = maxf(0.05, n)
@@ -120,9 +130,54 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		down = true
 		buffs.clear()
 		rush_t = 0.0
+		poison_t = 0.0
+		stuck_t = 0.0
 		cancel_charge()
 		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
 		downed.emit(self)
+
+## 罠で動けなくなる。網と歯列は、攻撃を連打するともがいて早く抜けられる
+func hold(why: String, secs: float) -> void:
+	if down:
+		return
+	if stuck_t <= 0.0 or secs > stuck_t:
+		stuck_kind = why
+	stuck_t = maxf(stuck_t, secs)
+	roll_t = 0.0
+	rush_t = 0.0
+	cancel_charge()
+
+func poison(secs: float, dps: float) -> void:
+	if down:
+		return
+	poison_dps = maxf(poison_dps if poison_t > 0.0 else 0.0, dps)
+	poison_t = maxf(poison_t, secs)
+
+## 毒など、転がっていてもかわせない削り
+func _lose_hp(n: float, col: Color) -> void:
+	if down:
+		return
+	ch.hp -= n
+	queue_popup(n, col)
+	if ch.hp <= 0.0:
+		ch.hp = 0.0
+		down = true
+		buffs.clear()
+		poison_t = 0.0
+		stuck_t = 0.0
+		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
+		downed.emit(self)
+
+func _struggle(delta: float) -> void:
+	var a := bool(cmd.get("attack", false))
+	if stuck_kind in ["net", "teeth"]:
+		if a and not atk_held:
+			stuck_t -= 0.3
+			lunge = Vector2.from_angle(Dice.rng.randf() * TAU) * 3.0
+		elif not controlled:
+			stuck_t -= delta * 0.6        # 操作していない仲間も、もがく
+	atk_held = a
+	hold_t = 0.0
 
 func heal(n: float) -> void:
 	if down:
@@ -154,6 +209,10 @@ func _physics_process(delta: float) -> void:
 	if sleep_t > 0.0:
 		queue_redraw()
 		return
+	if stuck_t > 0.0:
+		_struggle(delta)
+		queue_redraw()
+		return
 	if not controlled:
 		_ai(delta)
 	_move(delta)
@@ -165,6 +224,16 @@ func _tick(delta: float) -> void:
 	flash = maxf(0.0, flash - delta)
 	iframes = maxf(0.0, iframes - delta)
 	sleep_t = maxf(0.0, sleep_t - delta)
+	stuck_t = maxf(0.0, stuck_t - delta)
+	blind_t = maxf(0.0, blind_t - delta)
+	fear_t = maxf(0.0, fear_t - delta)
+	confuse_t = maxf(0.0, confuse_t - delta)
+	if poison_t > 0.0 and not down:
+		poison_t -= delta
+		_poison_tick -= delta
+		if _poison_tick <= 0.0:
+			_poison_tick = 1.0
+			_lose_hp(poison_dps, Color("9be06a"))
 	roll_cd = maxf(0.0, roll_cd - delta)
 	atk_cd = maxf(0.0, atk_cd - delta)
 	swing_t = maxf(0.0, swing_t - delta)
@@ -184,6 +253,8 @@ func _tick(delta: float) -> void:
 func _move(delta: float) -> void:
 	_attack_input(delta)
 	var mv: Vector2 = cmd.get("move", Vector2.ZERO)
+	if confuse_t > 0.0:
+		mv = -mv           # 回転板: 前後左右が逆になる
 	if rush_t > 0.0:
 		rush_t -= delta
 		intent = rush_dir
@@ -222,7 +293,7 @@ func _rush_hits() -> void:
 # ---------- 通常攻撃 ----------
 
 func can_attack() -> bool:
-	return not down and atk_cd <= 0.0 and rush_t <= 0.0 and roll_t <= 0.0 and sleep_t <= 0.0
+	return not down and atk_cd <= 0.0 and rush_t <= 0.0 and roll_t <= 0.0 and sleep_t <= 0.0 and stuck_t <= 0.0 and fear_t <= 0.0
 
 ## 正面へ一撃。届く範囲の魔物すべてに当たる。待ち時間のあいだは振れない
 func attack() -> bool:
@@ -578,9 +649,14 @@ func _ai_think() -> void:
 	var to_leader := Vector2.ZERO
 	if leader != null:
 		to_leader = leader.position - position
-	if leader != null and to_leader.length() > 330.0:
-		# 離れすぎたら、リーダーのそばへ(敵が見えていても)
-		ai_move = to_leader.normalized()
+	var lost := leader != null and _flow_dist() < 0
+	if lost:
+		# はぐれている(転移の罠など)。道のりがリーダーに届くまで、その場で身を守る
+		if ai_target != null and role() == "melee":
+			ai_move = (ai_target.position - position).normalized()
+	elif leader != null and to_leader.length() > 330.0:
+		# 離れすぎたら、リーダーのそばへ(敵が見えていても)。道なりに戻る
+		ai_move = _flow_step(to_leader)
 		ai_catchup = true
 	elif ai_target != null:
 		var to := ai_target.position - position
@@ -604,6 +680,30 @@ func _ai_think() -> void:
 			ai_move = to_f.normalized()
 			ai_catchup = to_f.length() > 60.0
 	_ai_skills()
+
+## リーダーまでの道のり(マス)。遠すぎるか、たどれなければ -1
+func _flow_dist() -> int:
+	var m := game_floor.map
+	var c := m.cell_of(position)
+	if not m.in_bounds(c.x, c.y) or game_floor.flow.size() != m.w * m.h:
+		return 0
+	return game_floor.flow[m.idx(c.x, c.y)]
+
+## 道のりの低いほうへ一歩(無ければ、まっすぐ)
+func _flow_step(fallback: Vector2) -> Vector2:
+	var m := game_floor.map
+	var c := m.cell_of(position)
+	var here := _flow_dist()
+	if here <= 0:
+		return fallback.normalized()
+	for d in FloorMap.DIRS4:
+		var nx: int = c.x + d.x
+		var ny: int = c.y + d.y
+		if m.in_bounds(nx, ny):
+			var v := game_floor.flow[m.idx(nx, ny)]
+			if v >= 0 and v < here:
+				return (m.center_of(Vector2i(nx, ny)) - position).normalized()
+	return fallback.normalized()
 
 func _count_enemies_within(center: Vector2, r: float) -> int:
 	var n := 0
@@ -718,6 +818,36 @@ func _draw_sleep() -> void:
 	else:
 		UI.text_center(self, 0.0, y, "!", 16, Color("ff6a5a"))
 
+const STUCK_LABEL := {"teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた"}
+
+## 罠の効き目を、体の上に描く
+func _draw_status() -> void:
+	var y := -radius - (34.0 if _is_sheet else 18.0)
+	var tm := Time.get_ticks_msec() / 1000.0
+	if poison_t > 0.0:
+		draw_arc(Vector2.ZERO, radius + 2.0, 0.0, TAU, 20, Color(0.55, 0.9, 0.35, 0.7), 2.0)
+	if stuck_t > 0.0:
+		match stuck_kind:
+			"net":
+				var r := radius + 4.0
+				for i in 4:
+					var o := -r + r * 2.0 * i / 3.0
+					draw_line(Vector2(o, -r), Vector2(o, r), Color(0.8, 0.7, 0.5, 0.85), 1.0)
+					draw_line(Vector2(-r, o), Vector2(r, o), Color(0.8, 0.7, 0.5, 0.85), 1.0)
+				if controlled:
+					UI.text_center(self, 0.0, y, "連打で抜ける", 10, Color("ffe9a8"))
+			"sleep":
+				UI.text_center(self, 6.0 + sin(tm * 2.0) * 2.0, y - fmod(tm * 6.0, 6.0), "z", 12, Color(0.8, 0.85, 1.0, 0.9))
+			_:
+				UI.text_center(self, 0.0, y, String(STUCK_LABEL.get(stuck_kind, "!")), 10, Color("ffb070"))
+		return
+	if fear_t > 0.0:
+		UI.text_center(self, 0.0, y, "怯え", 10, Color(0.75, 0.7, 1.0))
+	elif confuse_t > 0.0:
+		UI.text_center(self, sin(tm * 8.0) * 4.0, y, "?", 14, Color(1.0, 0.9, 0.5))
+	elif blind_t > 0.0:
+		UI.text_center(self, 0.0, y, "眩", 10, Color(1.0, 1.0, 0.8))
+
 func _draw() -> void:
 	draw_set_transform(lunge)
 	var col := Jobs.class_color(ch.cls)
@@ -739,6 +869,7 @@ func _draw() -> void:
 			var my := -radius - (30.0 if _is_sheet else 14.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
 		_draw_sleep()
+		_draw_status()
 		_draw_attack()
 		return
 	if down:
@@ -759,4 +890,5 @@ func _draw() -> void:
 	if controlled:
 		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 12), Vector2(5, -radius - 20), Vector2(-5, -radius - 20)]), Color("ffe9a8"))
 	_draw_sleep()
+	_draw_status()
 	_draw_attack()
