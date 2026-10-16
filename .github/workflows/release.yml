@@ -1,7 +1,9 @@
 name: Release
 
-# main にマージ(push)されるたびに、Deploy/ の最新のビルドを ZIP と Windows のインストーラーにして、GitHub の Release に出す。
-# ビルド自体は tools/build-deploy.sh で行い、Deploy/ にコミットしておく決まり(CI では、それを ZIP にまとめるだけ)。
+# main にマージ(push)されるたびに、Deploy/ の最新のビルドから、起動時の自動更新が使う .pck と latest.json を作り、
+# GitHub の Release「test」(テスト用。配布用ではない)を上書きする。ほかの Release は消す(リポジトリの README のとおり、リリースはしない)。
+# ZIP とインストーラーは、Release には載せず、この実行の成果物(Artifacts、90日)に置く。
+# ビルド自体は tools/build-deploy.sh で行い、Deploy/ にコミットしておく決まり(CI では、それをまとめるだけ)。
 on:
   push:
     branches: [main]
@@ -23,32 +25,43 @@ jobs:
       - name: NSIS を入れる(Windows のインストーラー用)
         run: sudo apt-get update -q && sudo apt-get install -y -q nsis
 
-      - name: ZIP とインストーラーにまとめる
+      - name: ZIP とインストーラー、自動更新用の .pck にまとめる
         env:
           INSTALLER_VERSION: v${{ github.run_number }}
+          RELEASE_TAG: test
         run: tools/package-release.sh dist
 
-      - name: Release を作る
+      - name: ZIP とインストーラーを成果物に置く(テストの機械に入れ直すとき用)
+        uses: actions/upload-artifact@v4
+        with:
+          name: UrbsLabyrinthi-v${{ github.run_number }}
+          path: |
+            dist/UrbsLabyrinthi-setup.exe
+            dist/UrbsLabyrinthi-windows.zip
+            dist/UrbsLabyrinthi-linux.zip
+          retention-days: 90
+
+      - name: Release「test」を上書きし、ほかの Release を消す
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="v${{ github.run_number }}"
+          VER="v${{ github.run_number }}"
           SHORT="$(git rev-parse --short HEAD)"
-          TITLE="$(git log -1 --pretty=%s)"
           {
-            echo "main の最新版($SHORT)。"
+            echo "テスト用(配布用ではない)。起動時の自動更新が使う、ゲームの中身(.pck)と latest.json だけを置く。"
             echo
-            echo "- \`UrbsLabyrinthi-setup.exe\` … Windows 用のインストーラー(Windows 10/11 x64。管理者の権限は要らない。未署名なので、SmartScreen が出たら「詳細情報」→「実行」)"
-            echo "- \`UrbsLabyrinthi-windows.zip\` … 展開して \`UrbsLabyrinthi.exe\` を実行(Windows 10/11 x64)"
-            echo "- \`UrbsLabyrinthi-linux.zip\` … 展開して \`./UrbsLabyrinthi.x86_64\` を実行(Ubuntu 22.04/24.04 x86_64。先に \`SetupScript/setup-ubuntu.sh\`)"
-            echo "- \`*.pck\`、\`latest.json\` … 起動時の自動更新が使う(ゲームの中身と、その版)"
-            echo "- \`SHA256SUMS.txt\` … ハッシュ"
+            echo "版 $VER、main の $SHORT。"
             echo
-            echo "ビルドの記録:"
             echo '```'
             cat Deploy/VERSION
             echo '```'
           } > notes.md
-          gh release create "$TAG" dist/UrbsLabyrinthi-setup.exe dist/UrbsLabyrinthi-windows.zip dist/UrbsLabyrinthi-windows.pck dist/UrbsLabyrinthi-linux.pck dist/latest.json dist/UrbsLabyrinthi-linux.zip dist/SHA256SUMS.txt \
-            --title "$TAG — $TITLE" --notes-file notes.md --target "${{ github.sha }}" --latest
+          (cd dist && sha256sum UrbsLabyrinthi-windows.pck UrbsLabyrinthi-linux.pck latest.json > SHA256SUMS.txt)
+          gh release delete test --cleanup-tag --yes || true
+          gh release create test dist/UrbsLabyrinthi-windows.pck dist/UrbsLabyrinthi-linux.pck dist/latest.json dist/SHA256SUMS.txt \
+            --title "test — テスト用($VER)" --notes-file notes.md --target "${{ github.sha }}" --latest
+          # 自動更新は releases/latest を見るので、test に「最新」の印を付けたまま、ほかの Release とタグを消す
+          gh release list --limit 300 --json tagName --jq '.[].tagName' | { grep -vx test || true; } | while read -r t; do
+            gh release delete "$t" --cleanup-tag --yes
+          done
