@@ -54,19 +54,21 @@ common "$L"
 (cd "$WORK" && rm -f "$OUT/UrbsLabyrinthi-linux.zip" && zip -qr -9 -y "$OUT/UrbsLabyrinthi-linux.zip" UrbsLabyrinthi-linux)
 
 # 起動時の更新用: ゲームの中身(.pck)と、latest.json(版と、.pck の場所とハッシュ)
+# TAG は版の名前(タイトルに出る)。.pck の URL は、RELEASE_TAG の Release を指す(既定は TAG と同じ)
 TAG="${INSTALLER_VERSION:-dev}"
+URL_TAG="${RELEASE_TAG:-$TAG}"
 REPO="${GITHUB_REPOSITORY:-xex-ken-xex/UrbsLabyrinthi}"
 cp "$D/windows/UrbsLabyrinthi.pck" "$OUT/UrbsLabyrinthi-windows.pck"
 cp "$D/linux/UrbsLabyrinthi.pck" "$OUT/UrbsLabyrinthi-linux.pck"
-python3 - "$OUT" "$TAG" "$REPO" "$D/VERSION" <<'PY'
+python3 - "$OUT" "$TAG" "$REPO" "$D/VERSION" "$URL_TAG" <<'PY'
 import hashlib, json, os, re, sys
-out, tag, repo, ver = sys.argv[1:5]
+out, tag, repo, ver, url_tag = sys.argv[1:6]
 m = re.search(r"godot:\s*(\d+)\.(\d+)(?:\.(\d+))?", open(ver).read())
 godot = "%s.%s.%s" % (m.group(1), m.group(2), m.group(3) or "0")
 pck = {}
 for os_name, f in (("Windows", "UrbsLabyrinthi-windows.pck"), ("Linux", "UrbsLabyrinthi-linux.pck")):
     p = os.path.join(out, f)
-    pck[os_name] = {"url": "https://github.com/%s/releases/download/%s/%s" % (repo, tag, f),
+    pck[os_name] = {"url": "https://github.com/%s/releases/download/%s/%s" % (repo, url_tag, f),
                     "sha256": hashlib.sha256(open(p, "rb").read()).hexdigest(), "size": os.path.getsize(p)}
 json.dump({"tag": tag, "godot": godot, "pck": pck}, open(os.path.join(out, "latest.json"), "w"), indent=1)
 PY

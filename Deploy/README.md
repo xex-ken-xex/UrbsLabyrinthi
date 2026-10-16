@@ -6,14 +6,15 @@ Linux(x86_64)と Windows(x86_64)向け。コードやデータを変えたら、
 エンジン本体(変わらない)と、ゲームの中身 `UrbsLabyrinthi.pck`(変わる)を分けてある。
 **`.pck` は、実行ファイルと同じフォルダに、同じ名前で置く。**
 
-## Release(配布用 ZIP)
+## Release「test」と ZIP
 
-`main` にマージされるたびに、GitHub Actions(`.github/workflows/release.yml`)が、この `Deploy/` から `UrbsLabyrinthi-windows.zip` と `UrbsLabyrinthi-linux.zip` を作り、Releases に出す(タグは `v<実行番号>`、最新版の印が付く)。
+このリポジトリはリリースを目的としない(リポジトリ直下の README)。`main` にマージされるたびに、GitHub Actions(`.github/workflows/release.yml`)が、自動更新用の `.pck` と `latest.json` だけを、テスト用の Release「test」に上書きで置く(最新版の印が付く)。ほかの Release とタグは消す。
+`UrbsLabyrinthi-windows.zip`、`UrbsLabyrinthi-linux.zip`、インストーラーは、その実行の成果物(Actions の Artifacts、90日)に置く。
 手元で作るなら `tools/package-release.sh`(`dist/` に出る)。ZIP の中身は `Deploy/` のコミット済みのビルドなので、コードを変えたら先に `tools/build-deploy.sh` を実行してコミットする。
 
 ## Windows のインストーラー
 
-Release の `UrbsLabyrinthi-setup.exe` を実行すると、`%LOCALAPPDATA%\Programs\UrbsLabyrinthi` に入る(管理者の権限は要らない。場所は変えられる)。
+Actions の成果物にある `UrbsLabyrinthi-setup.exe` を実行すると、`%LOCALAPPDATA%\Programs\UrbsLabyrinthi` に入る(管理者の権限は要らない。場所は変えられる)。
 スタートメニューに、起動、ログを取って起動、差し替え画像のフォルダ、アンインストールが並ぶ。デスクトップのショートカットは選べる。
 新しい版は、上から入れ直せばよい。アンインストールしても、セーブ(`%APPDATA%\Godot\app_userdata\Urbs Labyrinthi\`)と、`assets\` に自分で置いた画像は残る。
 作り方は `installer/UrbsLabyrinthi.nsi`。`tools/package-release.sh` が、`makensis`(Ubuntu は `apt install nsis`)があればいっしょに作る。
@@ -28,7 +29,7 @@ Release の `UrbsLabyrinthi-setup.exe` を実行すると、`%LOCALAPPDATA%\Prog
 - 確かめている間に Esc(コントローラーは B)で飛ばせる。`-- --no-update` を付けて起動すると、確かめない
 - 同じ版への入れ替えは一度だけ試す(覚えておく場所は `user://update.cfg`)。入れ替えに失敗しても、起動し直しを繰り返さない
 - 確かめている間は 30fps・省電力で描き、ハッシュの計算は裏で行う。各段階はログに `[urbs] 更新:` として残る
-- Release には `UrbsLabyrinthi-windows.pck`、`UrbsLabyrinthi-linux.pck`、`latest.json` を `tools/package-release.sh` が作って載せる
+- Release「test」には `UrbsLabyrinthi-windows.pck`、`UrbsLabyrinthi-linux.pck`、`latest.json` を `tools/package-release.sh` が作って載せる(`RELEASE_TAG=test` で、`.pck` の URL が test を指す)
 
 ## セットアップ(必要なライブラリを入れる)
 
