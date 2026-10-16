@@ -24,6 +24,8 @@ var overlay_kind := ""
 var trail: Array = []
 var light_t := 0.0                 # 燐晶の灯油の残り秒
 var pending_return := false
+var fire_until := -1.0            # 野営の火が消える時刻(迷宮の時刻、分)。燃料1つで1時間
+var _menu_fx: Array = []           # 持ち物の画面で起きた手ごたえ(料理、食べる)。閉じたら出す [擬音, Hero]
 var pending_rest := false         # 持ち物の「休む」を押した(閉じたら休み始める)
 var dtime: DungeonTime = null      # 迷宮の中の時間(闘技場では使わない)
 var _last_cell := Vector2i(-99, -99)
@@ -265,7 +267,7 @@ func save_dive() -> bool:
 		hs.append({"party": gs.party.find(h.ch), "pos": h.position, "buffs": h.buffs.duplicate(true), "rust": h.rust, "last_stand": h.last_stand})
 	var d := {"version": DiveSave.VERSION, "day": gs.day, "floor": current.floor_no, "floors": fls, "heroes": hs,
 		"active": gs.party.find(leader().ch), "bag": bag_crystal.duplicate(), "light_t": light_t, "insured": dive_insured,
-		"minutes": dtime.minutes, "resting": dtime.resting, "rest_end": dtime.rest_end, "rest_from": dtime.rest_from}
+		"minutes": dtime.minutes, "resting": dtime.resting, "rest_end": dtime.rest_end, "rest_from": dtime.rest_from, "fire_until": fire_until}
 	if not gs.save() or not DiveSave.write(d):
 		return false
 	log_msg("記録をつけた(%s、%s)。" % [ZaCalendar.label(gs.day), current.map.data["meta"].get("floor_label", "")], Color("9be29b"))
@@ -302,6 +304,7 @@ func resume_dive(d: Dictionary) -> void:
 	dtime.resting = bool(d.get("resting", false))
 	dtime.rest_end = float(d.get("rest_end", 0.0))
 	dtime.rest_from = float(d.get("rest_from", 0.0))
+	fire_until = float(d.get("fire_until", -1.0))
 	var fls: Dictionary = d.get("floors", {})
 	for n in fls:
 		var fl := _make_floor(int(n))
@@ -457,6 +460,10 @@ func start_day() -> void:
 			active = i
 			break
 	_apply_control()
+	gs.set_clock(gs.town_clock())
+	fire_until = -1.0
+	for c in gs.party:
+		c.belly = maxf(c.belly, Cooking.BELLY_START)     # 宿か自宅で、朝飯を食べて出る
 	dive_insured = gs.insured     # 帰還積立は、この潜行一回ぶん
 	gs.insured = false
 	if gs.blessed:
@@ -615,6 +622,7 @@ func _dungeon_frame(delta: float) -> void:
 		_check_traps()
 		if dtime != null:
 			dtime.update(delta)
+			gs.set_clock(gs.day * 1440.0 + dtime.minutes)
 	if (lead.blind_t > 0.0) != _blind_was:
 		_blind_was = lead.blind_t > 0.0
 		_refresh_view()
@@ -1358,6 +1366,7 @@ func open_inventory() -> void:
 	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
 	if phase == "menu" and dtime != null:
 		inventory.set_save(Callable(self, "save_dive"))
+	inventory.set_food(Callable(self, "cook_dish") if phase == "menu" and dtime != null else Callable(), Callable(self, "eat_dish"))
 
 ## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま
 func sync_hero_order() -> void:
@@ -1551,6 +1560,14 @@ func close_inventory() -> void:
 	inventory.queue_free()
 	inventory = null
 	_menu_cd = 0.3
+	for fx in _menu_fx:
+		var h: Hero = fx[1]
+		if current != null and is_instance_valid(h):
+			if String(fx[0]).begins_with("@"):
+				current.spawn_text(h.position + Vector2(0, -36), String(fx[0]).substr(1), Color("ffe08a"))
+			else:
+				Sfx.cue(current, h.position, String(fx[0]))
+	_menu_fx.clear()
 	if phase == "town" and screen is TownScreen:
 		(screen as TownScreen).refresh_top()
 		screen.call_deferred("focus_default")   # 持ち物を閉じたら、コントローラーの焦点を街へ戻す
@@ -1569,6 +1586,72 @@ func close_inventory() -> void:
 	elif screen is TownScreen:
 		(screen as TownScreen).refresh_top()
 		(screen as TownScreen)._refresh_all()
+
+# ---------- 料理(Cooking) ----------
+
+func _hero_of(ch: Character) -> Hero:
+	for h in heroes:
+		if h.ch == ch:
+			return h
+	return null
+
+## 野営で料理する(持ち物の画面から)。{ok, msg}。燃料で火を熾し、20分かかる
+func cook_dish(rid: String) -> Dictionary:
+	if dtime == null or current == null or arena != null:
+		return {"ok": false, "msg": "ここでは料理できない"}
+	var r := Cooking.recipe(rid)
+	if bool(r.get("home", false)):
+		return {"ok": false, "msg": "これは自宅の台所でしか作れない"}
+	var why := dtime.chased_reason()
+	if why != "":
+		return {"ok": false, "msg": why.replace("休めない", "料理できない")}
+	if not Cooking.can_make(gs, r):
+		return {"ok": false, "msg": "材料が足りない"}
+	var lit := ""
+	if dtime.minutes >= fire_until:
+		var fuel := ""
+		for id in Cooking.tag_ids("fuel"):
+			if gs.count(String(id)) > 0 and not (r["in"] as Dictionary).has(String(id)):
+				fuel = String(id)
+				break
+		if fuel == "":
+			return {"ok": false, "msg": "燃料が無い(焚き木束・焼け石・白蝋)"}
+		gs.remove_item(fuel)
+		fire_until = dtime.minutes + Cooking.FIRE_MINUTES
+		lit = "%sで火を熾した。" % ItemDB.item_name(fuel)
+	var res := Cooking.cook(gs, rid)
+	if not bool(res.get("ok", false)):
+		return res
+	dtime.minutes += Cooking.CAMP_MINUTES
+	gs.set_clock(gs.day * 1440.0 + dtime.minutes)
+	var lead := leader()
+	var kind := String(res.get("kind", ""))
+	_menu_fx.append(["simmer" if kind == "simmer" or kind == "smoke" else "sizzle", lead])
+	match int(res["q"]):
+		Cooking.Q_GREAT: _menu_fx.append(["@上出来!", lead])
+		Cooking.Q_BURNT: _menu_fx.append(["burnt", lead])
+	log_msg(lit + String(res["msg"]), Color("ffe08a") if int(res["q"]) == Cooking.Q_GREAT else Color("e8dcb0"))
+	res["msg"] = lit + String(res["msg"])
+	return res
+
+## 料理を食べる(街でも迷宮でも)。i は gs.food の番号
+func eat_dish(i: int, ch: Character) -> Dictionary:
+	var res := Cooking.eat(gs, i, ch)
+	if not bool(res.get("ok", false)):
+		return res
+	var h := _hero_of(ch) if phase == "menu" else null
+	if h != null:
+		_menu_fx.append(["munch", h])
+		if bool(res.get("rotten", false)):
+			h.poison(30.0, ch.max_hp() * 0.008)
+			_menu_fx.append(["bellyache", h])
+		elif bool(res.get("poison", false)):
+			h.poison(20.0, ch.max_hp() * 0.02)
+			_menu_fx.append(["poison", h])
+		log_msg(String(res["msg"]), Color("e8dcb0"))
+	elif bool(res.get("rotten", false)) or bool(res.get("poison", false)):
+		ch.hp = maxf(1.0, ch.hp - ch.max_hp() * 0.1)     # 街では、寝込んで少し弱る
+	return res
 
 ## 迷宮の中でだけ効く道具
 func use_special(id: String, _c: Character) -> bool:
@@ -1628,6 +1711,7 @@ func return_to_surface() -> void:
 	_clear_bag()
 	DiveSave.clear()
 	gs.day += 1
+	gs.set_clock(gs.town_clock())
 	var lines: Array = []
 	if not detail.is_empty():
 		lines.append("査定:  " + "   ".join(detail))
@@ -1643,6 +1727,12 @@ func return_to_surface() -> void:
 			downed.append(c.name)
 	if not downed.is_empty():
 		lines.append("倒れた仲間: %s(神殿で蘇らせよう)" % "、".join(downed))
+	var rotten := 0
+	for f in gs.food:
+		if Cooking.rotten(f, gs.clock):
+			rotten += int(f["n"])
+	if rotten > 0:
+		lines.append("持ち帰った料理のうち%d皿が、くさっていた(持ち物の「料理」で捨てられる)" % rotten)
 	# 〈芸能〉: 宿で芸を見せて稼ぐ(倒れていない仲間のうち、いちばん高い人)
 	var perf := 0.0
 	var performer := ""

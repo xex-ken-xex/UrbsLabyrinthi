@@ -5,7 +5,7 @@
   godot/assets/items/items_sheet.png   16列のシート(1マス 32×32、透明な背景)
   godot/data/item-icons.json           id → マスの番号
   godot/scripts/items_forage.gd        自生物、素材、遺品の定義と、出現・ドロップの表(自動生成。手で直さない)
-一覧は tools/item-catalog.py。"""
+一覧は tools/item-catalog.py。料理と市場の食材の絵は godot/data/cooking.json の icon から描く。"""
 import importlib.util
 import json
 import math
@@ -373,12 +373,183 @@ def draw_coins(c, col):
         c.p(x - 1, y - 2, shade(col, 1.5))
 
 
+
+# ---------- 料理と食材(data/cooking.json) ----------
+def draw_sack(c, col, grain, beans=False):
+    col, grain = hx(col), hx(grain)
+    disc(c, 16, 21, 9, shade(col, 0.8), 0.8); disc(c, 16, 20, 8, col, 0.8)
+    c.r(12, 9, 20, 13, col); c.r(11, 12, 21, 13, shade(col, 0.6))
+    disc(c, 16, 11, 4, grain, 0.6)
+    for (x, y) in ((14, 10), (17, 11), (15, 12), (19, 10)):
+        c.p(x, y, shade(grain, 0.75) if not beans else shade(grain, 0.6))
+    c.p(11, 18, shade(col, 1.3)); c.p(12, 17, shade(col, 1.3))
+
+
+def draw_root(c, col, leaf):
+    col, leaf = hx(col), hx(leaf)
+    disc(c, 16, 19, 7, shade(col, 0.85)); disc(c, 15, 18, 6, col)
+    c.line(16, 25, 17, 30, shade(col, 0.7))
+    c.p(13, 15, shade(col, 1.5)); c.p(12, 16, shade(col, 1.5))
+    for dx in (-4, 0, 4):
+        c.line(16, 12, 16 + dx, 4, leaf); c.p(16 + dx, 5, shade(leaf, 1.3))
+
+
+def draw_cabbage(c, col):
+    col = hx(col)
+    disc(c, 16, 18, 10, shade(col, 0.7), 0.85); disc(c, 16, 17, 8, col, 0.85)
+    for k in range(3):
+        c.line(10 + k * 4, 22, 13 + k * 3, 11, shade(col, 0.75))
+    disc(c, 16, 15, 3, shade(col, 1.3), 0.8)
+
+
+def draw_cheese(c, col):
+    col = hx(col)
+    for y in range(10, 25):
+        x1 = 7 + int((y - 10) * 1.2)
+        c.r(6, y, min(26, 26 - (24 - y) // 3), y, col if y > 11 else shade(col, 1.2))
+    for (x, y) in ((10, 16), (15, 20), (20, 18), (12, 22)):
+        disc(c, x, y, 1.5, shade(col, 0.7))
+    c.r(6, 24, 26, 25, shade(col, 0.65))
+
+
+def draw_egg(c, col):
+    col = hx(col)
+    for (x, y) in ((12, 19), (20, 20)):
+        disc(c, x, y, 6, shade(col, 0.8), 1.3); disc(c, x - 1, y - 1, 5, col, 1.3)
+        c.p(x - 3, y - 5, C("ffffff")); c.p(x - 2, y - 6, C("ffffff"))
+        c.p(x + 1, y + 2, shade(col, 0.6))
+
+
+def draw_pouch(c, col):
+    col = hx(col)
+    disc(c, 16, 20, 8, shade(col, 0.75)); disc(c, 16, 19, 7, col)
+    c.r(13, 9, 19, 12, col); c.line(12, 12, 20, 12, C("e8c870"))
+    for (x, y) in ((10, 27), (14, 28), (22, 27), (19, 29)):
+        c.p(x, y, shade(col, 1.2))
+
+
+def draw_logs(c, col):
+    col = hx(col)
+    for (y, x0) in ((22, 6), (16, 9), (10, 7)):
+        c.r(x0, y, x0 + 17, y + 4, col); c.r(x0, y, x0 + 17, y, shade(col, 1.3))
+        disc(c, x0 + 18, y + 2, 2.5, C("d8b880")); c.p(x0 + 18, y + 2, shade(col, 0.6))
+    c.line(5, 19, 27, 19, C("6a5a3a"))
+
+
+def draw_bowl(c, col, rim):
+    col, rim = hx(col), hx(rim)
+    for y in range(16, 27):
+        half = int(round(12 * math.sqrt(max(0.0, 1 - ((y - 16) / 11.0) ** 2))))
+        c.r(16 - half, y, 16 + half, y, shade(rim, 1.0 - 0.3 * (y - 16) / 11))
+    c.r(5, 15, 27, 17, shade(col, 0.9)); c.r(7, 15, 25, 15, shade(col, 1.25))
+    for (x, y) in ((11, 16), (18, 16), (22, 15)):
+        c.p(x, y, shade(col, 0.6))
+    c.line(10, 12, 11, 7, C("dcdcdc")); c.line(16, 12, 15, 5, C("dcdcdc")); c.line(21, 12, 22, 8, C("dcdcdc"))
+
+
+def draw_plate(c, col, kind="lump"):
+    col = hx(col)
+    disc(c, 16, 22, 12, C("b8b0a0"), 0.4); disc(c, 16, 21, 10, C("e0d8c8"), 0.35)
+    if kind == "fish":
+        for x in range(8, 23):
+            h = int(1 + 3 * (1 - abs((x - 14) / 8.0) ** 1.5))
+            c.r(x, 19 - h, x, 19 + h, col)
+        c.line(23, 19, 26, 16, col); c.line(23, 19, 26, 22, col)
+        for x in (12, 15, 18):
+            c.line(x, 17, x + 1, 21, shade(col, 0.55))
+    elif kind == "shroom":
+        for x in (11, 17, 22):
+            disc(c, x, 17, 3.5, col, 0.7); c.r(x - 1, 18, x + 1, 21, shade(col, 1.8))
+            c.p(x - 1, 16, shade(col, 0.5))
+    elif kind == "tuber":
+        disc(c, 13, 19, 5, shade(col, 0.6), 0.8); disc(c, 20, 19, 5, col, 0.8)
+        disc(c, 20, 18, 3, C("f0d890"), 0.8)
+    elif kind == "stirfry":
+        for (x, y, k) in ((10, 18, 1.0), (14, 17, 1.3), (18, 19, 0.8), (22, 17, 1.1), (16, 20, 0.7)):
+            c.r(x, y, x + 3, y + 1, shade(col, k))
+        for (x, y) in ((12, 19), (20, 18)):
+            c.r(x, y, x + 2, y + 1, C("8a4a2a"))
+    elif kind == "melt":
+        disc(c, 16, 19, 7, col, 0.5); c.r(10, 20, 11, 23, col); c.r(21, 20, 22, 24, col)
+        c.p(13, 17, C("fff0c0")); c.p(14, 17, C("fff0c0"))
+    elif kind == "leaf":
+        for (x, y) in ((11, 18), (16, 16), (20, 19), (14, 20)):
+            disc(c, x, y, 3, shade(col, 0.8 + 0.1 * (x % 3)), 0.6)
+        twinkle(c, 24, 13, C("f8f8f8"))
+    elif kind == "egg":
+        disc(c, 16, 19, 7, C("f8f4ec"), 0.6); disc(c, 16, 18, 3, col, 0.8)
+    elif kind == "slices":
+        for x in (9, 14, 19):
+            c.r(x, 16, x + 3, 21, col); c.r(x, 16, x + 3, 16, shade(col, 1.3))
+    else:
+        disc(c, 16, 19, 6, col, 0.6)
+
+
+def draw_skewer(c, col):
+    col = hx(col)
+    c.line(5, 27, 27, 5, C("c8a878"))
+    for k in range(4):
+        x, y = 10 + k * 4, 22 - k * 4
+        disc(c, x, y, 3, shade(col, 0.85 + 0.1 * (k % 2))); c.p(x - 1, y - 1, shade(col, 1.4))
+    c.line(9, 9, 10, 5, C("d8d8d8")); c.line(14, 8, 14, 4, C("d8d8d8"))
+
+
+def draw_cup(c, liquid, ice=False):
+    liq = hx(liquid)
+    c.r(9, 12, 22, 26, C("8a6a4a")); c.r(10, 13, 21, 25, C("a07a50"))
+    c.r(10, 13, 21, 15, liq); c.r(10, 13, 21, 13, shade(liq, 1.3))
+    c.r(22, 15, 25, 21, C("8a6a4a")); c.r(23, 16, 24, 20, (0, 0, 0, 0))
+    if ice:
+        for (x, y) in ((12, 11), (17, 10), (20, 12)):
+            c.r(x, y, x + 2, y + 2, C("e8f8ff"))
+    else:
+        c.line(13, 10, 14, 5, C("dcdcdc")); c.line(18, 10, 17, 4, C("dcdcdc"))
+
+
+def draw_bread(c, col, flat=False, cake=False):
+    col = hx(col)
+    if flat:
+        disc(c, 16, 19, 11, shade(col, 0.75), 0.45); disc(c, 16, 18, 10, col, 0.4)
+        for (x, y) in ((11, 17), (16, 19), (21, 17), (14, 16)):
+            c.p(x, y, shade(col, 0.6))
+        return
+    disc(c, 16, 19, 10, shade(col, 0.7), 0.6); disc(c, 16, 17, 9, col, 0.6)
+    if cake:
+        c.r(8, 14, 24, 15, C("fff8e8"))
+        for x in (10, 15, 20):
+            c.p(x, 16, C("fff8e8"))
+        twinkle(c, 24, 9, C("fff0c0"))
+    else:
+        for x in (11, 16, 21):
+            c.line(x - 1, 13, x + 1, 16, shade(col, 1.35))
+
+
+def draw_jerky(c, col):
+    col = hx(col)
+    for (x, y, l) in ((7, 10, 15), (9, 16, 16), (6, 22, 17)):
+        c.r(x, y, x + l, y + 3, col); c.r(x, y, x + l, y, shade(col, 1.4))
+        for xx in range(x + 2, x + l, 4):
+            c.p(xx, y + 2, shade(col, 0.6))
+    c.line(4, 8, 4, 28, C("6a5a3a"))
+
+
+def draw_pot(c, col):
+    col = hx(col)
+    disc(c, 16, 20, 10, shade(col, 0.75), 0.8); disc(c, 16, 19, 9, col, 0.8)
+    disc(c, 16, 12, 8, C("e0c080"), 0.4); c.r(9, 12, 23, 13, C("c8a060"))
+    c.line(12, 11, 14, 10, C("a07a40")); c.line(18, 11, 20, 10, C("a07a40"))
+    c.line(15, 9, 14, 4, C("dcdcdc")); c.line(18, 9, 19, 5, C("dcdcdc"))
+
+
 DRAW = {
     "mushroom": draw_mushroom, "moss": draw_moss, "tuber": draw_tuber, "herb": draw_herb, "flower": draw_flower,
     "jar": draw_jar, "bottle": draw_bottle, "charm": draw_charm, "scroll": draw_scroll, "fish": draw_fish, "shell": draw_shell,
     "pearl": draw_pearl, "slime": draw_slime, "lump": draw_lump, "meat": draw_meat, "pelt": draw_pelt, "fang": draw_fang,
     "bone": draw_bone, "scrap": draw_scrap, "scale": draw_scale, "gland": draw_gland, "feather": draw_feather, "fruit": draw_fruit,
     "bundle": draw_bundle, "tag": draw_tag, "coins": draw_coins,
+    "sack": draw_sack, "root": draw_root, "cabbage": draw_cabbage, "cheese": draw_cheese, "egg": draw_egg, "pouch": draw_pouch,
+    "logs": draw_logs, "bowl": draw_bowl, "plate": draw_plate, "skewer": draw_skewer, "cup": draw_cup, "bread": draw_bread,
+    "jerky": draw_jerky, "pot": draw_pot,
 }
 
 # ---------- 燐晶 ----------
@@ -451,6 +622,14 @@ def build():
     for it in cat.FORAGE:
         r, kw = it["icon"]
         add(it["id"], lambda c, r=r, k=kw: DRAW[r](c, **k))
+    # 料理と食材(data/cooking.json)
+    cook = json.load(open(os.path.join(ROOT, "godot", "data", "cooking.json"), encoding="utf-8"))
+    for i, it in cook["ingredients"].items():
+        r, kw = it["icon"]
+        add(i, lambda c, r=r, k=kw: DRAW[r](c, **k))
+    for it in cook["recipes"]:
+        r, kw = it["icon"]
+        add("dish_" + it["id"], lambda c, r=r, k=kw: DRAW[r](c, **k))
     # 死体(地面に置く絵)
     def corpse(c):
         c.r(7, 20, 24, 25, C("5a4a3a")); c.r(8, 19, 23, 21, C("6a5a48"))

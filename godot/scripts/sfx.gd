@@ -25,6 +25,14 @@ const CUES := {
 	"exhale": ["ゴオォォ…", Color(1.0, 0.55, 0.45)],
 	"sealed": ["ズン…", Color(0.85, 0.7, 0.95)],
 	"charge_full": ["キン", Color(1.0, 0.92, 0.55)],
+	# 料理(Cooking)
+	"sizzle": ["ジュウ…", Color(1.0, 0.75, 0.45)],
+	"simmer": ["グツグツ", Color(0.95, 0.8, 0.55)],
+	"burnt": ["プスプス…", Color(0.6, 0.55, 0.55)],
+	"munch": ["モグモグ", Color(1.0, 0.88, 0.65)],
+	"growl": ["ぐぅ〜", Color(0.95, 0.85, 0.7), 0.85],
+	"growl_hard": ["ぐぅぅ〜…", Color(1.0, 0.7, 0.6)],
+	"bellyache": ["グルル…", Color(0.7, 0.85, 0.5)],
 	"charge_hit": ["ドンッ!", Color(1.0, 0.7, 0.4)],
 	"charge_miss": ["ブンッ", Color(0.85, 0.85, 0.9)],
 	# 罠(TrapFx と Main._trigger_trap)。3つ目の数は、文字の大きさの倍率

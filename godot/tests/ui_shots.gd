@@ -77,6 +77,11 @@ func _run() -> void:
 	town._push_walk(TownScreen.WALK_LINES[0])
 	town._push_walk(TownScreen.FORTUNES[1])
 	await shot("pleasure")
+	town._go("market")
+	town.sel_id = "haimugi"
+	town._fill_shop()
+	town._show_shop_detail()
+	await shot("market")
 	town._go("general")
 	await shot("general")
 	# 暦: 灯祭の夜(灯火の月15夜)の広場と寝息通り
@@ -196,7 +201,30 @@ func _run() -> void:
 	await shot("pickup")
 	main.open_inventory()
 	await shot("dungeon_menu")
+	# 料理: 作る(野営)と、食べる
+	for id in ["kemono_niku", "kemono_niku", "iwa_jio", "takigi", "kuro_take", "kuro_take", "hai_imo"]:
+		main.gs.add_item(id)
+	var inv: InventoryScreen = main.inventory
+	inv._set_tab("food")
+	inv.food_mode = "make"
+	inv.sel_id = "r:ibukuro"
+	inv._refresh()
+	await shot("food_make")
+	main.gs.add_food("niku_kushi", Cooking.Q_GREAT, main.gs.clock + 300.0, 2)
+	main.gs.add_food("ibukuro", Cooking.Q_NORMAL, main.gs.clock + 600.0, 4)
+	main.gs.add_food("kuro_yaki", Cooking.Q_BURNT, main.gs.clock + 200.0, 1)
+	main.gs.add_food("mame_shio", Cooking.Q_NORMAL, main.gs.clock - 10.0, 3)
+	inv.food_mode = "eat"
+	inv.sel_id = InventoryScreen._food_key(main.gs.food[2])
+	inv._refresh()
+	await shot("food_eat")
+	main.cook_dish("ibukuro")
 	main.close_inventory()
+	main.gs.party[1].belly = 20.0
+	main.heroes[1].growl_t = 0.0
+	for i in 8:
+		await physics_frame
+	await shot("food_cooked")
 	# 遺体の3タイプ
 	for k in 3:
 		var look: String = ["bones", "sit", "hang"][k]

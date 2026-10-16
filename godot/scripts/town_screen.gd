@@ -19,6 +19,7 @@ const LOCATIONS := {
 	"inn": {"name": "宿「止まり木亭」", "art": "inn"},
 	"pleasure": {"name": "寝息通り", "art": "pleasure"},
 	"guild": {"name": "坑口館・冒険者ギルド", "art": "guild"},
+	"market": {"name": "壁下市場「灰の辻」", "art": "market"},
 }
 const QUOTES := {
 	"smith": "「炉火の神ヘルグの槌は、嘘をつかねえ。いい鋼を持っていきな。」",
@@ -27,6 +28,7 @@ const QUOTES := {
 	"temple": "「眠りは誰にも訪れる。静寂の母が、あなたの夜を守りますように。」",
 	"inn": "「あいよ、湯と寝床だ。今夜も、何人戻ってきたかね。」",
 	"guild": "「おかえり。戻ってきた者は、まずここで名を書く。遺品があれば、遺品課の窓口へ。」",
+	"market": "「灰麦も豆も、今朝の隊商で入ったばかりだ。迷宮で火を焚くなら、焚き木も持っていきな。」",
 	"pleasure": "縁環区と壁下区の境に伸びる通り。迷宮の「息」に対して、人の寝息の通りと呼ばれる。",
 }
 const RUMORS := [
@@ -72,6 +74,7 @@ const SIGNS := [
 	["guild", "坑口館", "冒険者ギルド", Vector2(0.64, 0.42), "大穴の縁に、ギルドの本部が建っている。窓口の灯は、夜通し消えない。"],
 	["inn", "止まり木亭", "宿・酒場・仲間", Vector2(0.70, 0.66), "笑い声と、焼いた肉の匂いが漏れてくる。"],
 	["temple", "静寂派の神殿", "癒し・蘇り", Vector2(0.12, 0.76), "鐘は鳴らない。静寂の母の神殿は、いつも静かだ。"],
+	["market", "灰の辻", "市場・食材", Vector2(0.88, 0.76), "壁下区へ下る辻に、麦と豆と干物の露店が並んでいる。"],
 	["dive", "坑口", "迷宮へ降りる", Vector2(0.50, 0.80), "大穴から、青白い光が昇っている。今夜の通路は、どう組み替わっただろう。"],
 ]
 const HUB_LINE := "縁環区・坑口広場。大穴の縁に立つ坑口館の前は、夜でも燐晶の灯が絶えない。"
@@ -83,6 +86,7 @@ const ENTER_LINES := {
 	"inn": "止まり木亭の扉を開けると、暖かい空気と話し声に包まれた。",
 	"pleasure": "広場の東から、提灯の続く通りへ入った。",
 	"guild": "坑口館の扉を押した。査定課の秤の音と、帰還を書き込む筆の音がする。",
+	"market": "坂を下って、灰の辻へ出た。焼いた芋の匂いと、売り声がする。",
 }
 ## 坑口館の掲示板(入るたびに2枚)
 const NOTICES := [
@@ -424,7 +428,7 @@ func _build_content() -> void:
 	if location == "inn":
 		place_label.text = TownLines.pick_stable("inn", gs.day, [QUOTES["inn"]])
 	match location:
-		"smith", "general", "magic": _content_shop(location)
+		"smith", "general", "magic", "market": _content_shop(location)
 		"temple": _content_temple()
 		"inn": _content_inn()
 		"pleasure": _content_pleasure()
@@ -560,6 +564,10 @@ func _show_shop_detail() -> void:
 		var b := UIKit.button("購入する", _buy.bind(-1))
 		b.disabled = gs.buy_price(sel_id) > gs.bank_silver
 		shop_actions.add_child(b)
+		if location == "market":
+			var b5 := UIKit.button("5つ買う", _buy_n.bind(5))
+			b5.disabled = gs.buy_price(sel_id) * 5 > gs.bank_silver
+			shop_actions.add_child(b5)
 		if kind == "weapon" or kind == "armor" or kind == "acc":
 			for i in gs.party.size():
 				var c: Character = gs.party[i]
@@ -593,6 +601,18 @@ func _buy(member: int) -> void:
 			var e := gs.equip(c, sel_id)
 			extra = "%sに装備した" % c.name if e == "" else e
 	_say("%sを買った。%s" % [ItemDB.item_name(sel_id), extra], UIKit.GOOD)
+	_refresh_top()
+	_fill_shop()
+	call_deferred("_refocus_shop")
+
+## 市場で、まとめて買う
+func _buy_n(n: int) -> void:
+	if gs.buy_price(sel_id) * n > gs.bank_silver:
+		_say("銀貨が足りない", UIKit.BAD)
+		return
+	for i in n:
+		gs.buy(sel_id)
+	_say("%sを%dつ買った。" % [ItemDB.item_name(sel_id), n], UIKit.GOOD)
 	_refresh_top()
 	_fill_shop()
 	call_deferred("_refocus_shop")

@@ -2,6 +2,7 @@ class_name InventoryScreen
 extends Control
 ## 持ち物(Tab)。アイテムを使う、装備を替える、スキルをショートカットに割り当てる、能力値を見る。
 ## 技能・特技: 技能の習熟を見る。レベルが上がったときの、能力値上昇・特技・熟達を選ぶ。
+## 料理: 作った料理を食べる。迷宮の中では、野営で料理を作る(Cooking)。
 
 signal closed
 
@@ -11,6 +12,9 @@ var rest_handler: Callable = Callable()      # 迷宮の中だけ。「休む(�
 var rest_btn: Button
 var save_btn: Button
 var save_handler: Callable = Callable()      # 迷宮の中だけ。「記録をつける」(-> bool)
+var cook_handler: Callable = Callable()      # 迷宮の中だけ。野営で料理する (rid) -> {ok, msg}(Main.cook_dish)
+var eat_handler: Callable = Callable()       # 料理を食べる (i, Character) -> {ok, msg}(Main.eat_dish)
+var food_mode := "eat"                       # 料理の欄: eat(食べる) / make(作る)
 var reorder_handler: Callable = Callable()   # 隊列を入れ替えたあと、迷宮の中の並びを合わせる(Main)
 var tab := "item"
 var member := 0
@@ -40,6 +44,11 @@ func open(state: GameState, special: Callable = Callable(), rest: Callable = Cal
 func set_save(h: Callable) -> void:
 	save_handler = h
 	save_btn.visible = h.is_valid()
+
+## 料理を食べる・作るの手続きを渡す(作るのは迷宮の中だけ)
+func set_food(cook: Callable, eat: Callable) -> void:
+	cook_handler = cook
+	eat_handler = eat
 
 func _on_save() -> void:
 	if not save_handler.is_valid():
@@ -71,7 +80,7 @@ func _ready() -> void:
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(row)
 	var tabs := UIKit.vbox(6)
-	for t in [["item", "アイテム"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"]]:
+	for t in [["item", "アイテム"], ["food", "料理"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"]]:
 		var b := UIKit.button(t[1], _set_tab.bind(t[0]), 150)
 		tab_btns[t[0]] = b
 		tabs.add_child(b)
@@ -159,7 +168,8 @@ func _refresh() -> void:
 	for i in gs.party.size():
 		var c: Character = gs.party[i]
 		var star := "★" if not c.pending().is_empty() else ""
-		var b := UIKit.button("%s%s  Lv%d %s\nHP %d/%d  MP %d/%d" % [star, c.name, c.level, Jobs.CLASSES[c.cls]["name"], int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp()], func(): member = i; sel_id = ""; _end_pick(); _refresh(), 210)
+		var hg: String = {"hungry": "  空腹", "starving": "  腹ぺこ"}.get(c.hunger(), "")
+		var b := UIKit.button("%s%s  Lv%d %s\nHP %d/%d  MP %d/%d%s" % [star, c.name, c.level, Jobs.CLASSES[c.cls]["name"], int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp(), hg], func(): member = i; sel_id = "" if tab != "food" else sel_id; _end_pick(); _refresh(), 210)
 		b.custom_minimum_size = Vector2(210, 54)
 		if i == member:
 			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
@@ -183,6 +193,7 @@ func _refresh() -> void:
 	ids = []
 	match tab:
 		"item": _fill_items()
+		"food": _fill_food()
 		"equip": _fill_equip()
 		"skill": _fill_skills()
 		"talent": _fill_talent()
@@ -346,6 +357,8 @@ func _show_detail() -> void:
 			t = _status_text(c)
 		"talent":
 			t = _talent_detail(c)
+		"food":
+			t = _food_detail(c)
 		"skill":
 			if sel_id == Character.WEAPON_SKILL and c.skill_def(sel_id).is_empty():
 				t = "[b][color=#e8dcb0]武器の技[/color][/b]\n\n武器を持っていない。装備している武器の種類で、技が決まる。"
@@ -464,11 +477,161 @@ func _status_text(c: Character) -> String:
 	t += "セーヴ: %s\n" % "  ".join(sv)
 	var fs: Array = c.feats().map(func(f): return Talents.FEATS[f]["name"])
 	t += "特技: %s" % ("、".join(fs) if not fs.is_empty() else "なし")
+	t += "\n\n" + _belly_text(c)
 	if not c.pending().is_empty():
 		t += "\n[color=#e8dcb0]★ 選んでいない能力値上昇・特技・熟達がある(「技能・特技」で選ぶ)[/color]"
 	if not c.birth.is_empty():
 		t += "\n\n[color=#8a90a0]生い立ち: %s[/color]" % Birth.text(c.birth)
 	return t
+
+# ---------- 料理 ----------
+
+static func _food_key(s: Dictionary) -> String:
+	return "f:%s|%d|%d" % [s["id"], int(s["q"]), int(round(float(s["until"])))]
+
+func _food_index(key: String) -> int:
+	for i in gs.food.size():
+		if _food_key(gs.food[i]) == key:
+			return i
+	return -1
+
+func _fill_food() -> void:
+	var mb := UIKit.hbox(8)
+	for m in [["eat", "食べる"], ["make", "作る"]]:
+		var b := UIKit.button(m[1], func(): food_mode = m[0]; sel_id = ""; _refresh(), 110)
+		if food_mode == m[0]:
+			b.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
+		mb.add_child(b)
+	slot_box.add_child(mb)
+	var now := gs.clock
+	if food_mode == "eat":
+		for s in gs.food:
+			var key := _food_key(s)
+			ids.append(key)
+			var bad := Cooking.rotten(s, now)
+			item_list.add_item("%s ×%d   %s" % [Cooking.stack_name(s, now), int(s["n"]), Cooking.left_text(s, now)], ItemIcons.texture("dish_" + String(s["id"])))
+			if bad:
+				item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.62, 0.72, 0.42))
+				item_list.set_item_icon_modulate(item_list.item_count - 1, Color(0.55, 0.75, 0.4))
+			elif int(s["q"]) == Cooking.Q_GREAT:
+				item_list.set_item_custom_fg_color(item_list.item_count - 1, UIKit.GOLD)
+			elif int(s["q"]) == Cooking.Q_BURNT:
+				item_list.set_item_icon_modulate(item_list.item_count - 1, Color(0.45, 0.4, 0.38))
+		if ids.is_empty():
+			item_list.add_item("(料理がない。「作る」で作る)")
+			item_list.set_item_disabled(0, true)
+	else:
+		# 作れるもの → 野営で作れるもの → 台所のもの(それぞれ、データの順)
+		var rs: Array = []
+		for pass_i in 3:
+			for r in Cooking.recipes():
+				var ok_r := Cooking.can_make(gs, r) and not bool(r["home"])
+				if (pass_i == 0 and ok_r) or (pass_i == 1 and not ok_r and not bool(r["home"])) or (pass_i == 2 and bool(r["home"])):
+					rs.append(r)
+		for r in rs:
+			ids.append("r:" + String(r["id"]))
+			var ok := Cooking.can_make(gs, r)
+			var where := "[台所] " if bool(r["home"]) else ""
+			item_list.add_item("%s%s%s" % ["" if ok else "  ", where, r["name"]], ItemIcons.texture("dish_" + String(r["id"])))
+			if not ok or (bool(r["home"]) or not cook_handler.is_valid()):
+				item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.55, 0.55, 0.6) if not ok else Color(0.72, 0.68, 0.6))
+	if sel_id != "" and ids.has(sel_id):
+		item_list.select(ids.find(sel_id))
+		item_list.ensure_current_is_visible()
+
+func _belly_text(c: Character) -> String:
+	var hg: String = {"full": "満腹", "ok": "ふつう", "hungry": "[color=#ffb070]空腹[/color]", "starving": "[color=#ff7a6a]腹ぺこ(力と足が落ちる)[/color]"}[c.hunger()]
+	var t := "%s の満腹 [b]%d[/b] / 100  %s" % [c.name, int(c.belly), hg]
+	if c.meal_active():
+		var left := (float(c.meal["until"]) - gs.clock) / 60.0
+		t += "\n料理の効き目: [color=#9be29b]%s[/color](あと%d時間)" % [Cooking.buff_text(String(c.meal["buff"]), float(c.meal["v"])), int(ceil(left))]
+	else:
+		t += "\n料理の効き目: なし"
+	return t
+
+func _food_detail(c: Character) -> String:
+	var t := ""
+	var now := gs.clock
+	if sel_id.begins_with("f:"):
+		var i := _food_index(sel_id)
+		if i >= 0:
+			var s: Dictionary = gs.food[i]
+			var r := Cooking.recipe(String(s["id"]))
+			t = "[b][color=#e8dcb0]%s[/color][/b]  ×%d   %s\n%s\n\n" % [Cooking.stack_name(s, now), int(s["n"]), Cooking.left_text(s, now), r.get("desc", "")]
+			if Cooking.rotten(s, now):
+				t += "[color=#a8c070]くさっている。食べると腹を下す(迷宮では毒のように HP が減る)。売れない。[/color]"
+			else:
+				var q := int(s["q"])
+				t += "満腹 +%d\n" % int(round(float(r["belly"]) * (0.6 if q == Cooking.Q_BURNT else 1.0)))
+				if q == Cooking.Q_BURNT:
+					t += "焦げていて、効き目はない。"
+				else:
+					var hrs := float(r["hours"]) * (1.5 if q == Cooking.Q_GREAT else 1.0)
+					t += Cooking.buff_text(String(r["buff"]), float(r["v"])) + ("(%d時間)" % int(round(hrs)) if String(r["buff"]) != "" else "")
+				t += "\n[color=#8a90a0]効き目は一人一つ。新しく食べると、前の効き目は消える。[/color]"
+			if eat_handler.is_valid():
+				var b := UIKit.button("%sが食べる" % c.name, _eat_sel)
+				b.disabled = c.hp <= 0.0
+				action_box.add_child(b)
+	elif sel_id.begins_with("r:"):
+		var r := Cooking.recipe(sel_id.substr(2))
+		if not r.is_empty():
+			t = "[b][color=#e8dcb0]%s[/color][/b]  %s\n%s\n\n" % [r["name"], "[自宅の台所]" if bool(r["home"]) else "[野営でも作れる]", r["desc"]]
+			var need: Dictionary = r["in"]
+			for k in need:
+				var have := Cooking.have_count(gs, String(k))
+				var col := "#9be29b" if have >= int(need[k]) else "#ff8a7a"
+				t += "[color=%s]%s %d[/color](持っている %d)   " % [col, Cooking.need_label(String(k)), int(need[k]), have]
+			t += "\n%d人分   日持ち %s   満腹 +%d   難しさ %d\n%s" % [int(r["n"]), Cooking.life_text(float(r["life"])), int(r["belly"]), int(r["dc"]),
+				Cooking.buff_text(String(r["buff"]), float(r["v"])) + ("(%d時間)" % int(r["hours"]) if String(r["buff"]) != "" else "")]
+			var ck := Cooking.cook_of(gs)
+			if ck != null:
+				t += "\n\n料理番: %s(〈生存〉%+d)。難しさ +5 で上出来(効き目の時間 1.5倍)、足りないと焦げる。" % [ck.name, ck.skill_bonus("survival")]
+			for k in need:
+				if String(k).begins_with("tag:"):
+					var names: Array = Cooking.tag_ids(String(k).substr(4)).map(func(x): return ItemDB.item_name(String(x)))
+					t += "\n[color=#8a90a0]%s: %s のどれでも[/color]" % [Cooking.need_label(String(k)), "・".join(names)]
+			if bool(r["home"]):
+				t += "\n\n[color=#c8b890]自宅の台所で作る(自宅はまだ無い)。[/color]"
+			elif cook_handler.is_valid():
+				t += "\n\n[color=#8a90a0]野営で作る: 20分かかる。燃料(焚き木束・焼け石・白蝋)1つで、火が1時間もつ。[/color]"
+				var b := UIKit.button("作る", _cook_sel)
+				b.disabled = not Cooking.can_make(gs, r)
+				action_box.add_child(b)
+			else:
+				t += "\n\n[color=#8a90a0]迷宮の中で(野営)作れる。[/color]"
+	else:
+		t = "[color=#8a90a0]左の一覧から選ぶ。[/color]"
+	if food_mode == "eat":
+		var bad := 0
+		for s in gs.food:
+			if Cooking.rotten(s, now):
+				bad += int(s["n"])
+		if bad > 0:
+			action_box.add_child(UIKit.button("くさったものを捨てる(%d皿)" % bad, func():
+				msg.text = "くさった料理を%d皿捨てた。" % gs.throw_rotten()
+				sel_id = ""
+				_refresh()))
+	return t + "\n\n" + _belly_text(c)
+
+func _eat_sel() -> void:
+	var i := _food_index(sel_id)
+	if i < 0 or not eat_handler.is_valid():
+		return
+	var res: Dictionary = eat_handler.call(i, _ch())
+	msg.text = String(res.get("msg", ""))
+	msg.add_theme_color_override("font_color", UIKit.GOOD if bool(res.get("ok", false)) and not bool(res.get("rotten", false)) else UIKit.BAD)
+	if _food_index(sel_id) < 0:
+		sel_id = ""
+	_refresh()
+
+func _cook_sel() -> void:
+	if not cook_handler.is_valid():
+		return
+	var res: Dictionary = cook_handler.call(sel_id.substr(2))
+	msg.text = String(res.get("msg", ""))
+	msg.add_theme_color_override("font_color", UIKit.GOOD if bool(res.get("ok", false)) else UIKit.BAD)
+	_refresh()
 
 # ---------- 操作 ----------
 

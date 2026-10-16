@@ -12,6 +12,8 @@ var visited_town := false
 var blessed := false           # 神殿の加護。次に潜るとき一度だけ効く
 var insured := false           # 坑口館の帰還積立。次に潜るとき一度だけ効く(全滅しても、灯手隊が装備と持ち物の半分を拾ってくる)
 var quests: Array = []         # 坑口館で受けた依頼 {"id", "n", "reward", "client"}
+var food: Array = []           # 作った料理 {"id", "q"(出来ばえ), "until"(傷む時刻), "n"}。Cooking
+var clock := float(Balance.DIVE_START_MIN)   # 世界の時刻(通しの分)。潜った夜の数×24時間 + 迷宮の中の時刻。戻ることはない
 
 ## 坑口館の掲示板に出る依頼。[品物, 依頼主, 最少, 最多, 一言]
 const REQUESTS := [
@@ -45,6 +47,52 @@ func new_game(chars: Array) -> void:
 	blessed = false
 	insured = false
 	quests = []
+	food = []
+	clock = float(Balance.DIVE_START_MIN)
+	Cooking.clock = clock
+
+# ---------- 時刻 ----------
+
+## 世界の時刻を進める(戻しはしない)。迷宮の中では Main が毎フレーム、街では夜の朝7時
+func set_clock(t: float) -> void:
+	clock = maxf(clock, t)
+	Cooking.clock = clock
+
+## 街にいるときの時刻(その夜の朝7時)
+func town_clock() -> float:
+	return day * 1440.0 + Balance.DIVE_START_MIN
+
+# ---------- 料理 ----------
+
+## 作った料理を積む。同じ料理・同じ出来・同じ期限なら、まとめる
+func add_food(id: String, q: int, until: float, n: int = 1) -> void:
+	for s in food:
+		if String(s["id"]) == id and int(s["q"]) == q and absf(float(s["until"]) - until) < 0.5:
+			s["n"] = int(s["n"]) + n
+			return
+	food.append({"id": id, "q": q, "until": until, "n": n})
+	food.sort_custom(func(a, b): return float(a["until"]) < float(b["until"]))
+
+## i 番目から一皿とる
+func take_food(i: int) -> void:
+	food[i]["n"] = int(food[i]["n"]) - 1
+	if int(food[i]["n"]) <= 0:
+		food.remove_at(i)
+
+func food_count() -> int:
+	var n := 0
+	for s in food:
+		n += int(s["n"])
+	return n
+
+## くさった料理を捨てる。捨てた皿の数を返す
+func throw_rotten() -> int:
+	var n := 0
+	for i in range(food.size() - 1, -1, -1):
+		if Cooking.rotten(food[i], clock):
+			n += int(food[i]["n"])
+			food.remove_at(i)
+	return n
 
 # ---------- 持ち物 ----------
 
@@ -85,7 +133,8 @@ func dismiss(ch: Character) -> bool:
 	return true
 
 func lose_everything() -> int:
-	var n := 0
+	var n := food_count()
+	food.clear()
 	for id in inventory:
 		n += int(inventory[id])
 	inventory.clear()
@@ -104,6 +153,12 @@ func lose_half() -> int:
 		var lost := int(inventory[id]) - int(floor(int(inventory[id]) / 2.0))
 		n += lost
 		remove_item(id, lost)
+	for i in range(food.size() - 1, -1, -1):
+		var lost_f := int(food[i]["n"]) - int(floor(int(food[i]["n"]) / 2.0))
+		n += lost_f
+		food[i]["n"] = int(food[i]["n"]) - lost_f
+		if int(food[i]["n"]) <= 0:
+			food.remove_at(i)
 	return n
 
 # ---------- 坑口館 ----------
@@ -204,6 +259,7 @@ func use_item(id: String, ch: Character) -> String:
 				return ""
 			var n := maxf(float(it.get("min", 12.0)), ch.max_hp() * float(it["v"])) * best_heal_mult()
 			ch.hp = minf(ch.max_hp(), ch.hp + n)
+			ch.belly = minf(Cooking.BELLY_MAX, ch.belly + Cooking.raw_belly(id))
 			remove_item(id)
 			return "%sのHPが回復した" % ch.name
 		"mp_pct":
@@ -287,7 +343,8 @@ func to_dict() -> Dictionary:
 	var chars: Array = []
 	for c in party:
 		chars.append(c.to_dict())
-	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests}
+	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
+		"food": food, "clock": clock}
 
 func save() -> bool:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -323,4 +380,10 @@ func load_save() -> bool:
 	for q in parsed.get("quests", []):
 		if typeof(q) == TYPE_DICTIONARY and ItemDB.ITEMS.has(String(q.get("id", ""))):
 			quests.append({"id": String(q["id"]), "n": int(q.get("n", 1)), "reward": int(q.get("reward", 0)), "client": String(q.get("client", ""))})
+	food = []
+	for f in parsed.get("food", []):
+		if typeof(f) == TYPE_DICTIONARY and not Cooking.recipe(String(f.get("id", ""))).is_empty():
+			food.append({"id": String(f["id"]), "q": int(f.get("q", 1)), "until": float(f.get("until", 0.0)), "n": int(f.get("n", 1))})
+	clock = 0.0
+	set_clock(maxf(float(parsed.get("clock", 0.0)), town_clock()))
 	return not party.is_empty()

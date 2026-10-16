@@ -46,6 +46,7 @@ var _is_sheet := false
 var _tex_ver := -1
 var walk_t := 0.0             # 歩きの絵を送る時間(スプライトシート用)
 var moving := false
+var growl_t := 20.0           # 次に腹が鳴るまでの秒(空腹のとき。DungeonTime)
 var sleep_t := 0.0            # 眠っている(休息中)、または寝込みを襲われて動けない残り秒
 # 罠の効き目(TrapFx、Main._trap_effect)
 var stuck_t := 0.0            # 動けない残り秒(網、眠りの煙、転倒、閉じる歯列、逆さの重み)
@@ -75,9 +76,16 @@ func hp_frac() -> float:
 	return clampf(ch.hp / float(ch.max_hp()), 0.0, 1.0)
 
 func buff(key: String, default: float = 1.0) -> float:
+	var v := default
 	if buffs.has(key) and float(buffs[key]["t"]) > 0.0:
-		return float(buffs[key]["v"])
-	return default
+		v = float(buffs[key]["v"])
+	match key:
+		"power", "guard", "speed", "spell":
+			v *= ch.food_mult(key)     # 料理の効き目と、腹ぺこ
+		"chill":
+			if v < 1.0 and ch.meal_v("chill") > 0.0:
+				v = 1.0 - (1.0 - v) * ch.meal_v("chill")     # 寒さ除け
+	return v
 
 func body_mass() -> float:
 	var m := ch.mass() * buff("mass")
@@ -150,6 +158,8 @@ func hold(why: String, secs: float) -> void:
 func poison(secs: float, dps: float) -> void:
 	if down:
 		return
+	if ch.meal_v("poison") > 0.0:
+		dps *= ch.meal_v("poison")      # 毒除け
 	poison_dps = maxf(poison_dps if poison_t > 0.0 else 0.0, dps)
 	poison_t = maxf(poison_t, secs)
 
