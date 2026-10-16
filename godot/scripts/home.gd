@@ -1,8 +1,9 @@
 class_name Home
 extends RefCounted
 ## 自宅(ken 10/16、生産系②)。坑口館の「空き家の札」で買う。中身は GameState.home(空なら、まだ無い)。
-## home = {"rooms": [部屋のid], "pantry": [料理の山], "storage": {品物: 数}, "pots": [熟成中の釜], "lab_closed": その夜は実験室が使えない(夜の番号)}
-## 台所と寝床ははじめから。食料庫・物置・実験室は増築(鍛冶場は生産系③)。
+## home = {"rooms": [部屋のid], "pantry": [料理の山], "storage": {品物: 数}, "pots": [熟成中の釜], "lab_closed": その夜は実験室が使えない(夜の番号),
+##         "anvil": 鍛冶場で冷ましている鎧 {id, ready}(Smithing)}
+## 台所と寝床ははじめから。食料庫・物置・実験室・鍛冶場は増築。
 ## 魔法実験は data/alchemy.json。すぐできる調合と、何夜か寝かせる熟成(釜3つ。街へ戻るたびに1夜)。
 
 const HOUSE_PRICE := 2000
@@ -14,7 +15,7 @@ const ROOMS := {
 	"pantry": {"name": "食料庫", "price": 600, "desc": "しまった料理が傷む速さが4分の1になる。"},
 	"storage": {"name": "物置", "price": 400, "desc": "持ち物を預けられる。全滅しても失わない。"},
 	"lab": {"name": "実験室", "price": 1500, "desc": "魔法実験で薬を作る。釜が3つあり、何夜か寝かせる薬も作れる。"},
-	"forge": {"name": "鍛冶場", "price": 1800, "desc": "武器と防具を作る(準備中)。", "soon": true},
+	"forge": {"name": "鍛冶場", "price": 1800, "desc": "炉と金床。武器と防具を作り、鉄屑を鉄塊に溶かす。重い鎧は一夜かかる。"},
 }
 const ROOM_ORDER := ["kitchen", "bed", "pantry", "storage", "lab", "forge"]
 const ALCHEMY_PATH := "res://data/alchemy.json"
@@ -33,7 +34,7 @@ static func buy_house(gs: GameState) -> String:
 	if gs.bank_silver < HOUSE_PRICE:
 		return "銀貨が足りない"
 	gs.bank_silver -= HOUSE_PRICE
-	gs.home = {"rooms": ["kitchen", "bed"], "pantry": [], "storage": {}, "pots": [], "lab_closed": -1}
+	gs.home = {"rooms": ["kitchen", "bed"], "pantry": [], "storage": {}, "pots": [], "lab_closed": -1, "anvil": {}}
 	gs.save()
 	return ""
 
@@ -218,7 +219,10 @@ static func ready_pots(gs: GameState) -> Array:
 static func sanitize(d: Variant) -> Dictionary:
 	if typeof(d) != TYPE_DICTIONARY or (d as Dictionary).is_empty():
 		return {}
-	var h := {"rooms": [], "pantry": [], "storage": {}, "pots": [], "lab_closed": int(d.get("lab_closed", -1))}
+	var h := {"rooms": [], "pantry": [], "storage": {}, "pots": [], "lab_closed": int(d.get("lab_closed", -1)), "anvil": {}}
+	var av: Variant = d.get("anvil", {})
+	if typeof(av) == TYPE_DICTIONARY and ItemDB.ITEMS.has(String((av as Dictionary).get("id", ""))):
+		h["anvil"] = {"id": String(av["id"]), "ready": int(av.get("ready", 0))}
 	for r in d.get("rooms", []):
 		if ROOMS.has(String(r)):
 			h["rooms"].append(String(r))

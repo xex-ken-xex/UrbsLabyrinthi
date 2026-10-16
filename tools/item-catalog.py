@@ -38,6 +38,10 @@ EXISTING = [
     ("regen_elixir", "bottle", dict(liquid="f0f0d0", big=True, glow=True)),
     ("marrow_elixir", "bottle", dict(liquid="f8d870", big=True, glow=True)),
     ("murky", "bottle", dict(liquid="5a5040")),
+    # 鍛冶の材料(炉火の槌で売る。data/smithing.json)
+    ("tetsukai", "ingot", dict(col="8a8e98")),
+    ("sumi", "lump", dict(col="2a2628", kind="dung")),
+    ("yumizai", "logs", dict(col="a07a4a")),
 ]
 
 # ---- 迷宮に自生するもの(税がかからない) ----

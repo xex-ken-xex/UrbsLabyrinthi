@@ -34,6 +34,7 @@ func _run() -> void:
 	await _test_cooking_dive()
 	_test_home_state()
 	await _test_home_town()
+	_test_smithing()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -544,7 +545,9 @@ func _test_home_state() -> void:
 	gs.bank_silver = 5000
 	check(Home.buy_house(gs) == "" and Home.owned(gs) and gs.bank_silver == 3000, "家を買える(-2000)")
 	check(Home.has_room(gs, "kitchen") and Home.has_room(gs, "bed") and not Home.has_room(gs, "lab"), "はじめは台所と寝床だけ")
-	check(Home.build(gs, "forge") != "", "鍛冶場はまだ作れない")
+	gs.bank_silver = 1000
+	check(Home.build(gs, "forge") != "" and not Home.has_room(gs, "forge"), "銀貨が足りないと、増築できない")
+	gs.bank_silver = 3000
 	for id in ["pantry", "storage", "lab"]:
 		check(Home.build(gs, id) == "", "%sを増築できる" % Home.ROOMS[id]["name"])
 	check(gs.bank_silver == 3000 - 600 - 400 - 1500, "増築の代金を払う")
@@ -679,6 +682,85 @@ func _test_home_town() -> void:
 		main.phase = "dungeon"
 	main.queue_free()
 	await _step(2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
+
+func _test_smithing() -> void:
+	print("[鍛冶]")
+	var gs := GameState.new()
+	var party: Array = []
+	for cls in ["fighter", "wizard"]:
+		party.append(Character.create(cls, "human", cls, Jobs.auto_stats(cls)))
+	gs.new_game(party)
+	var f: Character = party[0]
+	var bad: Array = []
+	var ids := Smithing.forgeable_ids(ItemDB.ITEMS)
+	for id in ids:
+		var r := Smithing.recipe(String(id))
+		if r.is_empty():
+			bad.append(id)
+			continue
+		for k in r["in"]:
+			if not ItemDB.ITEMS.has(String(k)):
+				bad.append("%s:%s" % [id, k])
+		for t in [1, 2]:
+			if not ItemDB.ITEMS.has("%s+%d" % [id, t]):
+				bad.append("%s+%d" % [id, t])
+	check(ids.size() >= 22 and bad.is_empty(), "作れる武具(%d)の材料と、良品・逸品が全部ある %s" % [ids.size(), str(bad)])
+	check(not ids.has("power_band") and not ids.has("tetsukai") and ids.has("scale_vest"), "魔法の品と材料は作れない。素材からだけの品は作れる")
+	check(float(ItemDB.ITEMS["longsword+2"]["power"]) == float(ItemDB.ITEMS["longsword"]["power"]) + 1.0 and int(ItemDB.ITEMS["plate+1"]["ac"]) == int(ItemDB.ITEMS["plate"]["ac"]) + 1, "逸品の武器は威力 +1、良品の鎧は防御 +1")
+	check(ItemDB.item_name("longsword+1") == "良品の長剣" and ItemDB.can_equip("longsword+2", "fighter"), "名前に「良品の」が付き、もとの品と同じく装備できる")
+	var pool_ok := true
+	var rng := RandomNumberGenerator.new()
+	for i in 200:
+		var g := ItemDB.roll_gear(8, rng)
+		pool_ok = pool_ok and not ItemDB.ITEMS[g].has("tier") and not ItemDB.ITEMS[g].get("forged", false)
+	check(pool_ok, "迷宮で拾う装備に、鍛冶の品は混ざらない")
+	gs.add_item("tetsukuzu", 6)
+	gs.add_item("sumi", 10)
+	check(not bool(Smithing.smelt(gs)["ok"]), "鍛冶場が無いと、溶かせない")
+	gs.bank_silver = 99999
+	Home.buy_house(gs)
+	check(Home.build(gs, "forge") == "", "鍛冶場を増築できる")
+	check(bool(Smithing.smelt(gs)["ok"]) and gs.count("tetsukai") == 1 and gs.count("tetsukuzu") == 3 and gs.count("sumi") == 9, "鉄屑3つと炭1つで、鉄塊1つ")
+	check(Smithing.smith_of(gs) == f and Smithing.smith_bonus(f) == f.mod("str") + f.prof_bonus(), "鍛冶役は戦士(【筋力】+習熟)")
+	# 長剣: 鉄塊2
+	var r := Smithing.recipe("longsword")
+	check(int(r["in"]["tetsukai"]) == 2 and int(r["nights"]) == 0, "長剣は鉄塊2つ")
+	gs.add_item("tetsukai", 5)
+	var x := Smithing.forge(gs, "longsword", 20)
+	check(bool(x["ok"]) and String(x["out"]) == "longsword+2" and gs.count("longsword+2") == 1 and gs.count("tetsukai") == 4, "出目20で逸品の長剣")
+	var p0 := f.bump_power()
+	gs.equip(f, "longsword+2")
+	check(f.bump_power() > p0, "逸品の長剣は、ただの片手剣より強い")
+	var y := Smithing.forge(gs, "longsword", 2)
+	check(int(y["q"]) == Smithing.Q_FAIL and gs.count("tetsukai") == 3, "届かないと、材料の半分を失う")
+	var z := Smithing.forge(gs, "longsword", 12)
+	check(String(z["out"]) == "longsword" or String(z["out"]).begins_with("longsword+"), "並か良品ができる (%s)" % z["out"])
+	# 重い鎧は一夜
+	gs.add_item("tetsukai", 20)
+	var pl := Smithing.forge(gs, "plate", 15)
+	check(bool(pl.get("set", false)) and gs.count("plate") == 0 and Smithing.anvil_ready(gs) == "", "板金鎧は金床で一夜冷ます")
+	check(not bool(Smithing.forge(gs, "chain_mail", 15)["ok"]), "金床がふさがっていると、次の重い鎧は打てない")
+	check(Smithing.collect(gs) == "", "仕上がる前は取り出せない")
+	gs.day += 1
+	check(Smithing.anvil_ready(gs) != "" and Smithing.collect(gs) != "" and (gs.count("plate") + gs.count("plate+1") + gs.count("plate+2")) == 1, "一夜たつと、板金鎧を取り出せる")
+	# 素材からだけの品
+	gs.add_item("uroko", 4)
+	gs.add_item("kemono_kawa", 5)
+	check(bool(Smithing.forge(gs, "scale_vest", 15)["ok"]), "鱗の胴着を作れる")
+	var w: Character = party[1]
+	w.equip["armor"] = "breastplate"
+	var m1 := w.mass()
+	w.equip["armor"] = "scale_vest"
+	check(w.mass() < m1 and w.armor_class() == 10 + 5 + mini(w.mod("dex"), 2), "鱗の胴着は、中装の守りで軽い")
+	w.equip["acc"] = "hide_cloak"
+	check(w.equip_fx("chill") == 0.5, "獣皮の外套は寒さ除け")
+	# 記録に残る
+	gs.home["anvil"] = {"id": "plate+1", "ready": gs.day + 1}
+	var gs2 := GameState.new()
+	FileAccess.open(GameState.SAVE_PATH, FileAccess.WRITE).store_string(JSON.stringify(gs.to_dict()))
+	gs2.load_save()
+	check(gs2.count("longsword+2") == gs.count("longsword+2") and String(gs2.party[0].equip["weapon"]) == "longsword+2" and String(gs2.home["anvil"]["id"]) == "plate+1", "鍛冶の品と金床が記録に残る")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 
 func _test_calendar() -> void:

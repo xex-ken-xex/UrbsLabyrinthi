@@ -113,6 +113,16 @@ func _run() -> void:
 	hpn.sel = "forge"
 	hpn._fill()
 	await shot("home_build")
+	gsh.bank_silver += 2000
+	Home.build(gsh, "forge")
+	for id in ["tetsukai", "sumi", "kemono_kawa", "uroko", "tetsukuzu"]:
+		gsh.add_item(id, 6)
+	Smithing.forge(gsh, "longsword", 20)
+	Smithing.forge(gsh, "plate", 15)
+	hpn._set_room("forge")
+	hpn.sel = "scale_vest"
+	hpn._fill()
+	await shot("home_forge")
 	town._go("general")
 	await shot("general")
 	# 暦: 灯祭の夜(灯火の月15夜)の広場と寝息通り

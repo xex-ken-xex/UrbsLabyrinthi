@@ -1016,7 +1016,9 @@ func _trap_effect(t: Dictionary, fx: String, victim: Body, pos: Vector2) -> void
 		"summon": _trap_summon(pos)
 		"squeak": pass          # 鳴るだけ(alarm で魔物が来る)
 		"rust":
-			if hero != null:
+			if hero != null and bool(hero.ch.equip_item("armor").get("rustproof", false)):
+				log_msg("%sの鎧は、錆の雨を弾いた。" % hero.ch.name, Color("c8d8e8"))
+			elif hero != null:
 				hero.rust = mini(3, hero.rust + 1)
 				log_msg("%sの鎧が錆びた。この潜行の間、守りが %d 下がる" % [hero.ch.name, hero.rust], Color("ffb070"))
 			else:
@@ -1758,6 +1760,9 @@ func return_to_surface() -> void:
 	var pots := Home.ready_pots(gs)
 	if not pots.is_empty():
 		lines.append("自宅の実験室で、%sが仕上がっている" % "、".join(pots))
+	var anvil := Smithing.anvil_ready(gs)
+	if anvil != "":
+		lines.append("自宅の鍛冶場で、%sが冷めて仕上がっている" % anvil)
 	if rotten > 0:
 		lines.append("持ち帰った料理のうち%d皿が、くさっていた(持ち物の「料理」で捨てられる)" % rotten)
 	# 〈芸能〉: 宿で芸を見せて稼ぐ(倒れていない仲間のうち、いちばん高い人)

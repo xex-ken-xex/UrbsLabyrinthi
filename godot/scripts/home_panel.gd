@@ -95,6 +95,7 @@ func _fill() -> void:
 		"pantry": _fill_pantry()
 		"storage": _fill_storage()
 		"lab": _fill_lab()
+		"forge": _fill_forge()
 		"build": _fill_build()
 	if sel != "" and keys.has(sel):
 		list.select(keys.find(sel))
@@ -114,6 +115,7 @@ func _show() -> void:
 		"pantry": _show_pantry()
 		"storage": _show_storage()
 		"lab": _show_lab()
+		"forge": _show_forge()
 		"build": _show_build()
 
 # ---------- 台所 ----------
@@ -263,6 +265,65 @@ func _show_lab() -> void:
 		var good := bool(res.get("ok", false)) and String(res.get("kind", "")) != "boom" and String(res.get("kind", "")) != "fail"
 		_after(String(res.get("msg", "")), UIKit.GOOD if good else UIKit.BAD))
 	b.disabled = not _can_brew(r) or Home.lab_closed(gs) or (int(r["nights"]) > 0 and Home.free_pots(gs) <= 0)
+	actions.add_child(b)
+
+# ---------- 鍛冶場 ----------
+
+func _fill_forge() -> void:
+	var a: Dictionary = gs.home.get("anvil", {})
+	if not a.is_empty():
+		var row := UIKit.hbox(8)
+		var left := int(a["ready"]) - gs.day
+		row.add_child(UIKit.label("金床: %s  %s" % [ItemDB.item_name(String(a["id"])), "仕上がっている" if left <= 0 else "冷ましている(あと%d夜)" % left], 15, UIKit.GOOD if left <= 0 else UIKit.TEXT))
+		if left <= 0:
+			row.add_child(UIKit.button("取り出す", func(): _after(Smithing.collect(gs)), 100))
+		pots_box.add_child(row)
+	var sr := Smithing.smelt_recipe()
+	_add("smelt", "鉄屑を溶かす(鉄屑3 → 鉄塊1)", ItemIcons.texture("tetsukai"), Color(0, 0, 0, 0) if Smithing.can_make(gs, sr) else Color(0.55, 0.55, 0.6))
+	var ids := Smithing.forgeable_ids(ItemDB.ITEMS)
+	for pass_i in 2:
+		for id in ids:
+			var r := Smithing.recipe(String(id))
+			var ok := Smithing.can_make(gs, r)
+			if ok == (pass_i == 0):
+				var it: Dictionary = ItemDB.ITEMS[id]
+				var tag := "[素材]" if it.get("forged", false) else ""
+				_add(String(id), "%s%s%s" % [tag, it["name"], "  (一夜)" if int(r["nights"]) > 0 else ""], ItemIcons.texture(String(id)) if ItemIcons.has_icon(String(id)) else null,
+					Color(0, 0, 0, 0) if ok else Color(0.55, 0.55, 0.6))
+
+func _need_text(need: Dictionary) -> String:
+	var t := ""
+	for k in need:
+		var have := gs.count(String(k))
+		t += "[color=%s]%s %d[/color](持っている %d)   " % ["#9be29b" if have >= int(need[k]) else "#ff8a7a", ItemDB.item_name(String(k)), int(need[k]), have]
+	return t
+
+func _show_forge() -> void:
+	var sm := Smithing.smith_of(gs)
+	var who := "鍛冶役: %s(腕前 %+d。【筋力】の補正%s)" % [sm.name, Smithing.smith_bonus(sm), "+習熟" if Smithing.SMITH_CLASSES.has(sm.cls) else ""] if sm != null else ""
+	var fuel_line := "炉の燃料: 炭 %d / 焼け石 %d(1回に1つ)" % [gs.count("sumi"), gs.count("yakeishi")]
+	if sel == "smelt":
+		var sr := Smithing.smelt_recipe()
+		detail.text = "[b][color=#e8dcb0]鉄屑を溶かす[/color][/b]\n%s\n\n%s\n%s" % [sr["desc"], _need_text(sr["in"]), fuel_line]
+		var b0 := UIKit.button("溶かす", func():
+			var res := Smithing.smelt(gs)
+			_after(String(res["msg"]), UIKit.GOOD if bool(res["ok"]) else UIKit.BAD))
+		b0.disabled = not Smithing.can_make(gs, sr) or Smithing.fuel(gs) == ""
+		actions.add_child(b0)
+		return
+	var r := Smithing.recipe(sel)
+	if r.is_empty():
+		detail.text = "炉と金床と、壁に掛けた槌。\n\n[color=#8a90a0]炉火の槌の武具は、鉄塊(値段100銀貨ごとに1つ)などで作れる。[素材]の品は、魔物の素材からだけ作れる。鉄塊・炭・弓材は炉火の槌で売っている。難しさ +5 で良品(+1)、+10 か出目20で逸品(+2)。届かないと、材料の半分を失う。重い鎧は、冷ましと仕上げに一夜かかる。[/color]\n\n%s\n%s" % [who, fuel_line]
+		return
+	var t := "[b][color=#e8dcb0]%s[/color][/b]%s\n%s\n\n%s\n難しさ %d%s\n%s\n%s\n[color=#8a90a0]%s[/color]" % [ItemDB.item_name(sel), "  一夜かかる" if int(r["nights"]) > 0 else "", ItemDB.detail(sel), _need_text(r["in"]), int(r["dc"]),
+		"" if sm == null else "(良品 %d、逸品 %d 以上)" % [int(r["dc"]) + 5, int(r["dc"]) + 10], who, fuel_line,
+		"良品は威力 +0.5、逸品は +1.0" if String(ItemDB.ITEMS[sel]["kind"]) == "weapon" else "良品は防御 +1、逸品は +2"]
+	detail.text = t
+	var b := UIKit.button("打つ", func():
+		var res := Smithing.forge(gs, sel)
+		var good := bool(res.get("ok", false)) and int(res.get("q", 0)) != Smithing.Q_FAIL
+		_after(String(res.get("msg", "")), UIKit.GOOD if good else UIKit.BAD))
+	b.disabled = not Smithing.can_make(gs, r) or Smithing.fuel(gs) == "" or (int(r["nights"]) > 0 and not (gs.home.get("anvil", {}) as Dictionary).is_empty())
 	actions.add_child(b)
 
 # ---------- 増築 ----------

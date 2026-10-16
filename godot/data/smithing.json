@@ -1,0 +1,32 @@
+{
+ "smelt": {"in": {"tetsukuzu": 3}, "out": "tetsukai", "desc": "鉄屑を炉で溶かして、鉄塊にする。燃料1つ。出来ばえは無い。"},
+ "fuel": ["sumi", "yakeishi"],
+ "not_forgeable": ["power_band", "swift_boots"],
+ "gear": {
+  "fang_dagger": {"name": "牙の短剣", "kind": "weapon", "cat": "dagger", "power": 1.8, "price": 160,
+   "desc": "魔物の牙を、鉄の柄に据えた短剣。ただの短剣より、深く刺さる。"},
+  "bone_longbow": {"name": "骨の長弓", "kind": "weapon", "cat": "bow", "power": 2.5, "spell": 2.0, "price": 300,
+   "desc": "骨片を膠で重ね、獣皮で巻いた長弓。長弓より少し弱いが、引きが軽い。矢の威力+2。"},
+  "crystal_hammer": {"name": "燐晶嵌めの鎚", "kind": "weapon", "cat": "blunt", "power": 3.0, "spell": 1.5, "price": 480,
+   "desc": "水晶藻の燐光を、鎚頭に焼き込んだもの。殴ると青く光る。技の威力+1.5。"},
+  "scale_vest": {"name": "鱗の胴着", "kind": "armor", "type": "medium", "ac": 5, "light_mass": true, "price": 420,
+   "desc": "魔物の鱗を獣皮に綴じた胴着。胸甲なみに守るが、軽装と同じくらい軽い(押されやすさが変わらない)。"},
+  "rust_breastplate": {"name": "錆苔焼きの胸甲", "kind": "armor", "type": "medium", "ac": 5, "rustproof": true, "price": 520,
+   "desc": "錆苔の灰で焼き締めた胸甲。もう錆びるところが無い。錆の罠を受けない。"},
+  "hide_cloak": {"name": "獣皮の外套", "kind": "acc", "fx": {"chill": 0.5}, "price": 140,
+   "desc": "獣皮を三枚縫い合わせた、分厚い外套。冷たい霧や冷気で足が鈍るのを、半分にする。"}
+ },
+ "recipes": {
+  "fang_dagger": {"in": {"kiba": 3, "tetsukai": 1}, "dc": 11},
+  "bone_longbow": {"in": {"honekuzu": 4, "kemono_kawa": 1, "hane": 2}, "dc": 13},
+  "crystal_hammer": {"in": {"tetsukai": 3, "sui_sho_mo": 2}, "dc": 15},
+  "scale_vest": {"in": {"uroko": 4, "kemono_kawa": 2}, "dc": 13},
+  "rust_breastplate": {"in": {"tetsukai": 4, "sabi_goke": 2}, "dc": 15},
+  "hide_cloak": {"in": {"kemono_kawa": 3}, "dc": 9},
+  "leather": {"in": {"kemono_kawa": 2}, "dc": 8},
+  "studded": {"in": {"kemono_kawa": 2, "tetsukai": 1}, "dc": 10},
+  "shortbow": {"in": {"yumizai": 1, "hane": 2}, "dc": 9},
+  "longbow": {"in": {"yumizai": 3, "hane": 2}, "dc": 13},
+  "buckler": {"in": {"tetsukai": 1, "yumizai": 1}, "dc": 8}
+ }
+}

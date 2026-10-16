@@ -436,6 +436,16 @@ def draw_logs(c, col):
     c.line(5, 19, 27, 19, C("6a5a3a"))
 
 
+def draw_ingot(c, col):
+    col = hx(col)
+    for (x, y) in ((6, 18), (14, 12)):
+        c.r(x, y + 2, x + 13, y + 8, shade(col, 0.7))
+        c.r(x + 2, y, x + 11, y + 2, shade(col, 1.25))
+        c.r(x + 1, y + 2, x + 12, y + 7, col)
+        c.line(x + 3, y + 1, x + 10, y + 1, shade(col, 1.6))
+    twinkle(c, 24, 10, (230, 230, 240, 255))
+
+
 def draw_bowl(c, col, rim):
     col, rim = hx(col), hx(rim)
     for y in range(16, 27):
@@ -546,7 +556,7 @@ DRAW = {
     "jar": draw_jar, "bottle": draw_bottle, "charm": draw_charm, "scroll": draw_scroll, "fish": draw_fish, "shell": draw_shell,
     "pearl": draw_pearl, "slime": draw_slime, "lump": draw_lump, "meat": draw_meat, "pelt": draw_pelt, "fang": draw_fang,
     "bone": draw_bone, "scrap": draw_scrap, "scale": draw_scale, "gland": draw_gland, "feather": draw_feather, "fruit": draw_fruit,
-    "bundle": draw_bundle, "tag": draw_tag, "coins": draw_coins,
+    "bundle": draw_bundle, "tag": draw_tag, "coins": draw_coins, "ingot": draw_ingot,
     "sack": draw_sack, "root": draw_root, "cabbage": draw_cabbage, "cheese": draw_cheese, "egg": draw_egg, "pouch": draw_pouch,
     "logs": draw_logs, "bowl": draw_bowl, "plate": draw_plate, "skewer": draw_skewer, "cup": draw_cup, "bread": draw_bread,
     "jerky": draw_jerky, "pot": draw_pot,
