@@ -39,7 +39,7 @@ func _ready() -> void:
 	Dice.rng.randomize()
 	_setup_input()
 	camera = Camera2D.new()
-	camera.zoom = Vector2(1.7, 1.7)
+	camera.zoom = Vector2.ONE * GameSettings.zoom()
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 9.0
 	add_child(camera)
@@ -259,7 +259,7 @@ func _clear_dungeon() -> void:
 	if arena_panel != null:
 		arena_panel.queue_free()
 		arena_panel = null
-	camera.zoom = Vector2(1.7, 1.7)
+	camera.zoom = Vector2.ONE * GameSettings.zoom()
 	camera.offset = Vector2.ZERO
 	current = null
 	dtime = null
@@ -377,6 +377,7 @@ func enter_floor(n: int, arrive: String) -> void:
 	for h in heroes:
 		h.game_floor = fl
 	place_party(fl.map.center_of(cell))
+	Sfx.cue(fl, leader().position, "stairs")
 	var meta: Dictionary = fl.map.data["meta"]
 	log_msg("%s「%s」" % [meta.get("floor_label", "第%d層" % n), fl.style.get("short", "")], Color("e8dcb0"))
 	var see: Array = fl.style.get("see", [])
@@ -406,6 +407,7 @@ func start_rest() -> void:
 		log_msg(why, Color(0.8, 0.8, 0.85))
 	else:
 		hud.hint = ""
+		Sfx.cue(current, leader().position, "rest")
 		log_msg("野営して休む。(%s / %s / Esc で中断)" % [Controls.hint("rest"), Controls.hint("interact")], Color("e8dcb0"))
 
 func light_radius() -> int:
@@ -515,8 +517,31 @@ func _read_input() -> void:
 		quick_heal()
 	if Input.is_action_just_pressed("rest"):
 		start_rest()
+	if Input.is_action_just_pressed("zoom_in"):
+		zoom_step(1)
+	if Input.is_action_just_pressed("zoom_out"):
+		zoom_step(-1)
 	if Input.is_action_just_pressed("inventory") and _menu_cd <= 0.0:
 		open_inventory()
+
+## 迷宮の画面を3段階で拡大・縮小する(闘技場は固定)。段は保存する
+func zoom_step(d: int) -> void:
+	if arena != null or phase != "dungeon":
+		return
+	var i := clampi(GameSettings.zoom_index + d, 0, GameSettings.ZOOMS.size() - 1)
+	if i == GameSettings.zoom_index:
+		return
+	GameSettings.set_zoom(i)
+	camera.zoom = Vector2.ONE * GameSettings.zoom()
+	log_msg("画面: %s" % GameSettings.zoom_name(), Color(0.7, 0.85, 1.0))
+
+func _unhandled_input(event: InputEvent) -> void:
+	if scripted_input or not (event is InputEventMouseButton) or not event.pressed:
+		return
+	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		zoom_step(1)
+	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		zoom_step(-1)
 
 func _switch_next() -> void:
 	for k in range(1, heroes.size()):
@@ -611,6 +636,7 @@ func _open_doors_near_heroes() -> void:
 				continue
 			d["open"] = true
 			opened = true
+			Sfx.cue(current, m.center_of(Vector2i(int(d["x"]), int(d["y"]))), "door")
 	if opened:
 		_refresh_view()
 
@@ -670,11 +696,13 @@ func _passive_detect(pc: Vector2i) -> void:
 func _reveal_trap(t: Dictionary) -> void:
 	t["st"] = "revealed"
 	log_msg("罠に気づいた: %s" % t["name"], Color("ff9a7a"))
+	Sfx.cue(current, current.map.center_of(Vector2i(int(t["x"]), int(t["y"]))), "trap_found")
 	current.queue_redraw()
 
 func _reveal_door(d: Dictionary) -> void:
 	d["found"] = true
 	log_msg("隠し扉を見つけた", Color("7bd0e0"))
+	Sfx.cue(current, current.map.center_of(Vector2i(int(d["x"]), int(d["y"]))), "door_secret")
 	_refresh_view()
 
 func _check_traps() -> void:
@@ -692,6 +720,7 @@ func _check_traps() -> void:
 func _trigger_trap(t: Dictionary, victim: Hero) -> void:
 	t["st"] = "triggered"
 	current.queue_redraw()
+	Sfx.cue(current, current.map.center_of(Vector2i(int(t["x"]), int(t["y"]))), "trap_alarm" if String(t["kind"]) == "alarm" else "trap")
 	log_msg("罠！ %s(%s)  %sが踏んだ" % [t["name"], SEVERITY_JP.get(String(t["severity"]), ""), victim.ch.name], Color("ff6a5a"))
 	log_msg(String(t["effect"]), Color(0.85, 0.7, 0.7))
 	var scale := 1.0
@@ -838,9 +867,11 @@ func _disarm(t: Dictionary) -> void:
 	if roll == 20 or roll + bonus >= dc:
 		t["st"] = "disarmed"
 		log_msg("罠を解除した: %s" % t["name"], Color("9be29b"))
+		Sfx.cue(current, current.map.center_of(Vector2i(int(t["x"]), int(t["y"]))), "disarm")
 		current.queue_redraw()
 	elif roll + bonus <= dc - 5:
 		log_msg("解除に失敗した!", Color("ff8a7a"))
+		Sfx.cue(current, current.map.center_of(Vector2i(int(t["x"]), int(t["y"]))), "disarm_fail")
 		_trigger_trap(t, leader())
 	else:
 		log_msg("解除に失敗した(もう一度試せる)", Color("ffb070"))
@@ -873,6 +904,7 @@ func search() -> void:
 				found = true
 	if not found:
 		log_msg("探ってみたが、何も見つからない", Color(0.7, 0.75, 0.8))
+		Sfx.cue(current, lp, "search")
 
 func quick_heal() -> void:
 	if phase != "dungeon" or arena != null:
@@ -893,6 +925,9 @@ func quick_heal() -> void:
 			var r2 := gs.use_item(id, worst)
 			if r2 != "":
 				log_msg(r2, Color("9be29b"))
+				for h in heroes:
+					if h.ch == worst:
+						Sfx.cue(current, h.position, "drink")
 				return
 
 # ---------- 持ち物 ----------

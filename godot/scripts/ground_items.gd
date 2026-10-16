@@ -251,6 +251,7 @@ func update(delta: float) -> void:
 func _loot_corpse(e: Dictionary) -> void:
 	var pos: Vector2 = e["pos"]
 	fl.message.emit("遺体を調べた", "info")
+	Sfx.cue(fl, pos, "corpse")
 	for k in Dice.rng.randi_range(1, 3):
 		add_crystal(pos, Crystal.roll(base, Dice.rng, 0.2), Dice.rng.randf_range(0.08, 0.35) * Balance.CRYSTAL_SCALE / 0.3, _burst(110.0))
 	var table := [["relic_tag", 0.6], ["relic_coins", 0.45], ["relic_tools", 0.25], ["relic_gear", 0.15], ["potion", 0.12]]

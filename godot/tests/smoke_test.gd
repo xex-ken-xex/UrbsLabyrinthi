@@ -1021,6 +1021,22 @@ func _test_game() -> void:
 	check(main.phase == "dungeon" and main.heroes.size() == 4 and main.current.floor_no == 1, "迷宮へ潜る")
 	check(not main.gs.blessed and main.heroes[0].buffs.has("guard"), "加護が効く")
 	var fl: FloorInstance = main.current
+	# 画面の拡大・縮小(3段階、保存される)
+	var z0: int = GameSettings.zoom_index
+	main.zoom_step(1)
+	main.zoom_step(1)
+	main.zoom_step(1)
+	check(GameSettings.zoom_index == GameSettings.ZOOMS.size() - 1 and is_equal_approx(main.camera.zoom.x, GameSettings.zoom()), "＋で画面が近くなり、3段目で止まる (×%.1f)" % main.camera.zoom.x)
+	main.zoom_step(-1)
+	main.zoom_step(-1)
+	main.zoom_step(-1)
+	check(GameSettings.zoom_index == 0 and is_equal_approx(main.camera.zoom.x, GameSettings.ZOOMS[0][1]), "－で画面が広くなる (×%.1f)" % main.camera.zoom.x)
+	GameSettings.set_zoom(z0)
+	main.camera.zoom = Vector2.ONE * GameSettings.zoom()
+	# 擬音
+	var nk := fl.get_child_count()
+	Sfx.cue(fl, main.leader().position, "door")
+	check(fl.get_child_count() == nk + 1 and not Sfx.sound_on(), "音なしでは、擬音の文字が出る")
 	# スキル
 	var casts := 0
 	for h in main.heroes:
