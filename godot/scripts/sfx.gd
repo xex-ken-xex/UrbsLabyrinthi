@@ -20,6 +20,8 @@ const CUES := {
 	"rest": ["パチパチ…", Color(1.0, 0.75, 0.45)],
 	"crystal": ["キラッ", Color(0.75, 0.95, 1.0)],
 	"crystal_big": ["ゴロッ", Color(0.75, 0.95, 1.0)],
+	"stun": ["ピヨ…", Color(1.0, 0.95, 0.55)],
+	"sunder": ["バキッ", Color(1.0, 0.7, 0.45)],
 }
 const LIFE := 0.9
 

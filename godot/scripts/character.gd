@@ -19,6 +19,7 @@ var mp := 0.0
 var equip := {"weapon": "", "armor": "", "acc": ""}
 var skills: Array = []              # 覚えているスキルのid
 var slots: Array = ["", "", "", ""] # ショートカット 1〜4
+const WEAPON_SKILL := "@weapon"     # 武器の技。skills と slots には、この名前で入る(中身は装備している武器で決まる)
 var max_hp_cache := 1
 var max_mp_cache := 0
 
@@ -36,6 +37,7 @@ static func create(nm: String, race_id: String, cls_id: String, point_stats: Dic
 	c.recalc_stats()
 	c.give_starting_kit()
 	c.learn_class_skills()
+	c.learn(WEAPON_SKILL)
 	c.hp = c.max_hp()
 	c.mp = c.max_mp()
 	return c
@@ -365,6 +367,8 @@ func skill_damage(sk: Dictionary) -> float:
 			d += float(w.get("spell", 0.0))
 	if sk.get("spell", false):
 		d *= 1.0 + skill_fx("arcana")
+	if sk.get("weapon", false) and favored_weapon():
+		d *= Balance.FAVORED_TECH
 		if has_feat("war_caster"):
 			d *= 1.2
 	if sk.get("kind", "") == "projectile" and has_feat("sharpshooter"):
@@ -380,8 +384,41 @@ func skill_amount(sk: Dictionary) -> float:
 func heal_mult() -> float:
 	return (1.0 + skill_fx("medicine")) * (1.3 if has_feat("healer") else 1.0)
 
+## 装備している武器の種類("none" は素手)
+func weapon_cat() -> String:
+	var w := equip_item("weapon")
+	return String(w.get("cat", "none")) if not w.is_empty() else "none"
+
+## いまの武器の技の id。珍しい武器は固有の技。無ければ ""
+func weapon_tech_id() -> String:
+	var w := equip_item("weapon")
+	if w.is_empty():
+		return ""
+	return String(w.get("tech", Jobs.WEAPON_TECH.get(String(w["cat"]), "")))
+
+## クラスの得意武器を持っているか(classes.gd の weapons の先頭)
+func favored_weapon() -> bool:
+	var ws: Array = class_data()["weapons"]
+	return not ws.is_empty() and weapon_cat() == String(ws[0])
+
+## スキルの中身。武器の技(@weapon)は、いまの武器の技。無ければ {}
+func skill_def(id: String) -> Dictionary:
+	if id == WEAPON_SKILL:
+		var t := weapon_tech_id()
+		return Jobs.SKILLS.get(t, {})
+	return Jobs.SKILLS.get(id, {})
+
+## 画面に出すスキルの名前
+func skill_label(id: String) -> String:
+	if id == WEAPON_SKILL:
+		var sk := skill_def(id)
+		if sk.is_empty():
+			return "武器の技(なし)"
+		return "%s%s" % [sk["name"], "(得意)" if favored_weapon() else ""]
+	return String(Jobs.SKILLS[id]["name"]) if Jobs.SKILLS.has(id) else id
+
 func learn(id: String) -> bool:
-	if skills.has(id) or not Jobs.SKILLS.has(id):
+	if skills.has(id) or (not Jobs.SKILLS.has(id) and id != WEAPON_SKILL):
 		return false
 	skills.append(id)
 	for i in slots.size():
@@ -457,6 +494,8 @@ static func from_dict(d: Dictionary) -> Character:
 	var sl: Array = d.get("slots", [])
 	for i in mini(4, sl.size()):
 		c.slots[i] = String(sl[i])
+	if not c.skills.has(WEAPON_SKILL):
+		c.learn(WEAPON_SKILL)      # 武器の技より前の記録。空いている枠があれば入れる
 	c.hp = float(d.get("hp", c.max_hp()))
 	c.mp = float(d.get("mp", c.max_mp()))
 	c.clamp_resources()

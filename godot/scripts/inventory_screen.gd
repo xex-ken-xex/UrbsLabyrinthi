@@ -219,12 +219,16 @@ func _fill_skills() -> void:
 		var l := UIKit.label("[%d]" % (i + 1), 16, UIKit.ACCENT)
 		l.custom_minimum_size = Vector2(36, 0)
 		r.add_child(l)
-		r.add_child(UIKit.label(String(Jobs.SKILLS[id]["name"]) if id != "" else "(空き)", 16, UIKit.GOLD if id != "" else UIKit.DIM))
+		r.add_child(UIKit.label(c.skill_label(id) if id != "" else "(空き)", 16, UIKit.GOLD if id != "" else UIKit.DIM))
 		slot_box.add_child(r)
 	for id in c.skills:
 		ids.append(id)
 		var at := c.slots.find(id)
-		item_list.add_item("%s%s  MP%d" % [("[%d] " % (at + 1)) if at >= 0 else "", Jobs.SKILLS[id]["name"], Jobs.SKILLS[id]["mp"]])
+		var sk := c.skill_def(id)
+		var nm := c.skill_label(id)
+		if id == Character.WEAPON_SKILL:
+			nm = "武器の技: " + nm
+		item_list.add_item("%s%s  MP%d" % [("[%d] " % (at + 1)) if at >= 0 else "", nm, int(sk.get("mp", 0))])
 	if sel_id != "" and ids.has(sel_id):
 		item_list.select(ids.find(sel_id))
 
@@ -326,9 +330,16 @@ func _show_detail() -> void:
 		"talent":
 			t = _talent_detail(c)
 		"skill":
-			if sel_id != "" and Jobs.SKILLS.has(sel_id):
-				var sk: Dictionary = Jobs.SKILLS[sel_id]
-				t = "[b][color=#e8dcb0]%s[/color][/b]\nMP %d   再使用 %.1f秒\n\n%s\n\n[color=#8a90a0]数字キー 1〜4 か、下のボタンでショートカットに割り当てる。[/color]" % [sk["name"], sk["mp"], sk["cd"], sk["desc"]]
+			if sel_id == Character.WEAPON_SKILL and c.skill_def(sel_id).is_empty():
+				t = "[b][color=#e8dcb0]武器の技[/color][/b]\n\n武器を持っていない。装備している武器の種類で、技が決まる。"
+				for i in 4:
+					action_box.add_child(UIKit.button("[%d]" % (i + 1), _assign.bind(i)))
+				action_box.add_child(UIKit.button("外す", _unassign))
+			elif sel_id != "" and not c.skill_def(sel_id).is_empty():
+				var sk := c.skill_def(sel_id)
+				t = "[b][color=#e8dcb0]%s[/color][/b]\nMP %d   再使用 %.1f秒\n\n%s\n\n[color=#8a90a0]数字キー 1〜4 か、下のボタンでショートカットに割り当てる。[/color]" % [c.skill_label(sel_id), sk["mp"], sk["cd"], sk["desc"]]
+				if sel_id == Character.WEAPON_SKILL:
+					t += "\n[color=#5bc0de]武器の技: 装備している武器の種類で変わる(珍しい武器は固有の技)。クラスの得意武器(%s)なら、威力が%.1f倍。[/color]" % [ItemDB.WEAPON_CAT_JP[c.class_data()["weapons"][0]], Balance.FAVORED_TECH]
 				for i in 4:
 					action_box.add_child(UIKit.button("[%d]" % (i + 1), _assign.bind(i)))
 				action_box.add_child(UIKit.button("外す", _unassign))

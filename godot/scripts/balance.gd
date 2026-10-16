@@ -34,6 +34,21 @@ static var ATTACK_CD := 0.7                 # 次に振れるまでの待ち時�
 const ATTACK_REACH := 22.0             # 体の縁から届く距離(画素)
 const ATTACK_ARC := 70.0               # 正面から左右に届く角度(度)
 const ATTACK_KNOCK := 140.0            # 当たった相手を押し返す強さ
+## 武器の種類ごとの、通常攻撃の振り方。reach: 体の縁から届く距離(画素)、arc: 正面から左右の角度(度)、
+## cd: 待ち時間の倍率、knock: 押し返しの倍率、dmg: 一撃の倍率(一撃は待ち時間に比例するので、毎秒の威力は dmg だけで変わる)、
+## stun: 当たった相手を怯ませる確率(0.6秒)。数字は仮。闘技場で直す
+const SWING := {
+	"none": {"reach": 22.0, "arc": 70.0, "cd": 1.0, "knock": 1.0, "dmg": 1.0},
+	"sword": {"reach": 22.0, "arc": 70.0, "cd": 1.0, "knock": 1.0, "dmg": 1.0},      # 標準
+	"dagger": {"reach": 15.0, "arc": 55.0, "cd": 0.55, "knock": 0.5, "dmg": 1.0},    # 短く、速く振れる(連打)
+	"axe": {"reach": 22.0, "arc": 80.0, "cd": 1.5, "knock": 1.3, "dmg": 1.15},      # 遅く、重い
+	"blunt": {"reach": 20.0, "arc": 70.0, "cd": 1.15, "knock": 1.9, "dmg": 1.0, "stun": 0.2},   # よく押し返し、たまに怯ませる
+	"spear": {"reach": 44.0, "arc": 22.0, "cd": 1.1, "knock": 1.2, "dmg": 1.0},     # 遠くまで届く突き。横は狭い
+	"staff": {"reach": 26.0, "arc": 70.0, "cd": 1.0, "knock": 1.0, "dmg": 0.8},     # 弱い(呪文の威力を上げる)
+	"bow": {"reach": 16.0, "arc": 60.0, "cd": 1.0, "knock": 0.6, "dmg": 0.5},       # 近くでは弱い
+}
+const FAVORED_TECH := 1.3              # クラスの得意武器(classes.gd の weapons の先頭)で使う、武器の技の威力の倍率
+const SUNDER_MULT := 1.3               # 叩き割られた魔物が受けるダメージの倍率
 
 # 魔物
 static var ENEMY_SPEED_SCALE := 0.85        # 魔物の移動の速さにかける

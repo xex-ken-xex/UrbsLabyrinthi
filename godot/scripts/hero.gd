@@ -17,6 +17,8 @@ var atk_cd := 0.0             # 通常攻撃の残りの待ち時間
 var atk_cd_max := 0.0
 var swing_t := 0.0            # 振りの描画
 var swing_dir := Vector2.RIGHT
+var swing_reach := Balance.ATTACK_REACH   # 描く弧の届く距離と角度(武器や技で変わる)
+var swing_arc := Balance.ATTACK_ARC
 var roll_cd := 0.0
 var roll_dir := Vector2.ZERO
 var rush_t := 0.0
@@ -224,28 +226,41 @@ func attack() -> bool:
 	if not can_attack():
 		return false
 	var aim := _aim()
+	var sw := swing()
 	facing = aim
 	swing_dir = aim
 	swing_t = 0.18
-	atk_cd_max = Balance.ATTACK_CD
+	swing_reach = float(sw["reach"])
+	swing_arc = float(sw["arc"])
+	atk_cd_max = attack_cd()
 	atk_cd = atk_cd_max
 	lunge = aim * 6.0
-	var dmg := ch.bump_power() * buff("power") * Balance.ATTACK_CD * Balance.ATTACK_SCALE
-	var arc := deg_to_rad(Balance.ATTACK_ARC)
+	var dmg := ch.bump_power() * buff("power") * atk_cd_max * Balance.ATTACK_SCALE * float(sw["dmg"])
+	var arc := deg_to_rad(swing_arc)
 	for en in game_floor.enemies.duplicate():
 		if en.dead:
 			continue
 		var to: Vector2 = en.position - position
-		if to.length() > radius + en.radius + Balance.ATTACK_REACH:
+		if to.length() > radius + en.radius + swing_reach:
 			continue
 		if to.length() > 4.0 and absf(aim.angle_to(to)) > arc:
 			continue
 		var dir := to.normalized() if to.length() > 0.5 else aim
 		en.take_damage(dmg, dir, self)
 		if not en.dead:
-			en.knock = dir * Balance.ATTACK_KNOCK / maxf(0.5, en.body_mass())
+			en.knock = dir * Balance.ATTACK_KNOCK * float(sw["knock"]) / maxf(0.5, en.body_mass())
+			if Dice.rng.randf() < float(sw.get("stun", 0.0)):
+				en.apply_stun(0.6)
 		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0, Color("ffe0a0"), 0.14))
 	return true
+
+## 装備している武器の種類の、通常攻撃の振り方(Balance.SWING)
+func swing() -> Dictionary:
+	return Balance.SWING.get(ch.weapon_cat(), Balance.SWING["none"])
+
+## 通常攻撃の待ち時間(秒)
+func attack_cd() -> float:
+	return Balance.ATTACK_CD * float(swing()["cd"])
 
 ## 待ち時間の進み具合(0 = 振ったばかり、1 = 振れる)
 func attack_ready_frac() -> float:
@@ -256,9 +271,11 @@ func attack_ready_frac() -> float:
 # ---------- スキル ----------
 
 func can_cast(id: String) -> bool:
-	if down or not Jobs.SKILLS.has(id):
+	if down:
 		return false
-	var sk: Dictionary = Jobs.SKILLS[id]
+	var sk := ch.skill_def(id)
+	if sk.is_empty():
+		return false
 	return float(cds.get(id, 0.0)) <= 0.0 and ch.mp >= float(sk["mp"]) and rush_t <= 0.0
 
 func cast_slot(i: int) -> bool:
@@ -291,7 +308,7 @@ func _aim() -> Vector2:
 func use_skill(id: String) -> bool:
 	if not can_cast(id):
 		return false
-	var sk: Dictionary = Jobs.SKILLS[id]
+	var sk := ch.skill_def(id)
 	var kind := String(sk["kind"])
 	var aim := _aim()
 	var ok := false
@@ -300,6 +317,7 @@ func use_skill(id: String) -> bool:
 		"burst_self": ok = _sk_burst(sk, position)
 		"burst_ahead": ok = _sk_burst(sk, position + aim * float(sk.get("ahead", 100.0)))
 		"rush": ok = _sk_rush(sk, aim)
+		"strike": ok = _sk_strike(sk, aim)
 		"buff_self": ok = _sk_buff(sk, [self])
 		"buff_party": ok = _sk_buff(sk, _allies())
 		"heal": ok = _sk_heal(sk)
@@ -312,6 +330,55 @@ func use_skill(id: String) -> bool:
 			game_floor.spawn_text(position + Vector2(0, -radius - 22), String(sk["name"]), Color("ffe9a8"))
 	return ok
 
+## スキルの威力。杖の技「魔力の溜め」の間は、呪文が強まる
+func _skill_dmg(sk: Dictionary) -> float:
+	return ch.skill_damage(sk) * (buff("spell") if sk.get("spell", false) else 1.0)
+
+## 武器の技: 正面へ打つ(hits 回)。気絶・足止め・守りを割る(sunder)
+func _sk_strike(sk: Dictionary, aim: Vector2) -> bool:
+	var reach := float(sk.get("reach", 24.0))
+	var arc := deg_to_rad(float(sk.get("arc", 45.0)))
+	var d := _skill_dmg(sk)
+	facing = aim
+	swing_dir = aim
+	swing_t = 0.18
+	swing_reach = reach
+	swing_arc = float(sk.get("arc", 45.0))
+	lunge = aim * 8.0
+	for en in game_floor.enemies.duplicate():
+		if en.dead:
+			continue
+		var to: Vector2 = en.position - position
+		if to.length() > radius + en.radius + reach:
+			continue
+		if to.length() > 4.0 and absf(aim.angle_to(to)) > arc:
+			continue
+		var dir := to.normalized() if to.length() > 0.5 else aim
+		for k in int(sk.get("hits", 1)):
+			if not en.dead:
+				en.take_damage(d, dir, self)
+		if en.dead:
+			continue
+		_skill_effects(en, sk, dir)
+		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 16.0, Jobs.class_color(ch.cls).lightened(0.3), 0.2))
+	return true
+
+## 当たった魔物への、押し返し・足止め・気絶・守りを割る
+func _skill_effects(en: Enemy, sk: Dictionary, away: Vector2) -> void:
+	var kn := float(sk.get("knock", 0.0))
+	if kn > 0.0:
+		en.knock = away * kn / maxf(0.5, en.body_mass() * 0.7)
+	if float(sk.get("slow", 0.0)) > 0.0:
+		en.apply_slow(float(sk["slow"]))
+	if float(sk.get("stun", 0.0)) > 0.0:
+		if sk.get("weapon", false) and en.stun_t <= 0.0:
+			Sfx.cue(game_floor, en.position, "stun")      # 武器の技で気絶させたとき(呪文の眠りや閃光は、前からのまま)
+		en.apply_stun(float(sk["stun"]))
+	if float(sk.get("sunder", 0.0)) > 0.0:
+		if en.sunder_t <= 0.0:
+			Sfx.cue(game_floor, en.position, "sunder")
+		en.apply_sunder(float(sk["sunder"]))
+
 func _allies() -> Array:
 	var out: Array = []
 	for h in game_floor.heroes:
@@ -322,7 +389,7 @@ func _allies() -> Array:
 func _sk_projectile(sk: Dictionary, aim: Vector2) -> bool:
 	var count: int = int(sk.get("count", 1))
 	var spread: float = float(sk.get("spread", 0.0))
-	var d := ch.skill_damage(sk)
+	var d := _skill_dmg(sk)
 	for i in count:
 		var ang := (i - (count - 1) / 2.0) * spread
 		var p := Projectile.new()
@@ -334,7 +401,7 @@ func _sk_projectile(sk: Dictionary, aim: Vector2) -> bool:
 
 func _sk_burst(sk: Dictionary, center: Vector2) -> bool:
 	var r := float(sk["radius"])
-	var d := ch.skill_damage(sk)
+	var d := _skill_dmg(sk)
 	var col := Jobs.class_color(ch.cls).lightened(0.25)
 	game_floor.add_child(Spark.make(center, r, col, 0.35, true))
 	for en in game_floor.enemies.duplicate():
@@ -348,19 +415,13 @@ func _sk_burst(sk: Dictionary, center: Vector2) -> bool:
 			en.take_damage(d, away, self)
 		if en.dead:
 			continue
-		var kn := float(sk.get("knock", 0.0))
-		if kn > 0.0:
-			en.knock = away * kn / maxf(0.5, en.body_mass() * 0.7)
-		if float(sk.get("slow", 0.0)) > 0.0:
-			en.apply_slow(float(sk["slow"]))
-		if float(sk.get("stun", 0.0)) > 0.0:
-			en.apply_stun(float(sk["stun"]))
+		_skill_effects(en, sk, away)
 	return true
 
 func _sk_rush(sk: Dictionary, aim: Vector2) -> bool:
 	rush_dir = aim
 	rush_t = float(sk["dist"]) / (Balance.ROLL_SPEED * 1.15)
-	rush_dmg = ch.skill_damage(sk)
+	rush_dmg = _skill_dmg(sk)
 	rush_knock = float(sk["knock"])
 	rush_hit = {}
 	facing = aim
@@ -490,7 +551,7 @@ func _ai_skills() -> void:
 		var id := String(ch.slots[i])
 		if id == "" or not can_cast(id):
 			continue
-		var sk: Dictionary = Jobs.SKILLS[id]
+		var sk := ch.skill_def(id)
 		var tdist := 1e9
 		if ai_target != null and is_instance_valid(ai_target):
 			tdist = position.distance_to(ai_target.position)
@@ -521,11 +582,13 @@ func _ai_skills() -> void:
 				ok = ai_target != null and tdist < float(sk["range"]) * 0.9
 			"rush":
 				ok = ai_target != null and tdist > 50.0 and tdist < float(sk["dist"]) * 0.85
+			"strike":
+				ok = ai_target != null and is_instance_valid(ai_target) and tdist <= radius + ai_target.radius + float(sk.get("reach", 24.0)) - 2.0
 		if ok and use_skill(id):
 			return
 	# 届く敵がいれば、通常攻撃で殴る
 	if ai_target != null and is_instance_valid(ai_target) and not ai_target.dead and can_attack():
-		if position.distance_to(ai_target.position) <= radius + ai_target.radius + Balance.ATTACK_REACH - 2.0:
+		if position.distance_to(ai_target.position) <= radius + ai_target.radius + float(swing()["reach"]) - 2.0:
 			attack()
 
 # ---------- 描画 ----------
@@ -557,8 +620,8 @@ func _draw_attack() -> void:
 	draw_set_transform(Vector2.ZERO)
 	if swing_t > 0.0:
 		var a := swing_dir.angle()
-		var arc := deg_to_rad(Balance.ATTACK_ARC)
-		var rr := radius + Balance.ATTACK_REACH * 0.7
+		var arc := deg_to_rad(swing_arc)
+		var rr := radius + swing_reach * 0.7
 		draw_arc(Vector2.ZERO, rr, a - arc, a + arc, 16, Color(1.0, 0.92, 0.7, swing_t / 0.18), 3.0)
 	if controlled and atk_cd > 0.0:
 		var w := 26.0
