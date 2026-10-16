@@ -23,7 +23,8 @@ var race_opt: OptionButton
 var look_opt: OptionButton
 var class_opt: OptionButton
 var use_check: CheckBox
-var stat_rows := {}          # abil → {val, bonus, minus, plus}
+var stat_rows := {}          # abil → {val, race, total, mod, minus, plus}
+var _last_total := {}        # abil → 前に出した合計。変わった数字を一瞬光らせる
 var points_label: Label
 var preview: RichTextLabel
 var prof_label: Label
@@ -129,27 +130,39 @@ func _build() -> void:
 	look_opt.item_selected.connect(_on_look)
 	rr.add_child(look_opt)
 	form.add_child(rr)
-	form.add_child(UIKit.label("能力値(ポイントバイ27点。8〜15)", 16, UIKit.DIM))
+	# 表(グリッド)にして、見出しと数字の縦列を揃える: 能力値 | − 割り振り ＋ | ＋種族 | ＝合計 | 補正
+	var stat_grid := GridContainer.new()
+	stat_grid.columns = 7
+	stat_grid.add_theme_constant_override("h_separation", 6)
+	stat_grid.add_theme_constant_override("v_separation", 4)
+	for c in [["能力値", 54], ["", 36], ["割り振り", 62], ["", 36], ["＋種族", 64], ["＝合計", 64], ["補正", 64]]:
+		var hl := UIKit.label(String(c[0]), 13, UIKit.DIM)
+		hl.custom_minimum_size = Vector2(int(c[1]), 0)
+		hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if c[0] == "能力値" else HORIZONTAL_ALIGNMENT_CENTER
+		stat_grid.add_child(hl)
 	for a in Jobs.ABILS:
-		var r := UIKit.hbox(6)
 		var nm := UIKit.label(String(Jobs.ABIL_JP[a]), 16)
 		nm.custom_minimum_size = Vector2(54, 0)
-		r.add_child(nm)
+		stat_grid.add_child(nm)
 		var minus := UIKit.button("−", _on_stat.bind(a, -1))
 		minus.custom_minimum_size = Vector2(36, 32)
-		r.add_child(minus)
+		stat_grid.add_child(minus)
 		var val := UIKit.label("10", 18, UIKit.GOLD)
-		val.custom_minimum_size = Vector2(34, 0)
+		val.custom_minimum_size = Vector2(62, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		r.add_child(val)
+		stat_grid.add_child(val)
 		var plus := UIKit.button("＋", _on_stat.bind(a, 1))
 		plus.custom_minimum_size = Vector2(36, 32)
-		r.add_child(plus)
-		var bonus := UIKit.label("", 15, UIKit.ACCENT)
-		bonus.custom_minimum_size = Vector2(130, 0)
-		r.add_child(bonus)
-		form.add_child(r)
-		stat_rows[a] = {"val": val, "bonus": bonus, "minus": minus, "plus": plus}
+		stat_grid.add_child(plus)
+		var cols := {}
+		for k in ["race", "total", "mod"]:
+			var l := UIKit.label("", 17 if k != "race" else 16, UIKit.TEXT)
+			l.custom_minimum_size = Vector2(64, 0)
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			stat_grid.add_child(l)
+			cols[k] = l
+		stat_rows[a] = {"val": val, "race": cols["race"], "total": cols["total"], "mod": cols["mod"], "minus": minus, "plus": plus}
+	form.add_child(stat_grid)
 	points_label = UIKit.label("", 16, UIKit.GOOD)
 	form.add_child(points_label)
 	var br := UIKit.hbox(8)
@@ -243,6 +256,7 @@ func _refresh_slots() -> void:
 
 func _select(i: int) -> void:
 	sel = i
+	_last_total.clear()     # 枠を替えたときは光らせない
 	_refresh_all()
 
 func _cur() -> Dictionary:
@@ -281,14 +295,33 @@ func _refresh_form() -> void:
 		var row: Dictionary = stat_rows[a]
 		(row["val"] as Label).text = str(v)
 		var b := int(bonus.get(a, 0))
-		(row["bonus"] as Label).text = ("種族 +%d → %d (補正 %+d)" % [b, v + b, int(floor((v + b - 10) / 2.0))]) if b > 0 else ("→ %d (補正 %+d)" % [v, int(floor((v - 10) / 2.0))])
+		var rl: Label = row["race"]
+		rl.text = ("▲%d" % b) if b > 0 else (("▼%d" % -b) if b < 0 else "・")
+		rl.add_theme_color_override("font_color", UIKit.GOOD if b > 0 else (UIKit.BAD if b < 0 else UIKit.DIM))
+		var total := v + b
+		var tl: Label = row["total"]
+		tl.text = str(total)
+		tl.add_theme_color_override("font_color", UIKit.GOLD)
+		var m := int(floor((total - 10) / 2.0))
+		var ml: Label = row["mod"]
+		ml.text = "%+d" % m
+		ml.add_theme_color_override("font_color", UIKit.ACCENT if m > 0 else (UIKit.BAD if m < 0 else UIKit.DIM))
+		if _last_total.has(a) and int(_last_total[a]) != total and is_inside_tree():
+			_flash(tl)
+			_flash(ml)
+		_last_total[a] = total
 		(row["minus"] as Button).disabled = not on or v <= 8
 		var cost_up := Jobs.point_cost(v + 1) - Jobs.point_cost(v)
 		(row["plus"] as Button).disabled = not on or v >= 15 or used + cost_up > 27
-	points_label.text = "残りポイント: %d / 27" % (27 - used)
+	points_label.text = "残りポイント: %d / 27(ポイントバイ。割り振りは各8〜15)" % (27 - used)
 	points_label.add_theme_color_override("font_color", UIKit.GOOD if used <= 27 else UIKit.BAD)
 	_refresh_picks()
 	_refresh_preview()
+
+## 変わった数字を一瞬光らせる
+func _flash(l: Label) -> void:
+	l.modulate = Color(2.2, 2.0, 1.2)
+	create_tween().tween_property(l, "modulate", Color.WHITE, 0.6)
 
 ## 技能の習熟の欄。クラスの一覧にある技能を太字の色で、種族の分は固定で示す
 func _refresh_picks() -> void:

@@ -143,6 +143,21 @@ func _test_controls() -> void:
 	check(Controls.conflicts("confirm", {"t": "btn", "b": JOY_BUTTON_A}).is_empty(), "決定と調べるは同じ A でよい")
 	Controls.reset()
 	check(Controls.hint("search") == "F", "初期設定に戻せる")
+	var lc := InputEventMouseButton.new()
+	lc.button_index = MOUSE_BUTTON_LEFT
+	lc.pressed = true
+	var rc := InputEventMouseButton.new()
+	rc.button_index = MOUSE_BUTTON_RIGHT
+	rc.pressed = true
+	check(InputMap.event_is_action(lc, "attack") and InputMap.event_is_action(rc, "guard"), "左クリックで攻撃、右クリックで構え")
+	check(Controls.from_event(lc) == {"t": "mouse", "m": MOUSE_BUTTON_LEFT} and Controls.label(Controls.from_event(rc)) == "右クリック", "マウスのボタンを記録できる")
+	var wh := InputEventMouseButton.new()
+	wh.button_index = MOUSE_BUTTON_WHEEL_UP
+	wh.pressed = true
+	check(Controls.from_event(wh).is_empty(), "ホイールは割り当てられない(画面の拡縮)")
+	check(not Controls.conflicts("interact", Controls._m(MOUSE_BUTTON_LEFT)).is_empty(), "左クリックをほかに割り当てると、重なりとして分かる")
+	var old := Controls._sanitize({"keys": [Controls._k(KEY_SPACE), {}], "pad": Controls._b(JOY_BUTTON_X)}, Controls.defaults()["attack"])
+	check((old["mouse"] as Dictionary).is_empty() and old["keys"][0]["c"] == KEY_SPACE, "マウスの枠が無い古い保存も読める")
 
 func _test_updater() -> void:
 	check(not Updater.should_check(), "エディタやテストでは、更新を確かめない")
