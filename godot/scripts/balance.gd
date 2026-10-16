@@ -48,6 +48,20 @@ const TAX_NOTE := "燐晶だけが課税"
 static var CRYSTAL_SCALE := 0.3             # 層に置く・魔物や遺体が落とす燐晶の量(kg)にかける。1.0 で、地図生成器の宝の量そのまま
 static var FORAGE_CELLS := 70.0             # 自生物は、歩ける床(部屋と通路)この数のマスにつき1つ
 
+# 迷宮の中の時間(分)。太陽と月で見せる。夜になると、起きている一行は吐息に呑まれ、どこかの部屋へ放り出される
+const DIVE_START_MIN := 7 * 60          # 潜り始めの時刻
+const NIGHT_MIN := 20 * 60              # 日が落ちる時刻
+const DAWN_MIN := 6 * 60                # 夜が明ける時刻
+static var CLOCK_RATE := 1.0                # 起きている間、実時間1秒で進む分
+static var REST_RATE := 50.0                # 休んでいる間、実時間1秒で進む分
+const REST_HOURS := [6, 8]             # 休むと、この幅の時間(ランダム)で目を覚ます
+# ワンダリング・モンスター。10分ごとに出現を振る
+const WANDER_EVERY := 10.0
+static var WANDER_CHANCE := 1.0 / 12.0      # 起きているとき
+static var REST_WANDER_CHANCE := 0.012      # 休んでいるとき(7時間でおよそ4割)
+const WANDER_MAX := 3                  # 層に同時にいる、ワンダリングの群れの上限
+const SURPRISE_TIME := 1.5             # 寝込みを襲われたとき、動けない秒
+
 ## 闘技場で、実行中に動かして調整できる係数。[初期値, 最小, 最大, 説明]
 const TUNABLE := {
 	"ENEMY_DMG_SCALE": [0.4, 0.05, 1.5, "敵の攻撃の係数(大きいほど痛い)"],

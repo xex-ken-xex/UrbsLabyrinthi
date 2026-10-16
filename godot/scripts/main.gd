@@ -23,6 +23,8 @@ var overlay_kind := ""
 var trail: Array = []
 var light_t := 0.0                 # 燐晶の灯油の残り秒
 var pending_return := false
+var pending_rest := false         # 持ち物の「休む」を押した(閉じたら休み始める)
+var dtime: DungeonTime = null      # 迷宮の中の時間(闘技場では使わない)
 var _last_cell := Vector2i(-99, -99)
 var _detect_t := 0.0
 var _search_cd := 0.0
@@ -260,6 +262,8 @@ func _clear_dungeon() -> void:
 	camera.zoom = Vector2(1.7, 1.7)
 	camera.offset = Vector2.ZERO
 	current = null
+	dtime = null
+	pending_rest = false
 	hud.overlay = []
 	hud.hint = ""
 
@@ -340,6 +344,7 @@ func start_day() -> void:
 			h.buffs["guard"] = {"t": 120.0, "v": 0.8}
 	phase = "dungeon"
 	hud.overlay = []
+	dtime = DungeonTime.new(self)
 	enter_floor(1, "up")
 	log_msg("第%d日。%s。" % [gs.day + 1, current.map.data["meta"].get("night_label", "")], Color("e8dcb0"))
 
@@ -369,10 +374,20 @@ func enter_floor(n: int, arrive: String) -> void:
 	fl.heroes = heroes
 	fl.leader = leader()
 	var cell := fl.up_cell if arrive == "up" else fl.down_cell
-	var center := fl.map.center_of(cell)
+	for h in heroes:
+		h.game_floor = fl
+	place_party(fl.map.center_of(cell))
+	var meta: Dictionary = fl.map.data["meta"]
+	log_msg("%s「%s」" % [meta.get("floor_label", "第%d層" % n), fl.style.get("short", "")], Color("e8dcb0"))
+	var see: Array = fl.style.get("see", [])
+	if arrive == "up" and not see.is_empty() and not fl.visited_rooms.has("floor"):
+		fl.visited_rooms["floor"] = true
+		log_msg(String(see[Dice.rng.randi_range(0, see.size() - 1)]), Color(0.8, 0.85, 0.9))
+
+## 一行を center のまわりへ置き直す(層に着いたとき、夜に放り出されたとき)
+func place_party(center: Vector2) -> void:
 	for i in heroes.size():
 		var h: Hero = heroes[i]
-		h.game_floor = fl
 		var a := TAU * i / maxf(1.0, heroes.size()) + 0.6
 		h.position = center + Vector2.from_angle(a) * (22.0 if i != active else 0.0)
 		h.knock = Vector2.ZERO
@@ -381,12 +396,17 @@ func enter_floor(n: int, arrive: String) -> void:
 	camera.reset_smoothing()
 	_last_cell = Vector2i(-99, -99)
 	_refresh_view()
-	var meta: Dictionary = fl.map.data["meta"]
-	log_msg("%s「%s」" % [meta.get("floor_label", "第%d層" % n), fl.style.get("short", "")], Color("e8dcb0"))
-	var see: Array = fl.style.get("see", [])
-	if arrive == "up" and not see.is_empty() and not fl.visited_rooms.has("floor"):
-		fl.visited_rooms["floor"] = true
-		log_msg(String(see[Dice.rng.randi_range(0, see.size() - 1)]), Color(0.8, 0.85, 0.9))
+
+## 休む(野営)。休めないときは、理由をログへ
+func start_rest() -> void:
+	if dtime == null or phase != "dungeon":
+		return
+	var why := dtime.start_rest()
+	if why != "":
+		log_msg(why, Color(0.8, 0.8, 0.85))
+	else:
+		hud.hint = ""
+		log_msg("野営して休む。(%s / %s / Esc で中断)" % [Controls.hint("rest"), Controls.hint("interact")], Color("e8dcb0"))
 
 func light_radius() -> int:
 	var b := 0
@@ -451,6 +471,8 @@ func _dungeon_frame(delta: float) -> void:
 	_open_doors_near_heroes()
 	if arena == null:
 		_check_traps()
+		if dtime != null:
+			dtime.update(delta)
 	_detect_t -= delta
 	if _detect_t <= 0.0:
 		_detect_t = 0.2
@@ -464,6 +486,12 @@ func _read_input() -> void:
 		_auto_switch()
 		lead = leader()
 	if scripted_input:
+		return
+	if dtime != null and dtime.resting:
+		# 休んでいる間は、中断だけ受け付ける
+		if Input.is_action_just_pressed("rest") or Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("ui_cancel") \
+				or Input.is_action_just_pressed("attack") or Input.get_vector("move_left", "move_right", "move_up", "move_down").length() > 0.5:
+			dtime.stop_rest("休むのをやめた。%d時間ほど休んだ。" % int(round((dtime.minutes - dtime.rest_from) / 60.0)))
 		return
 	var mv := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	lead.cmd["move"] = mv
@@ -485,6 +513,8 @@ func _read_input() -> void:
 		search()
 	if Input.is_action_just_pressed("quick_heal"):
 		quick_heal()
+	if Input.is_action_just_pressed("rest"):
+		start_rest()
 	if Input.is_action_just_pressed("inventory") and _menu_cd <= 0.0:
 		open_inventory()
 
@@ -887,7 +917,11 @@ func open_inventory() -> void:
 	inventory = InventoryScreen.new()
 	inventory.closed.connect(close_inventory)
 	ui_layer.add_child(inventory)
-	inventory.open(gs, Callable(self, "use_special"))
+	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable())
+
+func _rest_from_menu() -> void:
+	pending_rest = true
+	close_inventory()
 
 func close_inventory() -> void:
 	if inventory == null:
@@ -911,6 +945,9 @@ func close_inventory() -> void:
 		if pending_return:
 			pending_return = false
 			return_to_surface()
+		elif pending_rest:
+			pending_rest = false
+			start_rest()
 	elif screen is TownScreen:
 		(screen as TownScreen).refresh_top()
 		(screen as TownScreen)._refresh_all()
