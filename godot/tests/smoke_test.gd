@@ -21,6 +21,7 @@ func _run() -> void:
 	_test_controls()
 	_test_updater()
 	_test_talents()
+	_test_calendar()
 	_test_state()
 	await _test_assets()
 	await _test_floors()
@@ -294,6 +295,25 @@ func _test_talents() -> void:
 	check(int(o.stats["dex"]) == 16 and Talents.picks_valid("rogue", o.profs) and o.pending().size() == 2, "古いセーブは、能力値そのまま、技能はおまかせ、熟達は未選択で読める")
 
 # ---------- 持ち物と売買、セーブ ----------
+
+func _test_calendar() -> void:
+	print("[座暦]")
+	var d := func(day: int) -> Array:
+		var x := ZaCalendar.date(day)
+		return [x["year"], x["month"], x["night"]]
+	check(d.call(0) == [2352, 8, 1] and d.call(30) == [2352, 9, 1] and d.call(44) == [2352, 9, 15], "始まりは座暦2352年8月1夜。30夜で次の月")
+	check(d.call(150) == [2352, 12, 31] and d.call(198) == [2352, 12, 79] and d.call(199) == [2352, 13, 1], "大閏の年は、空座の月が79夜。そのあと座渡し")
+	check(d.call(204) == [2353, 1, 1] and ZaCalendar.month_len(2353, 12) == 30, "座昇りのあと新年。次の年は大閏ではない")
+	check(ZaCalendar.setsu(0) == "第一節の夜" and ZaCalendar.setsu(9) == "第三節の夜", "巡りの節は、迷宮の夜と同じ")
+	check(ZaCalendar.label(199).contains("沈黙の夜"), "座渡しの第一夜は沈黙の夜")
+	var months_ok := true
+	for m in range(1, 14):
+		var mo: Dictionary = TownLines.data().get("months", {}).get(str(m), {})
+		for cat in ["hub", "leave", "inn", "rumors", "walk", "look", "fortune"]:
+			months_ok = months_ok and not (mo.get(cat, []) as Array).is_empty()
+	check(months_ok, "どの月にも、広場・宿・噂・寝息通りの行がある")
+	check(TownLines.special_name(44) != "" and TownLines.pool("hub", 44) == TownLines.data()["special"]["9-15"]["hub"], "灯祭の夜は、祭りの行だけを使う")
+	check(TownLines.pick_stable("inn", 3, ["x"]) == TownLines.pick_stable("inn", 3, ["x"]), "宿の主人の挨拶は、その夜のあいだ変わらない")
 
 func _test_state() -> void:
 	print("[game state]")

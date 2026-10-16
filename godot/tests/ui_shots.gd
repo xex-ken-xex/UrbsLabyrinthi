@@ -79,6 +79,22 @@ func _run() -> void:
 	await shot("pleasure")
 	town._go("general")
 	await shot("general")
+	# 暦: 灯祭の夜(灯火の月15夜)の広場と寝息通り
+	var day0: int = main.gs.day
+	main.gs.day = 44
+	town._go("hub")
+	town._refresh_top()
+	await shot("hub_tomoshi")
+	town._go("pleasure")
+	town._push_walk(TownLines.pick("walk", 44, []))
+	town._push_walk(TownLines.pick("look", 44, []))
+	await shot("pleasure_tomoshi")
+	main.gs.day = 199
+	town._go("inn")
+	town._refresh_top()
+	await shot("inn_silence")
+	main.gs.day = day0
+	town._refresh_top()
 	main.gs.add_item("relic_tag", 2)
 	main.gs.add_item("relic_gear")
 	main.gs.add_item("relic_coins", 3)
