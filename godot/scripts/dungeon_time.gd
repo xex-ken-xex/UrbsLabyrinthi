@@ -177,25 +177,11 @@ func _spawn_cell(fl: FloorInstance, from: Vector2i, lo: int, hi: int) -> Vector2
 func _nightfall() -> void:
 	var fl: FloorInstance = main.current
 	var m := fl.map
-	var here := m.room_at[m.idx(m.cell_of(main.leader().position).x, m.cell_of(main.leader().position).y)]
-	var rooms: Array = []
-	for r in m.rooms:
-		var rid := int(r["id"])
-		if rid == here or not m.room_cells.has(rid) or (m.room_cells[rid] as Array).is_empty():
-			continue
-		var occupied := false
-		for e in fl.enemies:
-			var ec := m.cell_of(e.position)
-			if not e.dead and m.in_bounds(ec.x, ec.y) and m.room_at[m.idx(ec.x, ec.y)] == rid:
-				occupied = true
-				break
-		if not occupied:
-			rooms.append(rid)
+	var pc := m.cell_of(main.leader().position)
 	main.log_msg("日が落ちた。吐息が満ちて、意識が遠のく…", Color("b8a8e8"))
-	if rooms.is_empty():
+	var at: Vector2 = main.random_room_pos(fl, m.room_at[m.idx(pc.x, pc.y)])
+	if at.x >= INF:
 		return
-	var cells: Array = m.room_cells[rooms[Dice.rng.randi_range(0, rooms.size() - 1)]]
-	var c: int = cells[cells.size() / 2]
-	main.place_party(m.center_of(Vector2i(c % m.w, c / m.w)))
+	main.place_party(at)
 	minutes = _next_dawn()
 	main.log_msg("気がつくと、見知らぬ部屋で朝を迎えていた。", Color("e8dcb0"))

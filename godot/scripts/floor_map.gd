@@ -70,6 +70,7 @@ func _init(d: Dictionary) -> void:
 			"axis": String(dd["axis"]), "type": String(dd["type"]),
 			"lock_dc": int(dd.get("lock_dc", 0)), "find_dc": int(dd.get("find_dc", 0)),
 			"open": false, "found": dd["type"] != "secret", "unlocked": dd["type"] != "locked",
+			"room": int(dd.get("roomId", -1)),
 		}
 		doors.append(door)
 		door_at[int(dd["y"]) * w + int(dd["x"])] = door
