@@ -2,6 +2,7 @@ class_name GroundItems
 extends RefCounted
 ## 床に落ちているもの。光る燐晶の石、迷宮に自生するもの(茸や苔)、遺体、魔物の落とし物。
 ## 近づくと吸い寄せられて、拾える。燐晶は袋に入り(持ち帰るとき、査定と税)、自生物は持ち物へ入る(税なし)。
+## 遺体は拾わない。そばで E を押すと調べられる(中身が散らばり、遺体をこうした魔物が湧く)。
 ## 宝箱はない。燐晶は、露頭(壁ぎわの光る石)、宝のある部屋、遺体、倒した魔物から手に入る。
 
 const PICK_R := 17.0           # 触れて拾う距離
@@ -52,8 +53,48 @@ func add_item(pos: Vector2, id: String, qty: int = 1, vel: Vector2 = Vector2.ZER
 		return
 	entries.append({"kind": "item", "id": id, "qty": qty, "pos": pos, "vel": vel, "t": 0.0, "ph": Dice.rng.randf()})
 
-func add_corpse(pos: Vector2) -> void:
-	entries.append({"kind": "corpse", "id": "corpse", "pos": pos, "vel": Vector2.ZERO, "t": 0.0, "ph": Dice.rng.randf()})
+## 遺体の見た目。食い荒らす魔物の近くは骨、人型と悪魔の近くは吊るされた体、それ以外は座って息絶えた体
+const CORPSE_BONES_TYPES := ["beast", "monstrosity", "dragon", "swarm", "ooze"]
+const CORPSE_HANG_TYPES := ["humanoid", "fiend", "giant"]
+const CORPSE_NEAR := 16.0      # この距離(マス)の中の遭遇を、遺体の原因とみなす(無ければ層でいちばん近い遭遇)
+
+static func corpse_look(mon_type: String, mon_index: String = "") -> String:
+	var t := mon_type.to_lower()
+	if t.begins_with("swarm") or CORPSE_BONES_TYPES.has(t) or mon_index.contains("ghoul") or mon_index.contains("ghast"):
+		return "bones"
+	if CORPSE_HANG_TYPES.has(t):
+		return "hang"
+	return "sit"
+
+## 遺体を置く。cause は原因の魔物(書き出しの monsters[] の1行)と遭遇の種類 {mon, kind}。無ければ {}
+func add_corpse(pos: Vector2, cause: Dictionary = {}) -> void:
+	var look := "sit"
+	if not cause.is_empty():
+		look = corpse_look(String(cause["mon"].get("type", "")), String(cause["mon"].get("index", "")))
+	entries.append({"kind": "corpse", "id": "corpse_" + look, "look": look, "cause": cause, "searched": false,
+		"pos": pos, "vel": Vector2.ZERO, "t": 0.0, "ph": Dice.rng.randf()})
+
+## pos からいちばん近い遭遇の、先頭の魔物
+func _corpse_cause(pos: Vector2) -> Dictionary:
+	var best: Dictionary = {}
+	var bd := 1e18
+	for e in fl.map.data.get("encounters", []):
+		var mons: Array = e.get("monsters", [])
+		if mons.is_empty():
+			continue
+		for t in e["tokens"]:
+			var d := fl.map.center_of(Vector2i(int(t["x"]), int(t["y"]))).distance_squared_to(pos)
+			if d < bd:
+				bd = d
+				best = {"mon": mons[int(t["g"])], "kind": String(e.get("kind", "beast"))}
+	return best
+
+## そばの、まだ調べていない遺体(無ければ {})
+func corpse_near(pos: Vector2, r: float) -> Dictionary:
+	for e in entries:
+		if String(e["kind"]) == "corpse" and not bool(e["searched"]) and (e["pos"] as Vector2).distance_to(pos) <= r:
+			return e
+	return {}
 
 func _jitter_in_cell(c: Vector2i, spread: float = 11.0) -> Vector2:
 	var cen := fl.map.center_of(c)
@@ -176,7 +217,8 @@ func _spawn_corpses() -> void:
 	for i in n:
 		var c := _pick_cell(Dice.rng.randf() < 0.5, 0.25)
 		if c.x >= 0:
-			add_corpse(_jitter_in_cell(c))
+			var p := _jitter_in_cell(c)
+			add_corpse(p, _corpse_cause(p))
 
 # ---------- 魔物が倒れたとき ----------
 
@@ -235,9 +277,7 @@ func update(delta: float) -> void:
 		if near != null and float(e["t"]) > POP_DELAY:
 			var d := sqrt(nd)
 			if String(e["kind"]) == "corpse":
-				if d < PICK_R + 4.0:
-					_loot_corpse(e)
-					done = true
+				pass          # 遺体は拾わない(E で調べる)
 			elif d < PICK_R:
 				fl.ground_picked.emit(e, near)
 				done = true
@@ -247,6 +287,27 @@ func update(delta: float) -> void:
 		if done:
 			entries.remove_at(i)
 		i -= 1
+
+## 遺体を調べる。持ち物が散らばり、遺体をこうした魔物が湧く。湧いた魔物を返す
+func search_corpse(e: Dictionary) -> Array:
+	if bool(e["searched"]):
+		return []
+	e["searched"] = true
+	_loot_corpse(e)
+	var cause: Dictionary = e["cause"]
+	if cause.is_empty() or fl.arena:
+		return []
+	var line: Dictionary = (cause["mon"] as Dictionary).duplicate()
+	var party_n := 0
+	for h in fl.heroes:
+		if is_instance_valid(h) and h.is_alive():
+			party_n += 1
+	line["count"] = clampi(int(line.get("count", 1)), 1, maxi(1, party_n - 1))
+	var made: Array = fl.spawn_encounter([line], String(cause["kind"]), e["pos"], "遺体のそばにいた")
+	if not made.is_empty():
+		var nm := String(line.get("world_name", line.get("name_ja", "魔物")))
+		fl.message.emit("遺体の陰から、%sが現れた!" % nm, "danger")
+	return made
 
 func _loot_corpse(e: Dictionary) -> void:
 	var pos: Vector2 = e["pos"]
@@ -284,10 +345,15 @@ func draw(ci: CanvasItem, view: Rect2) -> void:
 			"crystal":
 				_draw_crystal(ci, e, pos, k, tms, ph)
 			"corpse":
-				var tex := ItemIcons.texture("corpse")
+				var tex := ItemIcons.texture(String(e["id"]))
+				if tex == null:
+					tex = ItemIcons.texture("corpse")
+				var up := 12.0 if String(e.get("look", "")) == "hang" else 0.0     # 吊るされた体は、上へ高く描く
+				var kk := k * (0.75 if bool(e.get("searched", false)) else 1.0)
 				if tex != null:
-					ci.draw_texture_rect(tex, Rect2(pos - Vector2(14, 15), Vector2(28, 28)), false, Color(k, k, k))
-				_glint(ci, pos + Vector2(4, -2), tms, ph, Color("b9d8ff"), k * 0.8)
+					ci.draw_texture_rect(tex, Rect2(pos - Vector2(15, 16 + up), Vector2(30, 30)), false, Color(kk, kk, kk))
+				if not bool(e.get("searched", false)):
+					_glint(ci, pos + Vector2(4, -2), tms, ph, Color("b9d8ff"), k * 0.8)
 			_:
 				var id := String(e["id"])
 				var bob := sin(tms * 2.2 + ph * TAU) * 1.2

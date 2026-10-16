@@ -308,7 +308,7 @@ func compute_flow(tx: int, ty: int, max_d: int = 48) -> PackedInt32Array:
 
 ## from から、flow を下る(または上る)隣のマス。なければ (-1,-1)
 func flow_step(flow: PackedInt32Array, from: Vector2i, descend: bool = true) -> Vector2i:
-	if not in_bounds(from.x, from.y):
+	if not in_bounds(from.x, from.y) or flow.size() != w * h:     # まだ流れを作っていない層(仲間が一度も立っていない)
 		return Vector2i(-1, -1)
 	var cur := flow[idx(from.x, from.y)]
 	var best := Vector2i(-1, -1)

@@ -294,7 +294,7 @@ func start_arena() -> void:
 	move_child(current, 0)
 	current.heroes = heroes
 	current.leader = leader()
-	current.message.connect(log_msg)
+	current.message.connect(_on_floor_message)
 	current.enemy_killed.connect(_on_enemy_killed)
 	current.ground_picked.connect(_on_ground_picked)
 	var center := current.map.center_of(current.up_cell)
@@ -364,7 +364,7 @@ func enter_floor(n: int, arrive: String) -> void:
 		if fl == null:
 			push_error("層を読めない: %d" % n)
 			return
-		fl.message.connect(log_msg)
+		fl.message.connect(_on_floor_message)
 		fl.enemy_killed.connect(_on_enemy_killed)
 		fl.ground_picked.connect(_on_ground_picked)
 		floors[n] = fl
@@ -425,6 +425,10 @@ func _refresh_view() -> void:
 	current.update_flow(pc)
 	current.light_pos = leader().position
 	current.queue_redraw()
+
+## 層からの知らせ(kind: info / danger)
+func _on_floor_message(text: String, kind: String) -> void:
+	log_msg(text, Color("ff6a5a") if kind == "danger" else Color(0.85, 0.85, 0.8))
 
 func log_msg(text: String, color: Color = Color.WHITE) -> void:
 	var s := text
@@ -782,12 +786,16 @@ func _nearest_trap_to_disarm() -> Variant:
 			return t
 	return null
 
+const CORPSE_REACH := 30.0     # 遺体を調べられる距離(画素)
+
 func _update_hint() -> void:
 	var h := ""
 	if _nearest_locked_door() != null:
 		h = "E: 解錠を試みる"
 	elif _nearest_trap_to_disarm() != null:
 		h = "%s: 罠をどうする?" % Controls.hint("interact")
+	elif arena == null and not current.ground.corpse_near(leader().position, CORPSE_REACH).is_empty():
+		h = "%s: 遺体を調べる" % Controls.hint("interact")
 	elif arena != null:
 		h = "E: 闘技場を出る" if _near(current.up_cell, 1.4) else ""
 	elif _near(current.down_cell, 1.4):
@@ -806,6 +814,12 @@ func interact() -> void:
 	var trap: Variant = _nearest_trap_to_disarm()
 	if trap != null:
 		open_trap_menu(trap)
+		return
+	var body := current.ground.corpse_near(leader().position, CORPSE_REACH)
+	if not body.is_empty():
+		current.ground.search_corpse(body)
+		current.queue_redraw()
+		_update_hint()
 		return
 	if arena != null:
 		if _near(current.up_cell, 1.4):

@@ -82,6 +82,9 @@ LOOKS = {
     "lamp_oil": "a flat glass flask of yellow glowing lamp oil",
     "return_scroll": "a rolled cream parchment scroll with a red wax seal",
     "corpse": "(drawn on the ground) the body of a fallen adventurer lying sideways, blue tunic, brown boots",
+    "corpse_bones": "(drawn on the ground) gnawed remains: scattered bones, a skull, ribs and torn blue cloth in a dark blood stain",
+    "corpse_sit": "(drawn on the ground) an adventurer who died sitting against the wall, head drooped, legs stretched out, a dropped dagger",
+    "corpse_hang": "(drawn on the ground, tall) a body hanged from a wooden beam by a rope, dark red clothes, a stain on the floor below",
 }
 CRYSTAL_LOOK = {
     "low": "dull grey-blue, cloudy, faint glints",
@@ -259,7 +262,7 @@ pair: tools/item-catalog.py(一覧の元)、tools/make-items.py(絵とゲーム�
 def write_prompts_doc():
     names = {i["id"]: i["name"] for i in cat.FORAGE}
     names.update({"potion": "治療薬", "hi_potion": "上級治療薬", "ether": "魔力水", "revive_charm": "蘇生の護符", "lamp_oil": "燐晶の灯油",
-                  "return_scroll": "帰還の札", "corpse": "遺体(地面に置く絵)"})
+                  "return_scroll": "帰還の札", "corpse": "遺体(地面に置く絵)", "corpse_bones": "遺体: 食い荒らされた骨", "corpse_sit": "遺体: 座って息絶えた", "corpse_hang": "遺体: 吊るされた"})
     rows = ["| マス | id | 名前 | 絵の指示(英語) |", "|---|---|---|---|"]
     for iid, n in sorted(icons.items(), key=lambda kv: kv[1]):
         if iid.startswith("crystal_"):
