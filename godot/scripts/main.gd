@@ -198,6 +198,31 @@ func show_make() -> void:
 	m.finished.connect(_on_party_made)
 	_set_screen(m)
 
+## 宿屋の酒場で、仲間を一人加える
+func show_recruit() -> void:
+	if gs.party.size() >= Balance.MAX_PARTY:
+		return
+	phase = "make"
+	var m := CharaMake.new()
+	m.recruit = true
+	m.party_now = gs.party.duplicate()
+	m.cancelled.connect(_back_to_inn.bind(""))
+	m.finished.connect(_on_recruited)
+	_set_screen(m)
+
+func _on_recruited(chars: Array) -> void:
+	for c in chars:
+		if gs.party.size() < Balance.MAX_PARTY:
+			gs.party.append(c)
+	_back_to_inn("%sが仲間に加わった。" % chars[0].name if not chars.is_empty() else "")
+
+func _back_to_inn(said: String) -> void:
+	go_town([])
+	if screen is TownScreen:
+		(screen as TownScreen)._go("inn")
+		if said != "":
+			(screen as TownScreen)._say(said, UIKit.GOOD)
+
 func _on_party_made(chars: Array) -> void:
 	gs.new_game(chars)
 	go_town(["「ようこそ、ヴェルガ・ノクスへ。許可証は灰等級から。」", "預け金 %d銀貨。装備と薬を整えてから、迷宮へ。" % gs.bank_silver])
@@ -231,6 +256,7 @@ func go_town(report: Array) -> void:
 	t.arena_requested.connect(start_arena)
 	t.to_title.connect(show_title)
 	t.key_config.connect(open_key_config)
+	t.recruit.connect(show_recruit)
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)
@@ -984,7 +1010,16 @@ func open_inventory() -> void:
 	inventory = InventoryScreen.new()
 	inventory.closed.connect(close_inventory)
 	ui_layer.add_child(inventory)
-	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable())
+	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
+
+## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま
+func sync_hero_order() -> void:
+	if heroes.is_empty():
+		return
+	var cur := leader()
+	heroes.sort_custom(func(a, b): return gs.party.find(a.ch) < gs.party.find(b.ch))
+	active = maxi(0, heroes.find(cur))
+	trail = [leader().position] if leader() != null else []
 
 ## 迷宮を止める・動かす(持ち物や罠の選択を開いている間)
 func _freeze_world(on: bool) -> void:

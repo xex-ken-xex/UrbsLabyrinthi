@@ -9,6 +9,7 @@ var gs: GameState
 var special_handler: Callable = Callable()   # (id, Character) -> bool。灯油や帰還の札のように、迷宮の中で効くもの
 var rest_handler: Callable = Callable()      # 迷宮の中だけ。「休む(野営)」
 var rest_btn: Button
+var reorder_handler: Callable = Callable()   # 隊列を入れ替えたあと、迷宮の中の並びを合わせる(Main)
 var tab := "item"
 var member := 0
 var ids: Array = []
@@ -24,8 +25,9 @@ var pick_key := ""            # 選んでいる最中の、能力値上昇・特
 var half_mode := false        # 能力値 +1 を二つに分けている途中
 var half_abil := ""           # +1 の一つ目
 
-func open(state: GameState, special: Callable = Callable(), rest: Callable = Callable()) -> void:
+func open(state: GameState, special: Callable = Callable(), rest: Callable = Callable(), reorder: Callable = Callable()) -> void:
 	gs = state
+	reorder_handler = reorder
 	special_handler = special
 	rest_handler = rest
 	rest_btn.visible = rest.is_valid()
@@ -105,6 +107,20 @@ func _unhandled_input(e: InputEvent) -> void:
 				_assign(i)
 				return
 
+## 選んでいる仲間を、隊列の前(-1)か後ろ(+1)へ一つ動かす
+func _move_member(d: int) -> void:
+	var j := member + d
+	if j < 0 or j >= gs.party.size():
+		return
+	var c: Character = gs.party[member]
+	gs.party[member] = gs.party[j]
+	gs.party[j] = c
+	member = j
+	if reorder_handler.is_valid():
+		reorder_handler.call()
+	msg.text = "%sを隊列の%d番目にした。" % [c.name, j + 1]
+	_refresh()
+
 func _ch() -> Character:
 	return gs.party[member]
 
@@ -133,6 +149,15 @@ func _refresh() -> void:
 		if c.hp <= 0.0:
 			b.add_theme_color_override("font_color", UIKit.BAD)
 		member_box.add_child(b)
+	if gs.party.size() > 1:
+		var fwd := UIKit.button("◀ 前へ", _move_member.bind(-1), 90)
+		fwd.tooltip_text = "選んでいる仲間を、隊列の一つ前へ(先頭が隊列の先頭)"
+		fwd.disabled = member == 0
+		member_box.add_child(fwd)
+		var back := UIKit.button("後ろへ ▶", _move_member.bind(1), 90)
+		back.tooltip_text = "選んでいる仲間を、隊列の一つ後ろへ"
+		back.disabled = member == gs.party.size() - 1
+		member_box.add_child(back)
 	for k in tab_btns:
 		(tab_btns[k] as Button).add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2) if k == tab else UIKit.box(Color(0.12, 0.13, 0.18, 0.95)))
 	UIKit.clear(slot_box)

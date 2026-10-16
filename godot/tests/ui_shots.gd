@@ -26,9 +26,17 @@ func _run() -> void:
 	main.show_make()
 	await shot("make")
 	var make: CharaMake = main.screen
-	make._select(2)
+	make._select(1)
 	await shot("make2")
 	make._on_start()
+	await process_frame
+	(main.screen as TownScreen)._go("inn")
+	main.show_recruit()
+	await shot("recruit")
+	(main.screen as CharaMake)._on_start()
+	await process_frame
+	main.show_recruit()
+	(main.screen as CharaMake)._on_start()
 	await process_frame
 	var town: TownScreen = main.screen
 	await shot("town")

@@ -124,9 +124,9 @@ static func sheet(key: String, builtin: bool = true) -> Texture2D:
 	_sheet_cache[ck] = tex
 	return tex
 
-## 仲間の見た目。{tex, sheet}。順番は、差し替えのシート → 差し替えの1枚絵 → 同梱のシート
+## 仲間の見た目。{tex, sheet}。順番は、差し替えのシート → 差し替えの1枚絵 → 同梱のシート(クラス×種族×性別 → 古い男女×5種)
 static func hero_visual(char_name: String, cls: String, race: String, look: String) -> Dictionary:
-	var keys := ["sheet_" + char_name, "sheet_%s_%s" % [cls, look], "sheet_%s_%s" % [look, String(SHEET_TYPE.get(cls, "WARRIOR"))]]
+	var keys := ["sheet_" + char_name, "sheet_%s_%s_%s" % [cls, race, look], "sheet_%s_%s" % [cls, look], "sheet_%s_%s" % [look, String(SHEET_TYPE.get(cls, "WARRIOR"))]]
 	for k in keys:
 		var t := sheet(String(k), false)
 		if t != null:
@@ -134,9 +134,10 @@ static func hero_visual(char_name: String, cls: String, race: String, look: Stri
 	var one := hero_texture(char_name, cls, race)
 	if one != null:
 		return {"tex": one, "sheet": false}
-	var b := sheet(String(keys[2]), true)
-	if b != null:
-		return {"tex": b, "sheet": true}
+	for k in [keys[1], keys[3]]:
+		var b := sheet(String(k), true)
+		if b != null:
+			return {"tex": b, "sheet": true}
 	return {"tex": null, "sheet": false}
 
 ## 魔物の見た目。{tex, sheet}。esheet_<index> → esheet_type_<種別> → 1枚絵(enemy_*)の順

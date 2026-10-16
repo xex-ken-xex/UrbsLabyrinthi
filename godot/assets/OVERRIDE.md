@@ -58,15 +58,16 @@
 | キー | 使い先 | 探す順 |
 |---|---|---|
 | `sheet_<名前>` | その名前の仲間 | 1番目 |
-| `sheet_<クラス>_<M/F>` | 例: `sheet_fighter_F` | 2番目 |
-| `sheet_<M/F>_<種類>` | 種類は `WARRIOR` `CLERIC` `FIGHTER` `THIEF` `MAGE`。例: `sheet_F_MAGE` | 3番目 |
+| `sheet_<クラス>_<種族>_<M/F>` | 例: `sheet_wizard_elf_F` | 2番目 |
+| `sheet_<クラス>_<M/F>` | 例: `sheet_fighter_F` | 3番目 |
+| `sheet_<M/F>_<種類>` | 種類は `WARRIOR` `CLERIC` `FIGHTER` `THIEF` `MAGE`。例: `sheet_F_MAGE` | 4番目 |
 | `esheet_<SRDのindex>` | その魔物(例: `esheet_giant-rat`) | 1番目 |
 | `esheet_type_<種別>` | その種別すべて | 2番目 |
 
 同梱のシートは、SRD の全魔物(334体)と、種別の代表(`esheet_type_aberration` など15種)。同じ名前のファイルを置けば差し替わる。外見とサイズの方針は `docs/monster-visuals.md`。
 
 クラスと種類の対応: 戦士=WARRIOR、僧侶=CLERIC、盗賊=THIEF、魔術師=MAGE、蛮族=FIGHTER、野伏=FIGHTER。
-キャラ作成で「見た目」(男性 M / 女性 F)を選ぶ。**同梱のシート**: 仲間の `sheet_M_*` `sheet_F_*` の10枚と、魔物 11種(`giant-rat` `rat` `gray-ooze` `green-slime` `giant-spider` `giant-bat` `bat` `skeleton` `zombie` `bandit` `goblin`)。
+キャラ作成で「見た目」(男性 M / 女性 F)を選ぶ。**同梱のシート**: 仲間の `sheet_<クラス>_<種族>_<M/F>` の48枚(6クラス × 4種族 × 男女)と、古い形の `sheet_M_*` `sheet_F_*` の10枚、魔物 11種(`giant-rat` `rat` `gray-ooze` `green-slime` `giant-spider` `giant-bat` `bat` `skeleton` `zombie` `bandit` `goblin`)。
 同梱のシートは、`tools/make-sprites.py` が、コードで描いたもの。AI で作った絵(プロンプトは `docs/asset-prompts.md`)に、同じファイル名で差し替えられる。
 
 ### 床、壁、アイコン(正方形。64×64 を推奨。1マス=32画素に縮めて、1マスずつ貼る)
