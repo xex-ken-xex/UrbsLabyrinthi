@@ -69,14 +69,16 @@ const BASE_ITEMS := {
 		"desc": "周囲の敵を怯ませて止める。"},
 }
 
-## 全品。自生物、魔物の素材、遺品(ForageData、tools/make-items.py が作る)を足してある。燐晶ではないので、税がかからない
-static var ITEMS: Dictionary = BASE_ITEMS.merged(ForageData.ITEMS)
+## 全品。自生物、魔物の素材、遺品(ForageData、tools/make-items.py が作る)と、市場の食材(Cooking)を足してある。燐晶ではないので、税がかからない
+static var ITEMS: Dictionary = BASE_ITEMS.merged(ForageData.ITEMS).merged(Cooking.ingredient_items())
 
 const SHOPS := {
 	"smith": ["dagger", "shortsword", "longsword", "greatsword", "mace", "warhammer", "handaxe", "greataxe", "spear", "shortbow", "longbow",
 		"leather", "studded", "chain_shirt", "breastplate", "chain_mail", "plate", "buckler", "power_band", "swift_boots"],
 	"general": ["potion", "hi_potion", "ether", "lamp_oil", "return_scroll", "robe", "quarterstaff", "vital_ring", "lamp_charm"],
 	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash"],
+	"market": ["haimugi", "suzumame", "chikabu", "makina", "hai_imo", "sunauo", "yagi_raku", "iwadori_tamago", "shirokona",
+		"kuromugishu", "jushi", "koushin", "iwa_jio", "takigi"],
 }
 
 ## 坑口館の遺品課でしか引き取らない遺品(店では売れない)
@@ -128,6 +130,10 @@ static func detail(id: String) -> String:
 	if it.get("free", false):
 		s += "
 迷宮に自生するもの・魔物の素材。燐晶ではないので、税がかからない。"
+	if it.get("food", false):
+		s += "\n料理の材料(持ち物の「料理」で使う)。"
+	if Cooking.is_fuel(id):
+		s += "\n野営の燃料になる(燃料1つで、火が1時間もつ)。"
 	if GUILD_ONLY.has(id):
 		s += "\n店では売れない。坑口館(冒険者ギルド)の遺品課が引き取り、謝礼を出す。"
 	match String(it["kind"]):

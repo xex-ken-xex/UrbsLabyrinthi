@@ -1,0 +1,1408 @@
+{
+ "ingredients": {
+  "haimugi": {
+   "name": "灰麦",
+   "price": 4,
+   "desc": "灰の混じる川畑で育つ大麦。壁下区のパンと粥のもと。",
+   "icon": [
+    "sack",
+    {
+     "col": "b8a070",
+     "grain": "d8c890"
+    }
+   ]
+  },
+  "suzumame": {
+   "name": "鈴豆",
+   "price": 4,
+   "desc": "莢を振ると、からからと鳴る乾いた豆。煮ると甘い。",
+   "icon": [
+    "sack",
+    {
+     "col": "8a7050",
+     "grain": "c8a060",
+     "beans": true
+    }
+   ]
+  },
+  "chikabu": {
+   "name": "血蕪",
+   "price": 3,
+   "desc": "切ると中まで赤い蕪。酢に漬けると、色が抜けない。",
+   "icon": [
+    "root",
+    {
+     "col": "b03848",
+     "leaf": "5a9a48"
+    }
+   ]
+  },
+  "makina": {
+   "name": "巻き菜",
+   "price": 3,
+   "desc": "葉を何重にも固く巻いた野菜。砂嵐の季節でも中は青い。",
+   "icon": [
+    "cabbage",
+    {
+     "col": "8ac060"
+    }
+   ]
+  },
+  "hai_imo": {
+   "name": "灰芋",
+   "price": 3,
+   "desc": "川畑の灰芋。壁下区の主食。野生の灰芋より柔らかい。",
+   "icon": [
+    "tuber",
+    {
+     "col": "a09080",
+     "sprout": "6aa050"
+    }
+   ]
+  },
+  "sunauo": {
+   "name": "砂魚の干物",
+   "price": 8,
+   "desc": "南の砂の川で獲れる魚を、隊商が干して運んでくる。",
+   "icon": [
+    "fish",
+    {
+     "col": "c8a878"
+    }
+   ]
+  },
+  "yagi_raku": {
+   "name": "山羊の乳酪",
+   "price": 10,
+   "desc": "荒野の山羊の乳を固めたもの。石のように固い。",
+   "icon": [
+    "cheese",
+    {
+     "col": "f0d890"
+    }
+   ]
+  },
+  "iwadori_tamago": {
+   "name": "岩鶏の卵",
+   "price": 6,
+   "desc": "岩場に巣をかける鶏の、殻の厚い卵。",
+   "icon": [
+    "egg",
+    {
+     "col": "e8dcc8"
+    }
+   ]
+  },
+  "shirokona": {
+   "name": "白粉",
+   "price": 12,
+   "desc": "南の王国から運ばれる小麦の粉。冠環区の白パンになる。高い。",
+   "icon": [
+    "sack",
+    {
+     "col": "e8e4dc",
+     "grain": "ffffff"
+    }
+   ]
+  },
+  "kuromugishu": {
+   "name": "黒麦酒",
+   "price": 6,
+   "desc": "縁環区の酒場で樽から注がれる、黒くて苦い麦酒。",
+   "icon": [
+    "bottle",
+    {
+     "liquid": "3a2418"
+    }
+   ]
+  },
+  "jushi": {
+   "name": "獣脂",
+   "price": 5,
+   "desc": "獣の脂を固めたもの。炒め物にも、灯りにも使う。",
+   "icon": [
+    "lump",
+    {
+     "col": "e8dcb0",
+     "kind": "wax"
+    }
+   ]
+  },
+  "koushin": {
+   "name": "隊商の香辛料",
+   "price": 20,
+   "desc": "南の王国の、赤くて辛い粉。少し入れるだけで体が温まる。",
+   "icon": [
+    "pouch",
+    {
+     "col": "c83a28"
+    }
+   ]
+  },
+  "takigi": {
+   "name": "焚き木束",
+   "price": 5,
+   "desc": "野営の燃料。一束で、火が1時間ほどもつ。",
+   "icon": [
+    "logs",
+    {
+     "col": "8a6038"
+    }
+   ]
+  }
+ },
+ "tags": {
+  "take": {
+   "name": "茸",
+   "ids": [
+    "kuro_take",
+    "tetsu_take",
+    "kotsufun_take",
+    "tomoshi_take"
+   ]
+  },
+  "niku": {
+   "name": "肉",
+   "ids": [
+    "kemono_niku"
+   ]
+  },
+  "imo": {
+   "name": "芋",
+   "ids": [
+    "hai_imo",
+    "no_hai_imo"
+   ]
+  },
+  "yasai": {
+   "name": "野菜",
+   "ids": [
+    "chikabu",
+    "makina",
+    "kodo_nira",
+    "ma_ha"
+   ]
+  },
+  "koku": {
+   "name": "穀",
+   "ids": [
+    "haimugi",
+    "shirokona"
+   ]
+  },
+  "koke": {
+   "name": "苔",
+   "ids": [
+    "hikari_goke",
+    "shizuku_goke",
+    "kagami_goke",
+    "inori_goke"
+   ]
+  },
+  "fuel": {
+   "name": "燃料",
+   "ids": [
+    "takigi",
+    "yakeishi",
+    "byakuro"
+   ]
+  }
+ },
+ "buffs": {
+  "power": {
+   "name": "力",
+   "text": "体当たりと武器の威力 +{p}%"
+  },
+  "guard": {
+   "name": "守り",
+   "text": "受けるダメージ -{p}%"
+  },
+  "speed": {
+   "name": "足",
+   "text": "足の速さ +{p}%"
+  },
+  "spell": {
+   "name": "呪",
+   "text": "呪文と技の威力 +{p}%"
+  },
+  "hp": {
+   "name": "体",
+   "text": "最大HP +{p}%"
+  },
+  "mp": {
+   "name": "魔",
+   "text": "最大MP +{p}%"
+  },
+  "light": {
+   "name": "灯",
+   "text": "灯りの半径 +{n}"
+  },
+  "eye": {
+   "name": "目",
+   "text": "探る・罠に気づく +{n}"
+  },
+  "hand": {
+   "name": "手",
+   "text": "解錠・罠の解除 +{n}"
+  },
+  "regen": {
+   "name": "息吹",
+   "text": "HPが少しずつ戻る"
+  },
+  "chill": {
+   "name": "寒さ除け",
+   "text": "冷たい霧・冷気の効きが半分"
+  },
+  "poison": {
+   "name": "毒除け",
+   "text": "毒の効きが半分"
+  },
+  "belly": {
+   "name": "腹持ち",
+   "text": "満腹の減りが{p}%"
+  },
+  "sleep": {
+   "name": "寝つき",
+   "text": "休んだときの回復が{x}倍"
+  }
+ },
+ "recipes": [
+  {
+   "id": "kuro_yaki",
+   "name": "黒茸の灰焼き",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "tag:take": 2
+   },
+   "n": 1,
+   "life": 8,
+   "belly": 30,
+   "buff": "guard",
+   "v": 0.06,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "焚き火の灰に埋めて焼いた茸。壁下区の子どもの、最初の料理。",
+   "icon": [
+    "plate",
+    {
+     "col": "3a3a46",
+     "kind": "shroom"
+    }
+   ]
+  },
+  {
+   "id": "niku_kushi",
+   "name": "獣肉の串焼き",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "tag:niku": 1,
+    "iwa_jio": 1
+   },
+   "n": 2,
+   "life": 8,
+   "belly": 40,
+   "buff": "power",
+   "v": 0.06,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "岩塩をすり込んで炙った獣肉。脂が火に落ちて、いい匂いがする。",
+   "icon": [
+    "skewer",
+    {
+     "col": "a85a3a"
+    }
+   ]
+  },
+  {
+   "id": "ibukuro",
+   "name": "胃袋スープ",
+   "home": false,
+   "dc": 11,
+   "in": {
+    "tag:niku": 2,
+    "tag:imo": 1,
+    "iwa_jio": 1
+   },
+   "n": 4,
+   "life": 12,
+   "belly": 50,
+   "buff": "hp",
+   "v": 0.08,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "魔物の肉を芋と煮込んだ、壁下区の名物。迷宮に「胃袋」と名付けた者たちの汁。",
+   "icon": [
+    "bowl",
+    {
+     "col": "8a5a3a",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "imo_uzumi",
+   "name": "灰芋の埋み焼き",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "tag:imo": 2
+   },
+   "n": 2,
+   "life": 10,
+   "belly": 35,
+   "buff": "belly",
+   "v": 0.6,
+   "hours": 8,
+   "kind": "grill",
+   "desc": "皮ごと灰に埋めて焼く。割ると湯気が立つ。",
+   "icon": [
+    "plate",
+    {
+     "col": "a09080",
+     "kind": "tuber"
+    }
+   ]
+  },
+  {
+   "id": "uo_shio",
+   "name": "目なし魚の塩焼き",
+   "home": false,
+   "dc": 11,
+   "in": {
+    "mekura_uo": 1,
+    "iwa_jio": 1
+   },
+   "n": 2,
+   "life": 8,
+   "belly": 30,
+   "buff": "eye",
+   "v": 2,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "目のない魚を焼くと、なぜか自分の目が冴える。",
+   "icon": [
+    "plate",
+    {
+     "col": "d8e0e8",
+     "kind": "fish"
+    }
+   ]
+  },
+  {
+   "id": "koke_kayu",
+   "name": "苔粥",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "tag:koku": 1,
+    "tag:koke": 1
+   },
+   "n": 3,
+   "life": 12,
+   "belly": 40,
+   "buff": "mp",
+   "v": 0.1,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "麦を苔と煮た、青白い粥。書院の写本師の夜食。",
+   "icon": [
+    "bowl",
+    {
+     "col": "8ab8c8",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "nira_itame",
+   "name": "坑道韮の肉炒め",
+   "home": false,
+   "dc": 12,
+   "in": {
+    "kodo_nira": 1,
+    "tag:niku": 1,
+    "jushi": 1
+   },
+   "n": 2,
+   "life": 8,
+   "belly": 40,
+   "buff": "power",
+   "v": 0.09,
+   "hours": 6,
+   "kind": "sizzle",
+   "desc": "坑夫が力をつけるときの一皿。鼻に抜ける辛さ。",
+   "icon": [
+    "plate",
+    {
+     "col": "6a8a3a",
+     "kind": "stirfry"
+    }
+   ]
+  },
+  {
+   "id": "tetsu_nabe",
+   "name": "鉄茸鍋",
+   "home": false,
+   "dc": 12,
+   "in": {
+    "tetsu_take": 2,
+    "tag:yasai": 1
+   },
+   "n": 3,
+   "life": 12,
+   "belly": 45,
+   "buff": "guard",
+   "v": 0.08,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "鉄の味のする茸を、野菜とことこと煮る。食べると肌が少し硬くなる気がする。",
+   "icon": [
+    "bowl",
+    {
+     "col": "6a6a72",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "kagami_cha",
+   "name": "鏡苔の煮出し",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "kagami_goke": 1
+   },
+   "n": 2,
+   "life": 6,
+   "belly": 10,
+   "buff": "speed",
+   "v": 0.04,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "銀色の苔を煮出した、ぴりっとする茶。足が軽くなる。",
+   "icon": [
+    "cup",
+    {
+     "liquid": "c8d0d8"
+    }
+   ]
+  },
+  {
+   "id": "yakusou_cha",
+   "name": "洞窟薬草の茶",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "yakusou": 1
+   },
+   "n": 2,
+   "life": 6,
+   "belly": 5,
+   "buff": "regen",
+   "v": 0.0008,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "苦い草を煮出した茶。傷が、ゆっくりふさがっていく。",
+   "icon": [
+    "cup",
+    {
+     "liquid": "5a8a4a"
+    }
+   ]
+  },
+  {
+   "id": "hikari_shiru",
+   "name": "光苔の汁",
+   "home": false,
+   "dc": 11,
+   "in": {
+    "hikari_goke": 2
+   },
+   "n": 2,
+   "life": 6,
+   "belly": 15,
+   "buff": "spell",
+   "v": 0.06,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "椀の中で、汁がほのかに光る。飲むと頭が冴える。",
+   "icon": [
+    "bowl",
+    {
+     "col": "6ab8e8",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "tomoshi_kushi",
+   "name": "灯り茸の串",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "tomoshi_take": 2
+   },
+   "n": 2,
+   "life": 6,
+   "belly": 20,
+   "buff": "light",
+   "v": 1,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "光る茸を串に刺して炙る。食べると、目の奥がしばらく明るい。",
+   "icon": [
+    "skewer",
+    {
+     "col": "9ad8f0"
+    }
+   ]
+  },
+  {
+   "id": "mame_shio",
+   "name": "鈴豆の塩煮",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "suzumame": 2,
+    "iwa_jio": 1
+   },
+   "n": 3,
+   "life": 24,
+   "belly": 40,
+   "buff": "belly",
+   "v": 0.6,
+   "hours": 8,
+   "kind": "simmer",
+   "desc": "豆を塩で煮ただけ。腹にたまる。",
+   "icon": [
+    "bowl",
+    {
+     "col": "c8a060",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "sunauo_aburi",
+   "name": "砂魚の炙り",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "sunauo": 1
+   },
+   "n": 1,
+   "life": 12,
+   "belly": 25,
+   "buff": "eye",
+   "v": 2,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "干物を火で炙る。隊商の男たちが、夜番の前に食べる。",
+   "icon": [
+    "plate",
+    {
+     "col": "c8a878",
+     "kind": "fish"
+    }
+   ]
+  },
+  {
+   "id": "hira_yaki",
+   "name": "野営の平焼き",
+   "home": false,
+   "dc": 11,
+   "in": {
+    "haimugi": 2,
+    "jushi": 1
+   },
+   "n": 3,
+   "life": 48,
+   "belly": 35,
+   "buff": "",
+   "v": 0,
+   "hours": 0,
+   "kind": "grill",
+   "desc": "灰麦を練って、焚き火の石で焼いた平たいパン。固いが、日持ちがする。",
+   "icon": [
+    "bread",
+    {
+     "col": "b89060",
+     "flat": true
+    }
+   ]
+  },
+  {
+   "id": "mitsu_mochi",
+   "name": "苔蜜の焼き餅",
+   "home": false,
+   "dc": 11,
+   "in": {
+    "tag:koku": 1,
+    "koke_mitsu": 1
+   },
+   "n": 2,
+   "life": 24,
+   "belly": 30,
+   "buff": "spell",
+   "v": 0.05,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "麦を練って焼き、苔蜜を塗る。甘いものは、迷宮ではめったに口に入らない。",
+   "icon": [
+    "bread",
+    {
+     "col": "d8a840",
+     "flat": true
+    }
+   ]
+  },
+  {
+   "id": "kousui_soup",
+   "name": "鉱水のスープ",
+   "home": false,
+   "dc": 12,
+   "in": {
+    "sabi_mizu": 1,
+    "tag:yasai": 1
+   },
+   "n": 2,
+   "life": 12,
+   "belly": 25,
+   "buff": "mp",
+   "v": 0.12,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "金気のある水で野菜を煮る。舌がしびれるが、魔力が満ちる。",
+   "icon": [
+    "bowl",
+    {
+     "col": "8a7a6a",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "ibushi_niku",
+   "name": "獣肉の燻し干し",
+   "home": false,
+   "dc": 13,
+   "in": {
+    "tag:niku": 2,
+    "iwa_jio": 1,
+    "tag:fuel": 1
+   },
+   "n": 3,
+   "life": 168,
+   "belly": 30,
+   "buff": "power",
+   "v": 0.05,
+   "hours": 6,
+   "kind": "smoke",
+   "desc": "煙で燻して干した肉。七夜はもつ。旅の荷の定番。",
+   "icon": [
+    "jerky",
+    {
+     "col": "7a3a2a"
+    }
+   ]
+  },
+  {
+   "id": "raku_aburi",
+   "name": "乳酪の炙り",
+   "home": false,
+   "dc": 10,
+   "in": {
+    "yagi_raku": 1,
+    "tag:koku": 1
+   },
+   "n": 2,
+   "life": 12,
+   "belly": 35,
+   "buff": "hp",
+   "v": 0.06,
+   "hours": 6,
+   "kind": "grill",
+   "desc": "固い乳酪を火にかざすと、とろりと溶ける。麦の生地に乗せて食べる。",
+   "icon": [
+    "plate",
+    {
+     "col": "f0c860",
+     "kind": "melt"
+    }
+   ]
+  },
+  {
+   "id": "kuromugi_ni",
+   "name": "黒麦酒の煮込み",
+   "home": false,
+   "dc": 12,
+   "in": {
+    "tag:niku": 1,
+    "kuromugishu": 1,
+    "tag:yasai": 1
+   },
+   "n": 3,
+   "life": 24,
+   "belly": 50,
+   "buff": "power",
+   "v": 0.07,
+   "hours": 8,
+   "kind": "simmer",
+   "desc": "肉を黒麦酒で煮込む。酒精は飛ぶが、気は大きくなる。",
+   "icon": [
+    "bowl",
+    {
+     "col": "4a2a1a",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "kotsufun_dashi",
+   "name": "骨粉茸の白湯",
+   "home": false,
+   "dc": 12,
+   "in": {
+    "kotsufun_take": 1,
+    "tag:yasai": 1
+   },
+   "n": 3,
+   "life": 12,
+   "belly": 30,
+   "buff": "hp",
+   "v": 0.06,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "白い茸から、骨のような白い出汁が出る。味は意外にやさしい。",
+   "icon": [
+    "bowl",
+    {
+     "col": "e8e4d0",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "reimu_hyouka",
+   "name": "冷霧の花の氷菓",
+   "home": false,
+   "dc": 13,
+   "in": {
+    "reimu_no_hana": 1,
+    "koke_mitsu": 1
+   },
+   "n": 2,
+   "life": 4,
+   "belly": 10,
+   "buff": "speed",
+   "v": 0.06,
+   "hours": 4,
+   "kind": "chill",
+   "desc": "霧の冷たさを閉じこめた花を、蜜と和える。四時間で溶ける。",
+   "icon": [
+    "cup",
+    {
+     "liquid": "a8d8f8",
+     "ice": true
+    }
+   ]
+  },
+  {
+   "id": "doku_nuki",
+   "name": "毒茸の毒抜き焼き",
+   "home": false,
+   "dc": 15,
+   "in": {
+    "doku_take": 1,
+    "iwa_jio": 2
+   },
+   "n": 1,
+   "life": 8,
+   "belly": 20,
+   "buff": "poison",
+   "v": 0.5,
+   "hours": 8,
+   "kind": "grill",
+   "desc": "塩で毒を抜いた茸。うまく抜ければ、毒に強くなる。焦がすと、毒に当たる。",
+   "icon": [
+    "plate",
+    {
+     "col": "8a3a8a",
+     "kind": "shroom"
+    }
+   ]
+  },
+  {
+   "id": "maha_ae",
+   "name": "魔草の葉の和え物",
+   "home": false,
+   "dc": 12,
+   "in": {
+    "ma_ha": 2,
+    "iwa_jio": 1
+   },
+   "n": 2,
+   "life": 6,
+   "belly": 15,
+   "buff": "spell",
+   "v": 0.08,
+   "hours": 6,
+   "kind": "raw",
+   "desc": "動く草木の葉を塩で揉む。まだ少し動いている。",
+   "icon": [
+    "plate",
+    {
+     "col": "4aa050",
+     "kind": "leaf"
+    }
+   ]
+  },
+  {
+   "id": "ikitake_sui",
+   "name": "息茸の吸い物",
+   "home": false,
+   "dc": 13,
+   "in": {
+    "iki_take": 1,
+    "shizuku_goke": 1
+   },
+   "n": 2,
+   "life": 8,
+   "belly": 20,
+   "buff": "regen",
+   "v": 0.0015,
+   "hours": 6,
+   "kind": "simmer",
+   "desc": "呼吸する茸の吸い物。飲むと、自分の息も深くなる。",
+   "icon": [
+    "bowl",
+    {
+     "col": "c8b8d8",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "tamago_yaki",
+   "name": "岩鶏の卵焼き",
+   "home": false,
+   "dc": 11,
+   "in": {
+    "iwadori_tamago": 2,
+    "jushi": 1
+   },
+   "n": 2,
+   "life": 12,
+   "belly": 30,
+   "buff": "speed",
+   "v": 0.04,
+   "hours": 6,
+   "kind": "sizzle",
+   "desc": "厚い殻を割って、脂で焼く。黄身が橙色に濃い。",
+   "icon": [
+    "plate",
+    {
+     "col": "f0c840",
+     "kind": "egg"
+    }
+   ]
+  },
+  {
+   "id": "haimugi_pan",
+   "name": "灰麦パン",
+   "home": true,
+   "dc": 10,
+   "in": {
+    "haimugi": 3
+   },
+   "n": 4,
+   "life": 72,
+   "belly": 35,
+   "buff": "",
+   "v": 0,
+   "hours": 0,
+   "kind": "bake",
+   "desc": "窯で焼いた、灰色のずっしりしたパン。縁環区の朝はこれで始まる。",
+   "icon": [
+    "bread",
+    {
+     "col": "9a8a70"
+    }
+   ]
+  },
+  {
+   "id": "shiro_pan",
+   "name": "白パン",
+   "home": true,
+   "dc": 12,
+   "in": {
+    "shirokona": 2,
+    "iwadori_tamago": 1
+   },
+   "n": 3,
+   "life": 48,
+   "belly": 40,
+   "buff": "hp",
+   "v": 0.05,
+   "hours": 8,
+   "kind": "bake",
+   "desc": "冠環区の食卓に上るような、柔らかい白パン。",
+   "icon": [
+    "bread",
+    {
+     "col": "f0e0c0"
+    }
+   ]
+  },
+  {
+   "id": "imo_raku_yaki",
+   "name": "灰芋の乳酪焼き",
+   "home": true,
+   "dc": 12,
+   "in": {
+    "tag:imo": 2,
+    "yagi_raku": 1
+   },
+   "n": 3,
+   "life": 24,
+   "belly": 55,
+   "buff": "guard",
+   "v": 0.07,
+   "hours": 8,
+   "kind": "bake",
+   "desc": "芋に乳酪を乗せて窯で焼く。焦げた乳酪がいちばんうまい。",
+   "icon": [
+    "plate",
+    {
+     "col": "e8c070",
+     "kind": "melt"
+    }
+   ]
+  },
+  {
+   "id": "tsubo_tsutsumi",
+   "name": "獣肉の壺包み焼き",
+   "home": true,
+   "dc": 14,
+   "in": {
+    "tag:niku": 2,
+    "shirokona": 1,
+    "tag:yasai": 1
+   },
+   "n": 4,
+   "life": 48,
+   "belly": 60,
+   "buff": "power",
+   "v": 0.09,
+   "hours": 10,
+   "kind": "bake",
+   "desc": "壺に肉と野菜を詰め、生地で蓋をして焼く。割るときが祭りだ。",
+   "icon": [
+    "pot",
+    {
+     "col": "b87a4a"
+    }
+   ]
+  },
+  {
+   "id": "nanashi_mitsu",
+   "name": "名なしの実の蜜漬け",
+   "home": true,
+   "dc": 15,
+   "in": {
+    "nanashi_no_mi": 1,
+    "koke_mitsu": 2
+   },
+   "n": 2,
+   "life": 480,
+   "belly": 30,
+   "buff": "hp",
+   "v": 0.12,
+   "hours": 12,
+   "kind": "preserve",
+   "desc": "何の味か言えない実を、蜜に沈めておく。二十夜はもつ。",
+   "icon": [
+    "jar",
+    {
+     "col": "c890d8",
+     "lid": "7a5a2a"
+    }
+   ]
+  },
+  {
+   "id": "uo_shiozuke",
+   "name": "目なし魚の塩漬け",
+   "home": true,
+   "dc": 12,
+   "in": {
+    "mekura_uo": 2,
+    "iwa_jio": 2
+   },
+   "n": 4,
+   "life": 360,
+   "belly": 25,
+   "buff": "eye",
+   "v": 2,
+   "hours": 8,
+   "kind": "preserve",
+   "desc": "白い魚を岩塩に埋めて寝かせる。十五夜はもつ。",
+   "icon": [
+    "jar",
+    {
+     "col": "d8e0e8",
+     "lid": "6a6a72"
+    }
+   ]
+  },
+  {
+   "id": "zui_kashi",
+   "name": "髄蜜の焼き菓子",
+   "home": true,
+   "dc": 16,
+   "in": {
+    "zui_mitsu": 1,
+    "shirokona": 1,
+    "iwadori_tamago": 1
+   },
+   "n": 4,
+   "life": 72,
+   "belly": 30,
+   "buff": "regen",
+   "v": 0.0015,
+   "hours": 10,
+   "kind": "bake",
+   "desc": "骨の髄に溜まる蜜で焼いた菓子。透き通った甘さ。",
+   "icon": [
+    "bread",
+    {
+     "col": "f0d8a0",
+     "cake": true
+    }
+   ]
+  },
+  {
+   "id": "honenohana_zuke",
+   "name": "骨の花の砂糖漬け",
+   "home": true,
+   "dc": 14,
+   "in": {
+    "hone_no_hana": 1,
+    "koke_mitsu": 1
+   },
+   "n": 3,
+   "life": 480,
+   "belly": 10,
+   "buff": "spell",
+   "v": 0.08,
+   "hours": 10,
+   "kind": "preserve",
+   "desc": "白い花を蜜に漬ける。西の森の霊薬師が、高く買っていくという。",
+   "icon": [
+    "jar",
+    {
+     "col": "f0f0e8",
+     "lid": "8a8a90"
+    }
+   ]
+  },
+  {
+   "id": "kuromugi_zuke",
+   "name": "獣肉の黒麦酒漬け",
+   "home": true,
+   "dc": 15,
+   "in": {
+    "tag:niku": 3,
+    "kuromugishu": 1,
+    "koushin": 1
+   },
+   "n": 5,
+   "life": 48,
+   "belly": 60,
+   "buff": "power",
+   "v": 0.1,
+   "hours": 12,
+   "kind": "simmer",
+   "desc": "肉を黒麦酒と香辛料に一晩漬けて、長く煮込む。いちばん力が出る。",
+   "icon": [
+    "bowl",
+    {
+     "col": "5a2a1a",
+     "rim": "4a3a2a"
+    }
+   ]
+  },
+  {
+   "id": "mame_himono_ni",
+   "name": "鈴豆と干物の煮込み",
+   "home": true,
+   "dc": 12,
+   "in": {
+    "suzumame": 2,
+    "sunauo": 1
+   },
+   "n": 4,
+   "life": 24,
+   "belly": 45,
+   "buff": "eye",
+   "v": 2,
+   "hours": 10,
+   "kind": "simmer",
+   "desc": "豆と干物を、とろとろになるまで煮る。隊商宿の味。",
+   "icon": [
+    "bowl",
+    {
+     "col": "b89060",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "karani",
+   "name": "隊商の辛煮",
+   "home": true,
+   "dc": 13,
+   "in": {
+    "tag:niku": 1,
+    "suzumame": 1,
+    "tag:imo": 1,
+    "koushin": 1
+   },
+   "n": 4,
+   "life": 24,
+   "belly": 55,
+   "buff": "chill",
+   "v": 0.5,
+   "hours": 10,
+   "kind": "simmer",
+   "desc": "南の王国の香辛料で煮た、真っ赤な煮込み。冷たい霧の中でも汗が出る。",
+   "icon": [
+    "bowl",
+    {
+     "col": "c83a28",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "chikabu_su",
+   "name": "血蕪の酢漬け",
+   "home": true,
+   "dc": 11,
+   "in": {
+    "chikabu": 3,
+    "iwa_jio": 1
+   },
+   "n": 4,
+   "life": 240,
+   "belly": 15,
+   "buff": "hand",
+   "v": 2,
+   "hours": 8,
+   "kind": "preserve",
+   "desc": "赤い蕪を酢と塩に漬ける。酸っぱさで、指先まで目が覚める。",
+   "icon": [
+    "jar",
+    {
+     "col": "b03848",
+     "lid": "7a5a2a"
+    }
+   ]
+  },
+  {
+   "id": "raku_ibushi",
+   "name": "乳酪の燻し",
+   "home": true,
+   "dc": 13,
+   "in": {
+    "yagi_raku": 2
+   },
+   "n": 3,
+   "life": 240,
+   "belly": 30,
+   "buff": "hp",
+   "v": 0.06,
+   "hours": 8,
+   "kind": "smoke",
+   "desc": "乳酪を煙で燻す。表は茶色く、中は白い。",
+   "icon": [
+    "plate",
+    {
+     "col": "c89040",
+     "kind": "melt"
+    }
+   ]
+  },
+  {
+   "id": "hoshi_imo",
+   "name": "干し灰芋",
+   "home": true,
+   "dc": 11,
+   "in": {
+    "tag:imo": 3
+   },
+   "n": 4,
+   "life": 240,
+   "belly": 30,
+   "buff": "belly",
+   "v": 0.6,
+   "hours": 10,
+   "kind": "preserve",
+   "desc": "芋を茹でて薄く切り、軒で干す。噛むほど甘い。",
+   "icon": [
+    "plate",
+    {
+     "col": "c8a878",
+     "kind": "slices"
+    }
+   ]
+  },
+  {
+   "id": "nemuri_yacha",
+   "name": "眠り茸の夜茶",
+   "home": true,
+   "dc": 14,
+   "in": {
+    "nemuri_take": 1,
+    "koke_mitsu": 1
+   },
+   "n": 2,
+   "life": 120,
+   "belly": 5,
+   "buff": "sleep",
+   "v": 1.3,
+   "hours": 12,
+   "kind": "simmer",
+   "desc": "眠りの胞子を、蜜でやわらげた茶。休む前に飲むと、よく眠れる。",
+   "icon": [
+    "cup",
+    {
+     "liquid": "8a78b8"
+    }
+   ]
+  },
+  {
+   "id": "inori_kayu",
+   "name": "祈りの苔の白粥",
+   "home": true,
+   "dc": 12,
+   "in": {
+    "inori_goke": 1,
+    "haimugi": 1
+   },
+   "n": 3,
+   "life": 24,
+   "belly": 35,
+   "buff": "regen",
+   "v": 0.001,
+   "hours": 10,
+   "kind": "simmer",
+   "desc": "骨の壁の白い苔を炊きこんだ粥。神殿の病人食。",
+   "icon": [
+    "bowl",
+    {
+     "col": "f0ece0",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "makina_tsutsumi",
+   "name": "巻き菜の包み煮",
+   "home": true,
+   "dc": 12,
+   "in": {
+    "makina": 2,
+    "tag:niku": 1
+   },
+   "n": 3,
+   "life": 24,
+   "belly": 45,
+   "buff": "guard",
+   "v": 0.06,
+   "hours": 8,
+   "kind": "simmer",
+   "desc": "巻き菜の葉で肉を包み、ゆっくり煮る。",
+   "icon": [
+    "bowl",
+    {
+     "col": "8ac060",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "mizukagami_hiyajiru",
+   "name": "水鏡草の冷や汁",
+   "home": true,
+   "dc": 13,
+   "in": {
+    "mizukagami_so": 1,
+    "tag:yasai": 1
+   },
+   "n": 2,
+   "life": 12,
+   "belly": 20,
+   "buff": "mp",
+   "v": 0.12,
+   "hours": 8,
+   "kind": "chill",
+   "desc": "鏡のような葉を浮かべた冷たい汁。椀に自分の顔が映る。",
+   "icon": [
+    "bowl",
+    {
+     "col": "a8d0e8",
+     "rim": "8a6a4a"
+    }
+   ]
+  },
+  {
+   "id": "tomoshi_abura",
+   "name": "灯り茸の油漬け",
+   "home": true,
+   "dc": 13,
+   "in": {
+    "tomoshi_take": 3,
+    "jushi": 1
+   },
+   "n": 3,
+   "life": 240,
+   "belly": 20,
+   "buff": "light",
+   "v": 1,
+   "hours": 10,
+   "kind": "preserve",
+   "desc": "光る茸を脂に漬ける。瓶ごと、ぼんやり光っている。",
+   "icon": [
+    "jar",
+    {
+     "col": "9ad8f0",
+     "lid": "6a6a72"
+    }
+   ]
+  }
+ ],
+ "raw_belly": {
+  "kuro_take": 10,
+  "no_hai_imo": 12,
+  "hai_imo": 12,
+  "yakusou": 3,
+  "koke_mitsu": 8,
+  "mekura_uo": 12,
+  "kotsufun_take": 10,
+  "reimu_no_hana": 5,
+  "zui_mitsu": 10,
+  "nanashi_no_mi": 15,
+  "kemono_niku": 10,
+  "tetsu_take": 8,
+  "tomoshi_take": 5,
+  "kodo_nira": 5,
+  "chikabu": 6,
+  "makina": 6,
+  "iwadori_tamago": 8,
+  "yagi_raku": 12,
+  "sunauo": 10,
+  "inori_goke": 3
+ }
+}

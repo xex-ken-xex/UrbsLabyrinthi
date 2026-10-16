@@ -30,6 +30,8 @@ func _run() -> void:
 	await _test_tempo()
 	await _test_game()
 	await _test_dive_save()
+	_test_cooking_state()
+	await _test_cooking_dive()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
 
@@ -365,6 +367,155 @@ func _test_dive_save() -> void:
 	main.return_to_surface()
 	await _step(3)
 	check(not DiveSave.exists(), "街へ戻ると、迷宮の記録は消える")
+	main.queue_free()
+	await _step(2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
+
+func _test_cooking_state() -> void:
+	print("[料理(持ち物と効き目)]")
+	var gs := GameState.new()
+	var party: Array = []
+	for cls in ["ranger", "fighter"]:
+		party.append(Character.create(cls, "human", cls, Jobs.auto_stats(cls)))
+	gs.new_game(party)
+	var a: Character = party[0]
+	check(Cooking.recipes().size() >= 40, "レシピがたくさんある (%d)" % Cooking.recipes().size())
+	var bad_ids: Array = []
+	for r in Cooking.recipes():
+		for k in r["in"]:
+			var key := String(k)
+			if key.begins_with("tag:"):
+				for id in Cooking.tag_ids(key.substr(4)):
+					if not ItemDB.ITEMS.has(String(id)):
+						bad_ids.append(id)
+			elif not ItemDB.ITEMS.has(key):
+				bad_ids.append(key)
+		if not ItemIcons.has_icon("dish_" + String(r["id"])):
+			bad_ids.append("dish_" + String(r["id"]))
+	check(bad_ids.is_empty(), "レシピの材料と絵が、全部ある %s" % str(bad_ids))
+	for id in ItemDB.SHOPS["market"]:
+		check(ItemDB.ITEMS.has(id), "市場の品 %s がある" % id)
+	# 作る: 仲間(tag:)は、どれでもよい
+	gs.add_item("kemono_niku", 2)
+	gs.add_item("hai_imo", 1)
+	gs.add_item("iwa_jio", 1)
+	var r1 := Cooking.cook(gs, "ibukuro", 20)
+	check(bool(r1["ok"]) and int(r1["q"]) == Cooking.Q_GREAT and gs.food_count() == 4, "胃袋スープを上出来で4人分作れる")
+	check(gs.count("kemono_niku") == 0 and gs.count("hai_imo") == 0 and gs.count("iwa_jio") == 0, "材料を使う")
+	check(not bool(Cooking.cook(gs, "ibukuro", 10)["ok"]), "材料が無いと作れない")
+	gs.add_item("kuro_take", 1)
+	gs.add_item("tetsu_take", 1)
+	var r2 := Cooking.cook(gs, "kuro_yaki", 1)
+	check(bool(r2["ok"]) and int(r2["q"]) == Cooking.Q_BURNT and gs.count("kuro_take") + gs.count("tetsu_take") == 0, "茸なら何でも2つ。出目1は焦げる")
+	# 食べる: 満腹が増え、効き目が付く
+	a.belly = 20.0
+	var hp0 := a.max_hp()
+	var i := -1
+	for k in gs.food.size():
+		if String(gs.food[k]["id"]) == "ibukuro":
+			i = k
+	var e := Cooking.eat(gs, i, a)
+	check(bool(e["ok"]) and a.belly > 60.0 and gs.food_count() == 4, "食べると満腹が増え、一皿へる (満腹 %.0f)" % a.belly)
+	check(a.meal_v("hp") > 0.0 and a.max_hp() > hp0, "胃袋スープで最大HPが上がる (%d → %d)" % [hp0, a.max_hp()])
+	check(absf(float(a.meal["until"]) - gs.clock - 6.0 * 60.0 * 1.5) < 1.0, "上出来は、効き目の時間が1.5倍")
+	# 一人一つ: 焦げた料理は効き目なし(前の効き目は残る)
+	var j := -1
+	for k in gs.food.size():
+		if String(gs.food[k]["id"]) == "kuro_yaki":
+			j = k
+	Cooking.eat(gs, j, a)
+	check(a.meal_v("hp") > 0.0 and a.meal_v("guard") == 0.0, "焦げた料理は効き目がない")
+	gs.add_item("kemono_niku", 1)
+	gs.add_item("iwa_jio", 1)
+	Cooking.cook(gs, "niku_kushi", 12)
+	for k in gs.food.size():
+		if String(gs.food[k]["id"]) == "niku_kushi":
+			j = k
+	Cooking.eat(gs, j, a)
+	check(a.meal_v("power") > 0.0 and a.meal_v("hp") == 0.0 and a.food_mult("power") > 1.0, "新しく食べると、効き目が入れ替わる(力)")
+	# 時間がたつと、効き目が切れ、料理はくさる
+	gs.set_clock(gs.clock + 13.0 * 60.0)
+	check(a.food_mult("power") == 1.0, "効き目は時間で切れる")
+	var rot := false
+	for s in gs.food:
+		rot = rot or Cooking.stack_name(s, gs.clock).begins_with("くさった")
+	check(rot, "日持ちを過ぎると「くさった○○」になる")
+	var b0 := a.belly
+	var er := Cooking.eat(gs, 0, a)
+	check(bool(er["rotten"]) and a.belly - b0 <= 5.01, "くさったものを食べると、腹を下す")
+	gs.add_food("ibushi_niku", 1, gs.clock + 100.0, 2)
+	var thrown := gs.throw_rotten()
+	check(thrown > 0 and gs.food_count() == 2, "くさったものだけ捨てられる (%d皿)" % thrown)
+	# 腹ぺこ
+	a.belly = 5.0
+	check(a.hunger() == "starving" and a.food_mult("power") < 1.0 and a.food_mult("speed") < 1.0, "腹ぺこだと力と足が落ちる")
+	a.belly = 25.0
+	check(a.hunger() == "hungry", "30未満で空腹")
+	# 生の自生物でも、少し満腹になる
+	a.hp = 1.0
+	gs.add_item("kuro_take", 1)
+	gs.use_item("kuro_take", a)
+	check(a.belly > 25.0, "黒茸をそのまま食べても、少し満腹になる")
+	# 記録に残る
+	a.meal = {"id": "niku_kushi", "buff": "power", "v": 0.06, "until": gs.clock + 60.0}
+	var d := gs.to_dict()
+	var gs2 := GameState.new()
+	var txt := JSON.stringify(d)
+	FileAccess.open(GameState.SAVE_PATH, FileAccess.WRITE).store_string(txt)
+	gs2.load_save()
+	var a2: Character = gs2.party[0]
+	check(gs2.food_count() == 2 and absf(a2.belly - a.belly) < 0.01 and a2.meal_v("power") > 0.0 and gs2.clock >= gs.clock, "料理、満腹、効き目、時刻が記録に残る")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
+	# 全滅で失う
+	gs.lose_everything()
+	check(gs.food_count() == 0, "全滅すると料理も失う")
+
+func _test_cooking_dive() -> void:
+	print("[料理(野営)]")
+	var main: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(main)
+	await _step(3)
+	main.show_make()
+	await _step(3)
+	main.screen._on_start()
+	await _step(3)
+	main._on_dive()
+	await _step(5)
+	main.scripted_input = true
+	var fl: FloorInstance = main.current
+	for e in fl.enemies:
+		e.state = "idle"
+	var gs: GameState = main.gs
+	check(gs.party[0].belly >= Cooking.BELLY_START - 1.0, "潜るときは、朝飯を食べて満腹 80 から")
+	gs.add_item("kemono_niku", 2)
+	gs.add_item("iwa_jio", 2)
+	var m0: float = main.dtime.minutes
+	var r: Dictionary = main.cook_dish("niku_kushi")
+	check(not bool(r["ok"]) and String(r["msg"]).contains("燃料"), "燃料が無いと、火を熾せない")
+	gs.add_item("takigi", 1)
+	r = main.cook_dish("niku_kushi")
+	check(bool(r["ok"]) and gs.count("takigi") == 0 and main.dtime.minutes - m0 >= 19.0, "焚き木で火を熾して作る。20分かかる")
+	r = main.cook_dish("niku_kushi")
+	check(bool(r["ok"]), "火があるうちは、燃料なしで続けて作れる")
+	check(not bool(main.cook_dish("haimugi_pan")["ok"]), "台所の料理は、野営では作れない")
+	gs.party[1].belly = 30.0
+	var burnt := int(gs.food[0]["q"]) == Cooking.Q_BURNT
+	var e: Dictionary = main.eat_dish(0, gs.party[1])
+	check(bool(e["ok"]) and gs.party[1].belly > 30.0 and (burnt or gs.party[1].meal_active()), "迷宮の中で食べられる")
+	# 満腹が減り、空腹で腹が鳴る
+	var c: Character = gs.party[0]
+	c.belly = 50.0
+	main.dtime.update(60.0)
+	check(c.belly < 50.0 - 5.0, "起きていると満腹が減る (%.1f)" % c.belly)
+	c.belly = 20.0
+	var h: Hero = main.heroes[0]
+	h.growl_t = 0.0
+	main.dtime.update(0.05)
+	var growl := false
+	for n in main.current.get_children():
+		if n is Sfx and (n as Sfx).text == "ぐぅ〜":
+			growl = true
+	check(growl, "空腹だと、頭上で「ぐぅ〜」と鳴る")
 	main.queue_free()
 	await _step(2)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))

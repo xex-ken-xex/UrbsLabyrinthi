@@ -20,6 +20,8 @@ var equip := {"weapon": "", "armor": "", "acc": ""}
 var skills: Array = []              # 覚えているスキルのid
 var slots: Array = ["", "", "", "", "", ""] # スキル 1〜6(数字キー。Ctrl で選んで右クリックでも使う)。0 番目(スキル1)は武器の技
 var hired := false                  # 酒場で加えた仲間(3人目と4人目)。宿で別れられる。作ったときの二人(主人公と相棒)は別れない
+var belly := Cooking.BELLY_START    # 満腹度(0〜100)。迷宮で起きていると減る。30未満で「ぐぅ〜」、10未満で力と足が落ちる
+var meal := {}                      # 料理の効き目(一人一つ) {"id", "buff", "v", "until"(世界の時刻)}。無ければ空
 var skill_sel := 0                  # Ctrl で選んでいるスキル(0 = 通常攻撃、1〜6 = slots の 0〜5)。記録しない
 const SLOTS := 6
 const WEAPON_SKILL := "@weapon"     # 武器の技。skills と slots には、この名前で入る(中身は装備している武器で決まる)
@@ -69,7 +71,44 @@ func equip_fx(key: String) -> float:
 	var acc := equip_item("acc")
 	if not acc.is_empty():
 		t += float((acc["fx"] as Dictionary).get(key, 0.0))
+	match key:
+		"hp_pct": t += meal_v("hp")
+		"mp_pct": t += meal_v("mp")
+		"light": t += meal_v("light")
 	return t
+
+# ---------- 料理と満腹 ----------
+
+## いま効いている料理の効き目(buff が違うか、切れていれば 0)
+func meal_v(buff: String) -> float:
+	if meal.is_empty() or String(meal.get("buff", "")) != buff or Cooking.clock >= float(meal.get("until", 0.0)):
+		return 0.0
+	return float(meal.get("v", 0.0))
+
+func meal_active() -> bool:
+	return not meal.is_empty() and Cooking.clock < float(meal.get("until", 0.0))
+
+## "full"(満腹) / "ok" / "hungry"(空腹) / "starving"(腹ぺこ)
+func hunger() -> String:
+	if belly < Cooking.STARVING:
+		return "starving"
+	if belly < Cooking.HUNGRY:
+		return "hungry"
+	if belly >= 80.0:
+		return "full"
+	return "ok"
+
+## 料理と空腹で変わる倍率(Hero.buff が掛ける)。power / guard / speed / spell
+func food_mult(key: String) -> float:
+	var m := 1.0
+	var v := meal_v(key)
+	if v != 0.0:
+		m *= (1.0 - v) if key == "guard" else (1.0 + v)
+	if hunger() == "starving":
+		match key:
+			"power": m *= 0.9
+			"speed": m *= 0.95
+	return m
 
 # ---------- 派生値 ----------
 
@@ -148,15 +187,15 @@ func light_bonus() -> int:
 
 ## 探る(F): 〈知覚〉と〈捜査〉の高いほう
 func search_bonus() -> int:
-	return maxi(skill_bonus("perception"), skill_bonus("investigation")) + (5 if has_feat("alert") else 0)
+	return maxi(skill_bonus("perception"), skill_bonus("investigation")) + (5 if has_feat("alert") else 0) + int(meal_v("eye"))
 
 ## 解錠と罠の解除: 【敏捷】+ 盗賊道具の習熟
 func lock_bonus() -> int:
-	return skill_bonus("thieves_tools")
+	return skill_bonus("thieves_tools") + int(meal_v("hand"))
 
 ## 受動〈知覚〉: 10 + 〈知覚〉
 func passive_perception() -> int:
-	return 10 + skill_bonus("perception") + (5 if has_feat("alert") else 0)
+	return 10 + skill_bonus("perception") + (5 if has_feat("alert") else 0) + int(meal_v("eye"))
 
 func roll_cooldown() -> float:
 	var r := 1.0 - skill_fx("acrobatics")
@@ -477,7 +516,8 @@ func clamp_resources() -> void:
 
 func to_dict() -> Dictionary:
 	return {"hired": hired, "name": name, "race": race, "cls": cls, "look": look, "level": level, "xp": xp, "stats": stats, "hp": hp, "mp": mp,
-		"equip": equip, "skills": skills, "slots": slots, "base_stats": base_stats, "profs": profs, "choices": choices, "birth": birth}
+		"equip": equip, "skills": skills, "slots": slots, "base_stats": base_stats, "profs": profs, "choices": choices, "birth": birth,
+		"belly": belly, "meal": meal}
 
 static func from_dict(d: Dictionary) -> Character:
 	var c := Character.new()
@@ -517,6 +557,10 @@ static func from_dict(d: Dictionary) -> Character:
 		c.skills.append(WEAPON_SKILL)      # 武器の技より前の記録
 	if sl.size() < SLOTS:
 		c._weapon_first()          # 枠が4つだった頃の記録: 武器の技をスキル1へ寄せ、ほかを後ろへ詰める
+	c.belly = clampf(float(d.get("belly", Cooking.BELLY_START)), 0.0, Cooking.BELLY_MAX)
+	var ml: Variant = d.get("meal", {})
+	if typeof(ml) == TYPE_DICTIONARY and not (ml as Dictionary).is_empty():
+		c.meal = {"id": String(ml.get("id", "")), "buff": String(ml.get("buff", "")), "v": float(ml.get("v", 0.0)), "until": float(ml.get("until", 0.0))}
 	c.hp = float(d.get("hp", c.max_hp()))
 	c.mp = float(d.get("mp", c.max_mp()))
 	c.clamp_resources()

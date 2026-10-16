@@ -96,6 +96,7 @@ func _draw_procedural() -> void:
 		"inn": _draw_inn()
 		"pleasure": _draw_pleasure()
 		"guild": _draw_guild()
+		"market": _draw_market()
 		_: _grad(Rect2(Vector2.ZERO, size), Color("101018"), Color("202030"))
 
 func _draw_vignette() -> void:
@@ -490,3 +491,72 @@ func _draw_guild() -> void:
 		draw_line(Vector2(lx, 0), Vector2(lx, H * 0.12), Color("1a1a1a"), 2.0)
 		_glow(Vector2(lx, H * 0.14), 36.0 * _flick(float(i) * 2.3), Color("ffc060"), 0.45, 7)
 		draw_circle(Vector2(lx, H * 0.14), 5.0, Color("ffe0a0"))
+
+## 壁下市場「灰の辻」: 坂の辻に並ぶ露店。日除けの布、麦と豆の袋、芋を焼く火と煙
+func _draw_market() -> void:
+	var W := _w()
+	var H := _h()
+	_grad(Rect2(0, 0, W, H), Color("1a1418"), Color("3a2a22"))
+	# 奥の壁下区の家並み(段々に重なる)
+	_rng.seed = 41
+	for row in 3:
+		var base := H * (0.28 + row * 0.08)
+		var x := -20.0
+		while x < W:
+			var w := _rng.randf_range(W * 0.05, W * 0.1)
+			var h := _rng.randf_range(H * 0.06, H * 0.14)
+			draw_rect(Rect2(x, base - h, w - 4, h + H * 0.3), Color(0.09 + row * 0.03, 0.08 + row * 0.025, 0.09 + row * 0.02))
+			if _rng.randf() < 0.45:
+				_glow(Vector2(x + w * 0.4, base - h * 0.5), 8.0 * _flick(x * 0.01), Color("ffb060"), 0.35, 4)
+				draw_rect(Rect2(x + w * 0.3, base - h * 0.6, 6, 7), Color("ffc070"))
+			x += w
+	# 石畳
+	var gy := H * 0.6
+	draw_rect(Rect2(0, gy, W, H - gy), Color("2c2420"))
+	for i in 9:
+		draw_line(Vector2(0, gy + i * H * 0.05), Vector2(W, gy + i * H * 0.05), Color("231c18"), 2.0)
+	# 露店(左右に三つずつ)
+	var cols := [Color("a03a2a"), Color("c89a3a"), Color("4a7a5a"), Color("7a4a8a"), Color("c86a3a"), Color("3a6a9a")]
+	for i in 6:
+		var cx: float = W * float([0.03, 0.2, 0.37, 0.6, 0.77, 0.9][i])
+		var sw: float = W * 0.15 if i != 5 else W * 0.12
+		var top := H * 0.4
+		draw_rect(Rect2(cx, top, 6, H * 0.24), Color("3a2a1a"))
+		draw_rect(Rect2(cx + sw - 6, top, 6, H * 0.24), Color("3a2a1a"))
+		var c: Color = cols[i]
+		var sway := sin(t * 1.2 + i) * 3.0
+		var pts := PackedVector2Array([Vector2(cx - 10, top + 8), Vector2(cx + sw + 10, top + 8), Vector2(cx + sw + 4, top - H * 0.06 + sway), Vector2(cx - 4, top - H * 0.06 + sway)])
+		draw_colored_polygon(pts, c)
+		for k in 5:
+			var sx := cx - 10 + (sw + 20) * k / 5.0
+			draw_colored_polygon(PackedVector2Array([Vector2(sx, top + 8), Vector2(sx + (sw + 20) / 5.0, top + 8), Vector2(sx + (sw + 20) / 10.0, top + 20)]), c.darkened(0.25))
+		# 台と品物(袋、籠、吊った干物)
+		var ty := H * 0.6
+		draw_rect(Rect2(cx - 4, ty - H * 0.05, sw + 8, H * 0.05), Color("5a3e26"))
+		_rng.seed = 100 + i
+		for k in 4:
+			var bx := cx + sw * (0.12 + k * 0.22)
+			var bc: Color = [Color("b8a070"), Color("8a7050"), Color("b03848"), Color("8ac060"), Color("e8dcc8")][_rng.randi_range(0, 4)]
+			draw_circle(Vector2(bx, ty - H * 0.07), W * 0.018, bc)
+			draw_circle(Vector2(bx - 3, ty - H * 0.08), W * 0.006, bc.lightened(0.3))
+		for k in 3:
+			var hx := cx + sw * (0.2 + k * 0.3)
+			draw_line(Vector2(hx, top + 10), Vector2(hx, top + 26), Color("4a3a2a"), 1.0)
+			draw_rect(Rect2(hx - 4, top + 26, 8, 14), Color("c8a878"))
+	# 芋を焼く火と煙(真ん中)
+	var fp := Vector2(W * 0.53, H * 0.74)
+	draw_rect(Rect2(fp.x - 40, fp.y, 80, 14), Color("3a3030"))
+	_glow(fp, 60.0 * _flick(3.1, 9.0), Color("ff9040"), 0.55, 8)
+	for k in 5:
+		var fx := fp.x - 24 + k * 12
+		draw_colored_polygon(PackedVector2Array([Vector2(fx - 6, fp.y), Vector2(fx + 6, fp.y), Vector2(fx, fp.y - 18 - 8 * _flick(k * 1.3, 11.0))]), Color("ffb040"))
+	for m in motes:
+		var k := fmod(t * m[2] * 0.3 + m[3], 1.0)
+		var mp := fp + Vector2((m[0] - 0.5) * 40.0 + sin(t + m[3] * 6.0) * 10.0 * k, -k * H * 0.4)
+		draw_circle(mp, 6.0 + 14.0 * k, Color(0.6, 0.55, 0.55, 0.18 * (1.0 - k)))
+	# 吊り提灯
+	for i in 5:
+		var lx := W * (0.1 + i * 0.2)
+		draw_line(Vector2(lx - W * 0.1, H * 0.12), Vector2(lx + W * 0.1, H * 0.12), Color("1a1410"), 1.5)
+		_glow(Vector2(lx, H * 0.15), 26.0 * _flick(float(i) * 2.1), Color("ffb060"), 0.45, 6)
+		draw_circle(Vector2(lx, H * 0.15), 6.0, Color("ffd090"))
