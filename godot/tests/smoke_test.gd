@@ -1136,9 +1136,102 @@ func _test_game() -> void:
 	main._on_continue()
 	await _step(3)
 	check(main.phase == "town" and main.gs.party.size() == 4, "つづきからで街へ戻れる")
+	await _test_time(main)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 	main.queue_free()
 	await process_frame
+
+# ---------- 迷宮の時間、休息、ワンダリング ----------
+
+func _test_time(main: Node) -> void:
+	print("[time]")
+	for c in main.gs.party:
+		c.hp = float(c.max_hp())
+		c.mp = float(c.max_mp())
+	main._on_dive()
+	await _step(3)
+	var dt: DungeonTime = main.dtime
+	var fl: FloorInstance = main.current
+	check(dt != null and dt.phase_name() == "朝" and not dt.is_night(), "潜ると朝から始まる")
+	_clear_enemies(fl)
+	# MP は迷宮では自然に戻らない
+	var h0: Hero = main.heroes[0]
+	h0.ch.mp = 0.0
+	await _step(30)
+	check(h0.ch.mp == 0.0, "迷宮では MP が自然に戻らない")
+	# 休む: 早送り、回復、6〜8時間で目を覚ます
+	for h in main.heroes:
+		h.ch.hp = h.ch.max_hp() * 0.3
+		h.ch.mp = 0.0
+	var wc := Balance.REST_WANDER_CHANCE
+	Balance.REST_WANDER_CHANCE = 0.0
+	var m0 := dt.minutes
+	main.start_rest()
+	check(dt.resting and h0.sleep_t > 0.0, "休み始めると、全員が眠る")
+	var pos0 := h0.position
+	h0.cmd["move"] = Vector2.RIGHT
+	for i in 1200:
+		await physics_frame
+		if not dt.resting:
+			break
+	var hours := (dt.minutes - m0) / 60.0
+	check(not dt.resting and hours >= 5.99 and hours <= 8.01, "6〜8時間で目を覚ます (%.1f時間)" % hours)
+	check(h0.position.distance_to(pos0) < 4.0, "眠っている間は動かない")
+	check(h0.ch.hp > h0.ch.max_hp() * 0.9 and h0.ch.mp > h0.ch.max_mp() * 0.8, "休むと HP と MP が戻る (HP %d/%d, MP %d/%d)" % [int(h0.ch.hp), h0.ch.max_hp(), int(h0.ch.mp), h0.ch.max_mp()])
+	# 中断
+	h0.ch.mp = 0.0
+	main.start_rest()
+	await _step(5)
+	dt.stop_rest("中断")
+	check(not dt.resting and h0.sleep_t == 0.0 and h0.ch.mp < h0.ch.max_mp() * 0.5, "休むのを中断できる(途中までしか戻らない)")
+	Balance.REST_WANDER_CHANCE = wc
+	# 敵に追われていると休めない
+	var en := _fake_enemy(fl, h0.position + Vector2(60, 0), 50)
+	en.state = "chase"
+	main.start_rest()
+	check(not dt.resting, "敵に追われていると休めない")
+	_clear_enemies(fl)
+	await _step(2)
+	# 寝込みを襲われる
+	main.start_rest()
+	var n0: int = fl.enemies.size()
+	var got := dt.spawn_wanderer(true)
+	check(got and fl.enemies.size() > n0 and not dt.resting and h0.sleep_t > 0.0 and h0.sleep_t <= Balance.SURPRISE_TIME, "寝込みを襲われると、休息が終わり、少しの間動けない")
+	var near := 1e9
+	for e in fl.enemies:
+		near = minf(near, e.position.distance_to(h0.position))
+	check(near < 11.0 * Balance.CELL, "奇襲の敵は近くに出る (%.0f px)" % near)
+	check(not h0.attack(), "動けない間は攻撃できない")
+	_clear_enemies(fl)
+	fl.wanderers.clear()
+	# 起きているときのワンダリングは、見えない離れた所から
+	got = dt.spawn_wanderer(false)
+	var far := 1e9
+	for e in fl.enemies:
+		far = minf(far, e.position.distance_to(h0.position))
+	check(got and far > 10.0 * Balance.CELL and fl.enemies[0].state == "chase", "ワンダリング・モンスターは離れた所に出て、向かってくる (%.0f px)" % far)
+	check(dt._alive_wanderers() == 1, "出たワンダリングを数える")
+	_clear_enemies(fl)
+	fl.wanderers.clear()
+	# 夜: 起きていると、どこかの部屋へ放り出され、朝になる
+	var room0: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(h0.position).x, fl.map.cell_of(h0.position).y)]
+	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + Balance.NIGHT_MIN - 0.01
+	await _step(3)
+	var room1: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
+	check(not dt.is_night() and dt.phase_name() == "朝" and room1 >= 0 and room1 != room0, "夜を迎えると、別の部屋へ放り出され、朝になる (部屋 %d → %d)" % [room0, room1])
+	# 夕方から休むと、夜明けまで休み続ける
+	Balance.REST_WANDER_CHANCE = 0.0
+	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + 18 * 60
+	main.start_rest()
+	for i in 2000:
+		await physics_frame
+		if not dt.resting:
+			break
+	Balance.REST_WANDER_CHANCE = wc
+	check(not dt.resting and not dt.is_night() and dt.clock() >= Balance.DAWN_MIN and dt.clock() < Balance.DAWN_MIN + 5.0, "夜にかかる休息は、夜明けまで続く (%02d:%02d)" % [int(dt.clock()) / 60, int(dt.clock()) % 60])
+	main.return_to_surface()
+	await _step(3)
+	check(main.dtime == null, "街へ戻ると、迷宮の時間は片付く")
 
 # ---------- 闘技場 ----------
 

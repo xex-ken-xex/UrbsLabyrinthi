@@ -96,6 +96,8 @@ func _draw() -> void:
 		UI.text_center(self, size_v.x / 2.0, size_v.y - 96.0, hint, 18, Color("ffe9a8"))
 	if game.arena == null:
 		_draw_minimap(fl, size_v)
+	if game.dtime != null:
+		_draw_sky(game.dtime, size_v, size_v.x - fl.map.w * 3.0 - 20.0)
 	_draw_pickups(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
@@ -103,13 +105,58 @@ func _draw() -> void:
 		var lines := ["移動: %s%s%s%s   攻撃: %s(正面へ一撃)   構え: %s   転がり: %s   スキル: %s〜%s   仲間の切替: %s" % [
 				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("guard"), H.call("dodge"),
 				H.call("skill1"), H.call("skill4"), H.call("switch")],
-			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
-				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal")],
+			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
+				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal"), H.call("rest")],
 			"魔物は触れると殴ってくる。敵のHPを削るほど押し込め、こちらのHPが減ると押される。戻る・閉じる: Esc"]
 		for i in lines.size():
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))
 	if not overlay.is_empty():
 		_draw_overlay(size_v)
+
+## 迷宮の中の時刻を、太陽と月で見せる(時計は無い)。1時間刻みで動く。
+## 昼は太陽が左(夜明け)から右(日没)へ、夜は月が同じ弧を渡る
+func _draw_sky(dt: DungeonTime, size_v: Vector2, right: float) -> void:
+	var w := 132.0
+	var hh := 46.0
+	var r := Rect2(minf(size_v.x / 2.0 - w / 2.0, right - 12.0 - w), 12.0, w, hh)
+	var c := dt.clock()
+	var hour := floorf(c / 60.0)
+	var night := dt.is_night()
+	var sky := Color("26407a")
+	if night:
+		sky = Color("0c1024")
+	elif hour < 8.0:
+		sky = Color("8a5a6a")
+	elif hour >= 17.0:
+		sky = Color("8a4a3a")
+	draw_rect(r, Color(sky.r, sky.g, sky.b, 0.75))
+	draw_rect(r, Color(1, 1, 1, 0.25), false, 1.0)
+	var base := Vector2(r.position.x + w / 2.0, r.end.y - 6.0)
+	var rad := w / 2.0 - 12.0
+	draw_line(Vector2(r.position.x + 4, base.y), Vector2(r.end.x - 4, base.y), Color(0, 0, 0, 0.5), 2.0)
+	# 弧の上の位置(0 = 左の地平、1 = 右の地平)
+	var t: float
+	if night:
+		var since := fmod(hour - Balance.NIGHT_MIN / 60.0 + 24.0, 24.0)
+		t = since / ((24.0 * 60.0 - Balance.NIGHT_MIN + Balance.DAWN_MIN) / 60.0)
+	else:
+		t = (hour - Balance.DAWN_MIN / 60.0) / ((Balance.NIGHT_MIN - Balance.DAWN_MIN) / 60.0)
+	t = clampf(t, 0.0, 1.0)
+	var p := base + Vector2(-cos(t * PI), -sin(t * PI)) * Vector2(rad, hh - 14.0)
+	if night:
+		for k in 5:
+			draw_rect(Rect2(r.position + Vector2(14.0 + k * 25.0, 8.0 + (k * 7) % 14), Vector2(2, 2)), Color(1, 1, 1, 0.6))
+		draw_circle(p, 7.0, Color("e8e4c8"))
+		draw_circle(p + Vector2(3.5, -2.5), 6.0, Color(sky.r, sky.g, sky.b, 1.0))      # 三日月
+	else:
+		draw_circle(p, 9.0, Color(1.0, 0.85, 0.35, 0.3))
+		draw_circle(p, 6.0, Color("ffd85a"))
+	UI.text_center(self, r.position.x + w / 2.0, r.end.y + 15.0, dt.phase_name(), 13, Color(0.9, 0.9, 0.95))
+	if dt.resting:
+		draw_rect(Rect2(Vector2.ZERO, size_v), Color(0.0, 0.02, 0.08, 0.35))
+		var hrs := int(floorf((dt.minutes - dt.rest_from) / 60.0))
+		UI.text_center(self, size_v.x / 2.0, size_v.y / 2.0 - 60.0, "休んでいる… %d時間" % hrs, 24, Color("e8dcb0"))
+		UI.text_center(self, size_v.x / 2.0, size_v.y / 2.0 - 32.0, "%s / %s / Esc で起きる" % [Controls.hint("rest"), Controls.hint("interact")], 14, Color(0.8, 0.85, 0.9))
 
 func _draw_pickups(fl: FloorInstance, size_v: Vector2) -> void:
 	if pickups.is_empty():

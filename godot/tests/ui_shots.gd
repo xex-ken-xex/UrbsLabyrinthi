@@ -127,6 +127,26 @@ func _run() -> void:
 	main.open_inventory()
 	await shot("dungeon_menu")
 	main.close_inventory()
+	# 迷宮の時間: 夕方、休息中、夜
+	main.dtime.minutes = 17 * 60
+	await shot("sky_dusk")
+	Balance.REST_WANDER_CHANCE = 0.0
+	main.dtime.minutes = 19 * 60
+	main.start_rest()
+	for i in 30:
+		await physics_frame
+	await shot("rest")
+	main.dtime.stop_rest("")
+	main.dtime.minutes = 23 * 60
+	main.dtime.resting = true
+	main.dtime.rest_end = 30 * 60
+	main.dtime.rest_from = 22 * 60
+	Balance.REST_RATE = 0.0
+	for i in 3:
+		await physics_frame
+	await shot("sky_night")
+	Balance.REST_RATE = 50.0
+	main.dtime.stop_rest("")
 	main.open_key_config()
 	await shot("keyconfig")
 	main.key_config._on_slot("search", "pad")
