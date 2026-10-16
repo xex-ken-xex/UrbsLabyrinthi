@@ -42,6 +42,7 @@ var _is_sheet := false
 var _tex_ver := -1
 var walk_t := 0.0             # 歩きの絵を送る時間(スプライトシート用)
 var moving := false
+var sleep_t := 0.0            # 眠っている(休息中)、または寝込みを襲われて動けない残り秒
 
 func setup(fl: FloorInstance, character: Character) -> void:
 	game_floor = fl
@@ -147,6 +148,9 @@ func _physics_process(delta: float) -> void:
 		queue_redraw()
 		return
 	apply_knock(delta)
+	if sleep_t > 0.0:
+		queue_redraw()
+		return
 	if not controlled:
 		_ai(delta)
 	_move(delta)
@@ -157,6 +161,7 @@ func _physics_process(delta: float) -> void:
 func _tick(delta: float) -> void:
 	flash = maxf(0.0, flash - delta)
 	iframes = maxf(0.0, iframes - delta)
+	sleep_t = maxf(0.0, sleep_t - delta)
 	roll_cd = maxf(0.0, roll_cd - delta)
 	atk_cd = maxf(0.0, atk_cd - delta)
 	swing_t = maxf(0.0, swing_t - delta)
@@ -168,7 +173,8 @@ func _tick(delta: float) -> void:
 			buffs.erase(k)
 	if down:
 		return
-	ch.mp = minf(ch.max_mp(), ch.mp + ch.regen_mp() * delta)
+	if game_floor.arena:
+		ch.mp = minf(ch.max_mp(), ch.mp + ch.regen_mp() * delta)     # 迷宮では自然に戻らない(休息で戻す)。闘技場だけ戻る
 	if buffs.has("regen"):
 		ch.hp = minf(ch.max_hp(), ch.hp + float(buffs["regen"]["v"]) * delta)
 
@@ -211,7 +217,7 @@ func _rush_hits() -> void:
 # ---------- 通常攻撃 ----------
 
 func can_attack() -> bool:
-	return not down and atk_cd <= 0.0 and rush_t <= 0.0 and roll_t <= 0.0
+	return not down and atk_cd <= 0.0 and rush_t <= 0.0 and roll_t <= 0.0 and sleep_t <= 0.0
 
 ## 正面へ一撃。届く範囲の魔物すべてに当たる。待ち時間のあいだは振れない
 func attack() -> bool:
@@ -256,7 +262,7 @@ func can_cast(id: String) -> bool:
 	return float(cds.get(id, 0.0)) <= 0.0 and ch.mp >= float(sk["mp"]) and rush_t <= 0.0
 
 func cast_slot(i: int) -> bool:
-	if i < 0 or i >= ch.slots.size():
+	if i < 0 or i >= ch.slots.size() or sleep_t > 0.0:
 		return false
 	var id := String(ch.slots[i])
 	if id == "":
@@ -560,6 +566,17 @@ func _draw_attack() -> void:
 		draw_rect(Rect2(-w / 2.0, y, w, 4.0), Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(-w / 2.0, y, w * attack_ready_frac(), 4.0), Color("ffe9a8"))
 
+## 眠っている間は「z」、寝込みを襲われて動けない間は「!」
+func _draw_sleep() -> void:
+	if sleep_t <= 0.0:
+		return
+	var y := -radius - (34.0 if _is_sheet else 18.0)
+	if sleep_t > Balance.SURPRISE_TIME + 0.01:
+		var t := Time.get_ticks_msec() / 1000.0
+		UI.text_center(self, 6.0 + sin(t * 2.0) * 2.0, y - fmod(t * 6.0, 6.0), "z", 12, Color(0.8, 0.85, 1.0, 0.9))
+	else:
+		UI.text_center(self, 0.0, y, "!", 16, Color("ff6a5a"))
+
 func _draw() -> void:
 	draw_set_transform(lunge)
 	var col := Jobs.class_color(ch.cls)
@@ -582,6 +599,7 @@ func _draw() -> void:
 		if controlled:
 			var my := -radius - (30.0 if _is_sheet else 14.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
+		_draw_sleep()
 		_draw_attack()
 		return
 	if down:
@@ -603,4 +621,5 @@ func _draw() -> void:
 	UI.text_center(self, 0.0, 4.0, Jobs.class_initial(ch.cls), 11, Color(0.05, 0.05, 0.08), false)
 	if controlled:
 		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 12), Vector2(5, -radius - 20), Vector2(-5, -radius - 20)]), Color("ffe9a8"))
+	_draw_sleep()
 	_draw_attack()

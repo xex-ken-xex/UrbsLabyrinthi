@@ -7,6 +7,8 @@ signal closed
 
 var gs: GameState
 var special_handler: Callable = Callable()   # (id, Character) -> bool。灯油や帰還の札のように、迷宮の中で効くもの
+var rest_handler: Callable = Callable()      # 迷宮の中だけ。「休む(野営)」
+var rest_btn: Button
 var tab := "item"
 var member := 0
 var ids: Array = []
@@ -22,9 +24,11 @@ var pick_key := ""            # 選んでいる最中の、能力値上昇・特
 var half_mode := false        # 能力値 +1 を二つに分けている途中
 var half_abil := ""           # +1 の一つ目
 
-func open(state: GameState, special: Callable = Callable()) -> void:
+func open(state: GameState, special: Callable = Callable(), rest: Callable = Callable()) -> void:
 	gs = state
 	special_handler = special
+	rest_handler = rest
+	rest_btn.visible = rest.is_valid()
 	member = clampi(member, 0, gs.party.size() - 1)
 	_refresh()
 
@@ -58,6 +62,10 @@ func _ready() -> void:
 		tabs.add_child(b)
 		if t[0] == "item":
 			b.call_deferred("grab_focus")
+	rest_btn = UIKit.button("休む(野営)", func(): if rest_handler.is_valid(): rest_handler.call(), 150)
+	rest_btn.tooltip_text = "6〜8時間休んで、HPとMPを戻す。寝込みを襲われることがある"
+	rest_btn.visible = false
+	tabs.add_child(rest_btn)
 	row.add_child(tabs)
 	var mid := UIKit.vbox(6)
 	mid.custom_minimum_size = Vector2(380, 0)

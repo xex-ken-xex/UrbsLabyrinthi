@@ -29,6 +29,7 @@ var light_pos := Vector2.ZERO
 var exhale := false
 var arena := false            # 闘技場(階段は上りだけ。魔物は後から出す)
 var enc_serial := 5000
+var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
 var _tex_ver := -1
 
