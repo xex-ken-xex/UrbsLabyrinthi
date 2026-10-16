@@ -1,6 +1,7 @@
 class_name CharaMake
 extends Control
-## キャラクター作成。名前、種族、クラス、能力値(ポイントバイ27点)で作る。「おまかせ」でクラスに合った配分になる。
+## キャラクター作成。名前、種族、クラス、能力値で作る。能力値は、ポイントバイ(27点)か、ロール式(各3d6)で決める。
+## 「おまかせ」でクラスに合った配分になる(ロール式では、振った目をクラスの優先順に並べ替える)。
 ## 始めは二人(Balance.START_PARTY)。3人目からは、宿屋で仲間に加える(recruit。一人ずつ作る)。
 
 signal finished(chars: Array)
@@ -12,7 +13,7 @@ const DEFAULT_PARTY := [["fighter", "human", "M"], ["cleric", "dwarf", "F"], ["w
 const RACE_IDS := ["human", "elf", "dwarf", "halfling"]
 const CLASS_IDS := ["fighter", "barbarian", "rogue", "wizard", "cleric", "ranger"]
 
-var slots: Array = []        # {use, name, race, cls, look, stats, picks, birth}
+var slots: Array = []        # {use, name, race, cls, look, method("buy"/"roll"), stats, picks, birth}
 var recruit := false         # 宿屋で仲間を一人加える
 var party_now: Array = []    # recruit のとき、いまの仲間(Character)。名前と、おすすめの組み合わせを避けるのに使う
 var sel := 0
@@ -26,6 +27,13 @@ var use_check: CheckBox
 var stat_rows := {}          # abil → {val, race, total, mod, minus, plus}
 var _last_total := {}        # abil → 前に出した合計。変わった数字を一瞬光らせる
 var points_label: Label
+var method_buy: Button       # 能力値の決め方: ポイントバイ
+var method_roll: Button      # 能力値の決め方: ロール式
+var roll_btn: Button
+var auto_btn: Button
+var random_btn: Button
+var _rolling := 0.0          # 振っている最中の残り時間。そのあいだ数字がくるくる変わる
+const ROLL_TIME := 1.1
 var preview: RichTextLabel
 var prof_label: Label
 var prof_checks := {}        # 技能id → CheckBox
@@ -55,7 +63,7 @@ func _ready() -> void:
 		var nm: String = NAMES[(i * 5 + 1) % NAMES.size()]
 		while taken.has(nm):
 			nm = NAMES[(NAMES.find(nm) + 1) % NAMES.size()]
-		slots.append({"use": true, "name": nm, "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0]),
+		slots.append({"use": true, "name": nm, "race": d[1], "cls": d[0], "look": d[2], "method": "buy", "stats": Jobs.auto_stats(d[0]),
 			"birth": b, "picks": Birth.apply_to_picks(b, d[0], d[1], Talents.default_picks(d[0], d[1]))})
 	_build()
 	_select(0)
@@ -95,7 +103,7 @@ func _build() -> void:
 	var mid := UIKit.panel()
 	mid.custom_minimum_size = Vector2(430, 0)
 	row.add_child(mid)
-	form = UIKit.vbox(8)
+	form = UIKit.vbox(6)
 	mid.add_child(form)
 	use_check = CheckBox.new()
 	use_check.text = "この枠を使う"
@@ -134,7 +142,16 @@ func _build() -> void:
 	var stat_grid := GridContainer.new()
 	stat_grid.columns = 7
 	stat_grid.add_theme_constant_override("h_separation", 6)
-	stat_grid.add_theme_constant_override("v_separation", 4)
+	stat_grid.add_theme_constant_override("v_separation", 1)
+	var mr := UIKit.hbox(8)
+	mr.add_child(UIKit.label("能力値の決め方", 16, UIKit.DIM))
+	method_buy = UIKit.button("ポイントバイ", _on_method.bind("buy"))
+	method_buy.toggle_mode = true
+	mr.add_child(method_buy)
+	method_roll = UIKit.button("ロール式(3d6)", _on_method.bind("roll"))
+	method_roll.toggle_mode = true
+	mr.add_child(method_roll)
+	form.add_child(mr)
 	for c in [["能力値", 54], ["", 36], ["割り振り", 62], ["", 36], ["＋種族", 64], ["＝合計", 64], ["補正", 64]]:
 		var hl := UIKit.label(String(c[0]), 13, UIKit.DIM)
 		hl.custom_minimum_size = Vector2(int(c[1]), 0)
@@ -145,14 +162,14 @@ func _build() -> void:
 		nm.custom_minimum_size = Vector2(54, 0)
 		stat_grid.add_child(nm)
 		var minus := UIKit.button("−", _on_stat.bind(a, -1))
-		minus.custom_minimum_size = Vector2(36, 32)
+		minus.custom_minimum_size = Vector2(36, 28)
 		stat_grid.add_child(minus)
 		var val := UIKit.label("10", 18, UIKit.GOLD)
 		val.custom_minimum_size = Vector2(62, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		stat_grid.add_child(val)
 		var plus := UIKit.button("＋", _on_stat.bind(a, 1))
-		plus.custom_minimum_size = Vector2(36, 32)
+		plus.custom_minimum_size = Vector2(36, 28)
 		stat_grid.add_child(plus)
 		var cols := {}
 		for k in ["race", "total", "mod"]:
@@ -163,11 +180,16 @@ func _build() -> void:
 			cols[k] = l
 		stat_rows[a] = {"val": val, "race": cols["race"], "total": cols["total"], "mod": cols["mod"], "minus": minus, "plus": plus}
 	form.add_child(stat_grid)
-	points_label = UIKit.label("", 16, UIKit.GOOD)
+	points_label = UIKit.label("", 15, UIKit.GOOD)
+	points_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	form.add_child(points_label)
 	var br := UIKit.hbox(8)
-	br.add_child(UIKit.button("おまかせ(クラスに合わせる)", _on_auto))
-	br.add_child(UIKit.button("ランダム配分", _on_random_stats))
+	roll_btn = UIKit.button("ロールする", _on_roll_stats)
+	br.add_child(roll_btn)
+	auto_btn = UIKit.button("おまかせ(クラスに合わせる)", _on_auto)
+	br.add_child(auto_btn)
+	random_btn = UIKit.button("ランダム配分", _on_random_stats)
+	br.add_child(random_btn)
 	form.add_child(br)
 	# 右: 技能の習熟と、プレビュー
 	var right := UIKit.panel()
@@ -256,6 +278,7 @@ func _refresh_slots() -> void:
 
 func _select(i: int) -> void:
 	sel = i
+	_rolling = 0.0          # 振っている最中に枠を替えたら、振り終えたことにする
 	_last_total.clear()     # 枠を替えたときは光らせない
 	_refresh_all()
 
@@ -290,6 +313,16 @@ func _refresh_form() -> void:
 		(birth_opts[k] as OptionButton).disabled = not on
 	var bonus: Dictionary = Jobs.RACES[s["race"]]["bonus"]
 	var used := Jobs.points_used(s["stats"])
+	var roll := String(s.get("method", "buy")) == "roll"
+	method_buy.set_pressed_no_signal(not roll)
+	method_roll.set_pressed_no_signal(roll)
+	method_buy.disabled = not on
+	method_roll.disabled = not on
+	roll_btn.visible = roll
+	roll_btn.disabled = not on or _rolling > 0.0
+	auto_btn.text = "クラスに合わせて並べ替え" if roll else "おまかせ(クラスに合わせる)"
+	auto_btn.disabled = not on or _rolling > 0.0
+	random_btn.visible = not roll
 	for a in Jobs.ABILS:
 		var v := int(s["stats"][a])
 		var row: Dictionary = stat_rows[a]
@@ -310,11 +343,23 @@ func _refresh_form() -> void:
 			_flash(tl)
 			_flash(ml)
 		_last_total[a] = total
-		(row["minus"] as Button).disabled = not on or v <= 8
+		(row["minus"] as Button).disabled = not on or roll or v <= 8
 		var cost_up := Jobs.point_cost(v + 1) - Jobs.point_cost(v)
-		(row["plus"] as Button).disabled = not on or v >= 15 or used + cost_up > 27
-	points_label.text = "残りポイント: %d / 27(ポイントバイ。割り振りは各8〜15)" % (27 - used)
-	points_label.add_theme_color_override("font_color", UIKit.GOOD if used <= 27 else UIKit.BAD)
+		(row["plus"] as Button).disabled = not on or roll or v >= 15 or used + cost_up > 27
+		# ロール式では ± を消す(表の列がずれないよう、見えなくするだけ)
+		for k in ["minus", "plus"]:
+			(row[k] as Button).modulate.a = 0.0 if roll else 1.0
+			(row[k] as Button).mouse_filter = Control.MOUSE_FILTER_IGNORE if roll else Control.MOUSE_FILTER_STOP
+			(row[k] as Button).focus_mode = Control.FOCUS_NONE if roll else Control.FOCUS_ALL
+	if roll:
+		var sum := 0
+		for a in Jobs.ABILS:
+			sum += int(s["stats"][a])
+		points_label.text = "ロール式: 各能力値を3d6(3〜18)で振る。合計 %d(標準の配分は72)" % sum
+		points_label.add_theme_color_override("font_color", UIKit.GOOD)
+	else:
+		points_label.text = "残りポイント: %d / 27(ポイントバイ。割り振りは各8〜15)" % (27 - used)
+		points_label.add_theme_color_override("font_color", UIKit.GOOD if used <= 27 else UIKit.BAD)
 	_refresh_picks()
 	_refresh_preview()
 
@@ -472,12 +517,14 @@ func _on_class(i: int) -> void:
 	if _updating:
 		return
 	_cur()["cls"] = CLASS_IDS[i]
-	_cur()["stats"] = Jobs.auto_stats(CLASS_IDS[i])
+	_cur()["stats"] = _sorted_rolls() if _is_roll() else Jobs.auto_stats(CLASS_IDS[i])
 	_cur()["picks"] = _birth_picks(Talents.default_picks(CLASS_IDS[i], String(_cur()["race"])))
 	_refresh_all()
 
 func _on_stat(a: String, d: int) -> void:
 	var s := _cur()
+	if _is_roll():
+		return
 	var v := int(s["stats"][a]) + d
 	if v < 8 or v > 15:
 		return
@@ -488,8 +535,72 @@ func _on_stat(a: String, d: int) -> void:
 	_refresh_form()
 
 func _on_auto() -> void:
-	_cur()["stats"] = Jobs.auto_stats(String(_cur()["cls"]))
+	_cur()["stats"] = _sorted_rolls() if _is_roll() else Jobs.auto_stats(String(_cur()["cls"]))
 	_refresh_form()
+
+func _is_roll() -> bool:
+	return String(_cur().get("method", "buy")) == "roll"
+
+## 能力値の決め方を替える。ロール式にしたら、すぐに一度振る
+func _on_method(m: String) -> void:
+	if _updating or not _cur()["use"]:
+		return
+	if String(_cur().get("method", "buy")) == m:
+		_refresh_form()
+		return
+	_cur()["method"] = m
+	if m == "roll":
+		_on_roll_stats()
+	else:
+		_rolling = 0.0
+		_cur()["stats"] = Jobs.auto_stats(String(_cur()["cls"]))
+		_refresh_form()
+
+## 各能力値を3d6で、上から順に振る。サイコロ3つぶんの擬音が画面を飛び交い、数字がしばらくくるくる回ってから止まる
+func _on_roll_stats() -> void:
+	if not _is_roll() or _rolling > 0.0:
+		return
+	var st := {}
+	for a in Jobs.ABILS:
+		st[a] = Dice.roll("3d6")
+	_cur()["stats"] = st
+	msg.text = ""
+	_rolling = ROLL_TIME if is_inside_tree() else 0.0
+	_refresh_form()
+	if _rolling > 0.0:
+		DiceFx.throw(self, Rect2(Vector2.ZERO, size))
+
+## 振った目を、クラスの優先順(大きい目から)に並べ替える
+func _sorted_rolls() -> Dictionary:
+	var vals: Array = Jobs.ABILS.map(func(a): return int(_cur()["stats"][a]))
+	vals.sort()
+	vals.reverse()
+	var prime: Array = Jobs.CLASSES[String(_cur()["cls"])]["prime"]
+	var out := {}
+	for i in prime.size():
+		out[prime[i]] = vals[i]
+	return out
+
+func _process(delta: float) -> void:
+	if _rolling <= 0.0:
+		return
+	_rolling -= delta
+	if _rolling <= 0.0:
+		_rolling = 0.0
+		_last_total.clear()
+		_refresh_form()
+		for a in Jobs.ABILS:
+			for k in ["val", "total", "mod"]:
+				_flash(stat_rows[a][k])
+		return
+	# 振っている最中は、数字がくるくる変わる(止まる直前はゆっくり)
+	if Engine.get_process_frames() % (2 if _rolling > 0.4 else 5) != 0:
+		return
+	for a in Jobs.ABILS:
+		var row: Dictionary = stat_rows[a]
+		(row["val"] as Label).text = str(randi_range(3, 18))
+		(row["total"] as Label).text = "?"
+		(row["mod"] as Label).text = ""
 
 func _on_random_stats() -> void:
 	var st := {}
@@ -510,6 +621,8 @@ func _on_random_stats() -> void:
 	_refresh_form()
 
 func _on_start() -> void:
+	if _rolling > 0.0:
+		return
 	var chars: Array = []
 	for s in slots:
 		if not s["use"]:
