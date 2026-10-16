@@ -6,7 +6,8 @@
   コマ 1〜3: 下向き(DOWN)、4〜6: 左向き(LEFT)、7〜9: 右向き(RIGHT)、10〜12: 上向き(UP)。各向きに、歩きの3コマ。
 内部は 32×32 の格子で描いて、輪郭を足し、最近傍で2倍にする(ドットの粒が、64×64 の中で 2×2 になる)。
 
-  sheet_<M|F>_<WARRIOR|CLERIC|FIGHTER|THIEF|MAGE>.png   仲間(男女 × 5種)
+  sheet_<M|F>_<WARRIOR|CLERIC|FIGHTER|THIEF|MAGE>.png   仲間(男女 × 5種。古い形。差し替えの見本)
+  sheet_<クラス>_<種族>_<M|F>.png                        仲間(6クラス × 4種族 × 男女 = 48枚)
   esheet_<SRDのindex>.png                               魔物
 使い方: python3 tools/make-sprites.py            (godot/assets/sprites/ に書く)
 """
@@ -88,6 +89,11 @@ def item(c, kind, x, y, side=False):
         c.r(x, y - 15, x, y + 3, WOOD)
     elif kind == "wand":
         c.r(x, y - 8, x, y, WOOD)
+    elif kind == "axe":
+        c.r(x, y - 9, x, y + 1, WOOD); c.r(x - 3, y - 9, x - 1, y - 5, STEEL); c.r(x - 3, y - 9, x - 3, y - 5, C("e8ecf4"))
+    elif kind == "bow":
+        c.line(x, y - 9, x + 2, y - 5, WOOD); c.r(x + 2, y - 5, x + 2, y + 1, WOOD); c.line(x + 2, y + 1, x, y + 5, WOOD)
+        c.r(x, y - 8, x, y + 4, C("e8e0c8"))
 
 
 def crystal(c, x, y, col):
@@ -177,8 +183,8 @@ def headgear_front(c, st, bob, back):
             c.r(hx0, 9 + bob, hx1, hy1 + 3, st["beard"]); c.r(14, 9 + bob, 17, 9 + bob, shade(st["beard"], 0.8))
         else:
             c.p(15, 9 + bob, shade(skin, 0.8)); c.p(16, 9 + bob, shade(skin, 0.8))
-    if back and st.get("mask") and h == "hood":
-        pass
+    if not back and h == "helmet" and st.get("beard"):
+        c.r(hx0, hy1 - 1, hx1, hy1 + 3, st["beard"]); c.r(14, hy1 - 1, 17, hy1 - 1, shade(st["beard"], 0.8))     # 兜の下から出る髭
 
 
 def wings_front(c, st, bob):
@@ -377,6 +383,8 @@ def humanoid_side(c, st, sw, bob):
             c.r(hx0 - 1, 8 + bob, 16, hy1, st["mask"])
         elif st.get("beard"):
             c.r(hx0, 9 + bob, 15, hy1 + 3, st["beard"])
+    elif h == "helmet" and st.get("beard"):
+        c.r(hx0, hy1 - 1, 15, hy1 + 3, st["beard"])
     # 腕と持ち物(手前の腕)
     ax = 15 + 2 * sw
     c.r(ax, 13 + bob, ax + 2, 17 + bob, st.get("sleeve", torso))
@@ -459,6 +467,94 @@ hero("M_MAGE", head="hat", head_col=C("5a3c98"), hat_band=GOLD, beard=C("e8e8ee"
 hero("F_MAGE", head="hat", head_col=C("4a2a78"), hat_band=C("c8a040"), hair=C("2a1c3a"), hair_long=True, torso=C("4a2a78"), robe=True,
      robe_col=C("4a2a78"), trim=GOLD, trim2=C("7a52b8"), sleeve=C("4a2a78"), cuff=GOLD, glove=SKIN_F, belt=C("8a6a30"), boots=C("2e2040"),
      right_hand=("wand", C("c07aff")))
+
+
+# ---------- 種族 × クラス × 性別(sheet_<クラス>_<種族>_<M|F>) ----------
+# クラスで服と持ち物、種族で肌・髪・耳・背丈、性別で髪型と髭を変える。
+# ドワーフとハーフリングは、胴と脚の行を抜いて背を低くする(頭の大きさはそのまま)。
+CLASS_BASE = {"fighter": "WARRIOR", "cleric": "CLERIC", "rogue": "THIEF", "wizard": "MAGE"}
+RACE_LOOK = {
+    "human": {"skin": (C("e0b48c"), C("e8bf9a")), "hair": (C("3a2e2a"), C("7a4a2a"))},
+    "elf": {"skin": (C("f0d2b4"), C("f4dcc4")), "hair": (C("d8c070"), C("e8e0c0")), "ears": True},
+    "dwarf": {"skin": (C("d09a78"), C("dca888")), "hair": (C("a8502a"), C("8a4a24")), "wide": 1, "drop": (15, 18, 23, 25)},
+    "halfling": {"skin": (C("e8b890"), C("ecc29c")), "hair": (C("6a4228"), C("8a5a30")), "drop": (14, 17, 19, 22, 24, 26)},
+}
+
+
+def barbarian(sex):
+    st = dict(head="bare", torso=C("7a5a3a"), fur=True, chest=C("a07a50"), sleeve=None, glove=C("4a3424"), belt=C("4a3424"),
+              pants=C("4a3a2c"), boots=C("5a4030"), bracer=C("6a5a4a"), right_hand="axe", shoulder=C("c8b8a0"))
+    if sex == "F":
+        st["ponytail"] = True
+    return st
+
+
+def ranger(sex):
+    return dict(head="hood", head_col=C("3a5a32"), cape=C("2e4a2a"), torso=C("4a6a3a"), chest=C("6a4a30"), sleeve=C("3a5a32"),
+                glove=C("4a3424"), belt=C("6a4a30"), pants=C("3a3a2c"), boots=C("4a3424"), right_hand="shortsword", left_hand="bow")
+
+
+def hero_look(cls, race, sex):
+    if cls in CLASS_BASE:
+        st = dict(HEROES[f"{sex}_{CLASS_BASE[cls]}"])
+    else:
+        st = barbarian(sex) if cls == "barbarian" else ranger(sex)
+    rl = RACE_LOOK[race]
+    f = 1 if sex == "F" else 0
+    skin, hair = rl["skin"][f], rl["hair"][f]
+    st["female"] = sex == "F"
+    if st.get("glove") in (SKIN, SKIN_F):
+        st["glove"] = skin
+    if st.get("sleeve") is None:
+        st["sleeve"] = skin
+    st["skin"] = skin
+    for k in ("hair", "ponytail"):
+        if st.get(k):
+            st[k] = hair
+    if st["head"] == "bare" and not st.get("hair"):
+        st["hair"] = hair
+    st.pop("beard", None)
+    if rl.get("ears"):
+        st["ears"] = True
+    if race == "dwarf":
+        st["wide"] = st.get("wide", 0) + 1
+        if sex == "M":
+            st["beard"] = hair                       # ドワーフの男は、髪と同じ色の髭
+        elif st["head"] in ("bare", "helmet", "hood"):
+            st["ponytail"] = hair                    # 女は、編んだ髪を一本
+    elif race == "human" and sex == "M" and cls in ("wizard", "cleric"):
+        st["beard"] = C("6a5a4a")                    # 人間の男の術者は、短い茶の髭
+    if race == "halfling":
+        st["boots"] = skin                           # 裸足
+        if st["head"] == "helmet":
+            st["head"] = "bare"; st["hair"] = hair
+    if race == "elf" and st["head"] == "hat" and sex == "M":
+        st["hair"] = hair; st["hair_long"] = True
+    st["_drop"] = rl.get("drop", ())
+    return st
+
+
+def render_hero(st, d, ph):
+    im = render_humanoid(st, d, ph, ol=False)
+    drop = st.get("_drop", ())
+    if d == "R":
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)    # 行を抜いてから、輪郭を足して反転し直す
+    if drop:
+        src = im.load()
+        rows = [y for y in range(G) if y not in drop]
+        c = Canvas()
+        off = G - len(rows)
+        for ny, y in enumerate(rows):
+            for x in range(G):
+                if src[x, y][3]:
+                    c.p(x, ny + off, src[x, y])
+    else:
+        c = Canvas(); c.im = im.copy(); c.px = c.im.load()
+    c.outline()
+    return c.im.transpose(Image.FLIP_LEFT_RIGHT) if d == "R" else c.im
+
+
+HERO_CLASSES = ("fighter", "barbarian", "rogue", "wizard", "cleric", "ranger")
 
 
 # ---------- 魔物 ----------
@@ -571,6 +667,12 @@ def main():
     for name, st in HEROES.items():
         sheet_from(lambda d, ph, s=st: render_humanoid(s, d, ph)).save(os.path.join(OUT, f"sheet_{name}.png"))
         n += 1
+    for cls in HERO_CLASSES:
+        for race in RACE_LOOK:
+            for sex in ("M", "F"):
+                st = hero_look(cls, race, sex)
+                sheet_from(lambda d, ph, s=st: render_hero(s, d, ph)).save(os.path.join(OUT, f"sheet_{cls}_{race}_{sex}.png"))
+                n += 1
     for key, fn in MONSTERS.items():
         sheet_from(fn).save(os.path.join(OUT, f"esheet_{key}.png"))
         n += 1

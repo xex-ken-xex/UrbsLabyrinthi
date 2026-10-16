@@ -8,6 +8,7 @@ signal open_inventory
 signal to_title
 signal arena_requested
 signal key_config
+signal recruit           # 宿屋の酒場で、仲間を一人加える
 
 const LOCATIONS := {
 	"hub": {"name": "縁環区・坑口広場", "art": "town"},
@@ -531,9 +532,42 @@ func _content_inn() -> void:
 	rest.disabled = gs.bank_silver < cost or alive == 0
 	content.add_child(rest)
 	content.add_child(UIKit.button("酒場で噂を聞く(無料)", _rumor))
+	var full := gs.party.size() >= Balance.MAX_PARTY
+	var rb := UIKit.button("酒場で仲間を探す(いま%d人 / 最大%d人)" % [gs.party.size(), Balance.MAX_PARTY], func(): recruit.emit())
+	rb.disabled = full
+	content.add_child(rb)
 	content.add_child(UIKit.button("記録をつける(セーブ)", _save))
-	content.add_child(Control.new())
 	content.add_child(UIKit.label("倒れた仲間は、宿では目を覚まさない。神殿で蘇らせること。", 14, UIKit.DIM))
+	content.add_child(Control.new())
+	content.add_child(UIKit.label("並び順(上が隊列の先頭。迷宮では先頭の仲間から操作する)", 16, UIKit.ACCENT))
+	for i in gs.party.size():
+		var c: Character = gs.party[i]
+		var row := UIKit.hbox(8)
+		var up := UIKit.button("↑", _move_member.bind(i, -1))
+		up.custom_minimum_size = Vector2(40, 32)
+		up.disabled = i == 0
+		row.add_child(up)
+		var dn := UIKit.button("↓", _move_member.bind(i, 1))
+		dn.custom_minimum_size = Vector2(40, 32)
+		dn.disabled = i == gs.party.size() - 1
+		row.add_child(dn)
+		row.add_child(UIKit.label("%d. %s  %s・%s  Lv%d" % [i + 1, c.name, Jobs.RACES[c.race]["name"], Jobs.CLASSES[c.cls]["name"], c.level], 16,
+			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT))
+		content.add_child(row)
+
+## 並び順を一つ動かす(先頭が、迷宮で最初に操作する仲間で、隊列の先頭)
+func _move_member(i: int, d: int) -> void:
+	var j := i + d
+	if j < 0 or j >= gs.party.size():
+		return
+	var c: Character = gs.party[i]
+	gs.party[i] = gs.party[j]
+	gs.party[j] = c
+	gs.save()
+	_say("%sを%d番目にした。" % [c.name, j + 1], UIKit.TEXT)
+	_refresh_top()
+	_build_content()
+	call_deferred("_refocus_content")
 
 func _rest(cost: int) -> void:
 	if gs.bank_silver < cost:

@@ -1,7 +1,7 @@
 class_name CharaMake
 extends Control
-## キャラクター作成。最大4人のパーティを、名前、種族、クラス、能力値(ポイントバイ27点)で作る。
-## 「おまかせ」でクラスに合った配分になる。
+## キャラクター作成。名前、種族、クラス、能力値(ポイントバイ27点)で作る。「おまかせ」でクラスに合った配分になる。
+## 始めは二人(Balance.START_PARTY)。3人目からは、宿屋で仲間に加える(recruit。一人ずつ作る)。
 
 signal finished(chars: Array)
 signal cancelled
@@ -13,6 +13,8 @@ const RACE_IDS := ["human", "elf", "dwarf", "halfling"]
 const CLASS_IDS := ["fighter", "barbarian", "rogue", "wizard", "cleric", "ranger"]
 
 var slots: Array = []        # {use, name, race, cls, look, stats, picks, birth}
+var recruit := false         # 宿屋で仲間を一人加える
+var party_now: Array = []    # recruit のとき、いまの仲間(Character)。名前と、おすすめの組み合わせを避けるのに使う
 var sel := 0
 var _updating := false
 var slot_box: VBoxContainer
@@ -42,10 +44,16 @@ func _ready() -> void:
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
-	for i in Balance.MAX_PARTY:
-		var d: Array = DEFAULT_PARTY[i]
+	var n := 1 if recruit else Balance.START_PARTY
+	var taken: Array = party_now.map(func(c): return c.name)
+	for k in n:
+		var i := party_now.size() + k if recruit else k
+		var d: Array = DEFAULT_PARTY[i % DEFAULT_PARTY.size()]
 		var b := Birth.roll()
-		slots.append({"use": true, "name": NAMES[(i * 5 + 1) % NAMES.size()], "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0]),
+		var nm: String = NAMES[(i * 5 + 1) % NAMES.size()]
+		while taken.has(nm):
+			nm = NAMES[(NAMES.find(nm) + 1) % NAMES.size()]
+		slots.append({"use": true, "name": nm, "race": d[1], "cls": d[0], "look": d[2], "stats": Jobs.auto_stats(d[0]),
 			"birth": b, "picks": Birth.apply_to_picks(b, d[0], d[1], Talents.default_picks(d[0], d[1]))})
 	_build()
 	_select(0)
@@ -58,8 +66,12 @@ func _build() -> void:
 	add_child(margin)
 	var root := UIKit.vbox(10)
 	margin.add_child(root)
-	root.add_child(UIKit.label("パーティを作る", 30, UIKit.GOLD))
-	root.add_child(UIKit.label("最大4人。操作するのは一人で、残りは自分で戦う。クラスの組み合わせを考えよう。", 14, UIKit.DIM))
+	if recruit:
+		root.add_child(UIKit.label("仲間に加える", 30, UIKit.GOLD))
+		root.add_child(UIKit.label("酒場で声をかけた相手だ。いまの仲間 %d人に、一人加わる(最大%d人)。" % [party_now.size(), Balance.MAX_PARTY], 14, UIKit.DIM))
+	else:
+		root.add_child(UIKit.label("パーティを作る", 30, UIKit.GOLD))
+		root.add_child(UIKit.label("始めは%d人。操作するのは一人で、もう一人は自分で戦う。仲間は、宿屋の酒場で最大%d人まで増やせる。" % [Balance.START_PARTY, Balance.MAX_PARTY], 14, UIKit.DIM))
 	var row := UIKit.hbox(14)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(row)
@@ -199,17 +211,20 @@ func _build() -> void:
 	var bot := UIKit.hbox(12)
 	root.add_child(bot)
 	bot.add_child(UIKit.button("戻る", func(): cancelled.emit(), 140))
-	start_btn = UIKit.button("このパーティで街へ", _on_start, 280)
+	start_btn = UIKit.button("仲間に加える" if recruit else "このパーティで街へ", _on_start, 280)
 	bot.add_child(start_btn)
 
 func _refresh_slots() -> void:
 	UIKit.clear(slot_box)
 	slot_box.add_child(UIKit.label("パーティ", 18, UIKit.GOLD))
+	for i in party_now.size():
+		var c: Character = party_now[i]
+		slot_box.add_child(UIKit.label("%d. %s\n    %s・%s" % [i + 1, c.name, Jobs.RACES[c.race]["name"], Jobs.CLASSES[c.cls]["name"]], 15, UIKit.DIM))
 	for i in slots.size():
 		var s: Dictionary = slots[i]
-		var txt := "%d. (空き)" % (i + 1)
+		var txt := "%d. (空き)" % (party_now.size() + i + 1)
 		if s["use"]:
-			txt = "%d. %s\n    %s・%s" % [i + 1, s["name"], Jobs.RACES[s["race"]]["name"], Jobs.CLASSES[s["cls"]]["name"]]
+			txt = "%d. %s\n    %s・%s" % [party_now.size() + i + 1, s["name"], Jobs.RACES[s["race"]]["name"], Jobs.CLASSES[s["cls"]]["name"]]
 		var b := UIKit.button(txt, _select.bind(i))
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.custom_minimum_size = Vector2(0, 56)
@@ -229,6 +244,7 @@ func _refresh_all() -> void:
 	var s := _cur()
 	use_check.button_pressed = s["use"]
 	use_check.disabled = sel == 0
+	use_check.visible = not recruit
 	name_edit.text = s["name"]
 	race_opt.select(RACE_IDS.find(s["race"]))
 	class_opt.select(CLASS_IDS.find(s["cls"]))
@@ -342,7 +358,7 @@ func _on_name(txt: String) -> void:
 	_refresh_preview()
 
 func _on_random_name() -> void:
-	var used: Array = []
+	var used: Array = party_now.map(func(c): return c.name)
 	for s in slots:
 		used.append(s["name"])
 	var pool: Array = NAMES.filter(func(n): return not used.has(n))
@@ -456,6 +472,9 @@ func _on_start() -> void:
 			continue
 		if String(s["name"]).strip_edges() == "":
 			msg.text = "名前のない仲間がいる"
+			return
+		if party_now.any(func(c): return c.name == String(s["name"]).strip_edges()):
+			msg.text = "%sという名前の仲間は、もういる" % String(s["name"]).strip_edges()
 			return
 		if not Talents.picks_valid(s["cls"], s["picks"]):
 			msg.text = "%sの技能を選び終えていない(クラスの一覧から%dつ、ほかに%dつ)" % [s["name"], int(Talents.CLASS_PROF[s["cls"]]["count"]), Talents.BACKGROUND_COUNT]

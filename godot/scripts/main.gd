@@ -198,6 +198,31 @@ func show_make() -> void:
 	m.finished.connect(_on_party_made)
 	_set_screen(m)
 
+## 宿屋の酒場で、仲間を一人加える
+func show_recruit() -> void:
+	if gs.party.size() >= Balance.MAX_PARTY:
+		return
+	phase = "make"
+	var m := CharaMake.new()
+	m.recruit = true
+	m.party_now = gs.party.duplicate()
+	m.cancelled.connect(_back_to_inn.bind(""))
+	m.finished.connect(_on_recruited)
+	_set_screen(m)
+
+func _on_recruited(chars: Array) -> void:
+	for c in chars:
+		if gs.party.size() < Balance.MAX_PARTY:
+			gs.party.append(c)
+	_back_to_inn("%sが仲間に加わった。" % chars[0].name if not chars.is_empty() else "")
+
+func _back_to_inn(said: String) -> void:
+	go_town([])
+	if screen is TownScreen:
+		(screen as TownScreen)._go("inn")
+		if said != "":
+			(screen as TownScreen)._say(said, UIKit.GOOD)
+
 func _on_party_made(chars: Array) -> void:
 	gs.new_game(chars)
 	go_town(["「ようこそ、ヴェルガ・ノクスへ。許可証は灰等級から。」", "預け金 %d銀貨。装備と薬を整えてから、迷宮へ。" % gs.bank_silver])
@@ -231,6 +256,7 @@ func go_town(report: Array) -> void:
 	t.arena_requested.connect(start_arena)
 	t.to_title.connect(show_title)
 	t.key_config.connect(open_key_config)
+	t.recruit.connect(show_recruit)
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)

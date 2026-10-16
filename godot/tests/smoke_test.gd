@@ -377,11 +377,12 @@ func _test_sheets(dir: String) -> void:
 	check(steps == [0, 1, 2, 1, 0] and Assets.sheet_frame(2, 7.0, false) == 7, "歩きは 0,1,2,1 と回り、止まると真ん中のコマ")
 	var bad := 0
 	for cls in Jobs.CLASSES:
-		for look in ["M", "F"]:
-			var v := Assets.hero_visual("だれか", cls, "human", look)
-			if not v["sheet"] or v["tex"].get_width() != 768 or v["tex"].get_height() != 64:
-				bad += 1
-	check(bad == 0, "6クラス × 男女の、同梱のスプライトシート(768×64)が揃っている (不足 %d)" % bad)
+		for race in Jobs.RACES:
+			for look in ["M", "F"]:
+				var v := Assets.hero_visual("だれか", cls, race, look)
+				if not v["sheet"] or v["tex"].get_width() != 768 or v["tex"].get_height() != 64 or v["tex"] != Assets.sheet("sheet_%s_%s_%s" % [cls, race, look]):
+					bad += 1
+	check(bad == 0, "6クラス × 4種族 × 男女の、同梱のスプライトシート(768×64)が揃っている (不足 %d)" % bad)
 	var ev := Assets.enemy_visual("giant-rat", "beast")
 	check(ev["sheet"] and Assets.enemy_visual("skeleton", "undead")["sheet"] and Assets.enemy_visual("x-unknown", "unknown")["tex"] == null, "魔物のシートは、あるものだけ使い、無ければ元の絵")
 	var encd: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/encounter-data.json"))
@@ -918,14 +919,37 @@ func _test_game() -> void:
 	make._on_start()
 	check(main.phase != "town" and make.msg.text.contains("技能"), "技能を選び終えていないと、始められない")
 	make._on_auto_picks()
-	make._select(3)
+	check(make.slots.size() == Balance.START_PARTY, "始めは%d人の枠" % Balance.START_PARTY)
+	make._select(1)
 	make._on_use(false)
-	check(not make.slots[3]["use"], "3番目以降の枠は空にできる")
+	check(not make.slots[1]["use"], "2番目の枠は空にできる")
 	make._on_use(true)
 	make._on_start()
 	await _step(3)
-	check(main.phase == "town" and main.gs.party.size() == 4 and main.screen is TownScreen, "街へ着く (仲間%d人)" % main.gs.party.size())
+	check(main.phase == "town" and main.gs.party.size() == 2 and main.screen is TownScreen, "二人で街へ着く (仲間%d人)" % main.gs.party.size())
+	# 宿屋の酒場で、仲間を加える
+	for k in 2:
+		(main.screen as TownScreen)._go("inn")
+		(main.screen as TownScreen).recruit.emit()
+		await _step(2)
+		check(main.screen is CharaMake and (main.screen as CharaMake).recruit and (main.screen as CharaMake).slots.size() == 1, "酒場で仲間を作る画面が開く")
+		var rm: CharaMake = main.screen
+		check(not rm.party_now.any(func(c): return c.name == String(rm.slots[0]["name"])), "いまの仲間と名前が重ならない")
+		rm._on_start()
+		await _step(3)
+	check(main.screen is TownScreen and main.gs.party.size() == 4 and (main.screen as TownScreen).location == "inn", "仲間が4人になり、宿屋へ戻る")
+	main.show_recruit()
+	check(main.screen is TownScreen, "4人いると、もう加えられない")
 	var town: TownScreen = main.screen
+	# 並び替え
+	var p0: Character = main.gs.party[0]
+	var p1: Character = main.gs.party[1]
+	town._move_member(0, 1)
+	check(main.gs.party[0] == p1 and main.gs.party[1] == p0, "宿屋で並び順を入れ替えられる")
+	town._move_member(0, -1)
+	check(main.gs.party[0] == p1, "先頭より上へは動かない")
+	town._move_member(1, -1)
+	check(main.gs.party[0] == p0, "元に戻す")
 	# 店
 	var bank0: int = main.gs.bank_silver
 	var ls_cost: int = main.gs.buy_price("longsword")

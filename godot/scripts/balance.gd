@@ -17,6 +17,7 @@ const ROLL_TIME := 0.22
 const ROLL_COOLDOWN := 0.8
 const LIGHT_RADIUS := 7                # 灯りの半径(マス)
 const MAX_PARTY := 4
+const START_PARTY := 2                 # 始めの人数。残りは宿屋の酒場で加える
 
 # 体当たり(ハイドライド式)の押し合い。魔物は触れている間、一定間隔でダメージを与える(仲間は通常攻撃で殴る)
 static var BUMP_TICK := 0.25                # ダメージが入る間隔(秒)
