@@ -199,22 +199,22 @@ func _draw_skillbar(size_v: Vector2) -> void:
 	var af := h.attack_ready_frac()
 	draw_rect(Rect2(ar.position, Vector2(ar.size.x * af, ar.size.y)), Color(0.55, 0.42, 0.2, 0.55) if af < 1.0 else Color(0.55, 0.42, 0.2, 0.25))
 	UI.text(self, ar.position + Vector2(8, 18), "[%s] 攻撃" % Controls.hint("attack"), 14, Color("e8dcb0") if af >= 1.0 else Color(0.7, 0.7, 0.72), false)
-	UI.text(self, ar.position + Vector2(8, 36), "待ち %.1f秒" % Balance.ATTACK_CD, 12, Color(0.7, 0.7, 0.75), false)
+	UI.text(self, ar.position + Vector2(8, 36), "%s 待ち %.1f秒" % [ItemDB.WEAPON_CAT_JP.get(h.ch.weapon_cat(), "素手"), h.attack_cd()], 12, Color(0.7, 0.7, 0.75), false)
 	draw_rect(ar, Color("e8dcb0") if af >= 1.0 else Color(1, 1, 1, 0.18), false, 1.5 if af >= 1.0 else 1.0)
 	for i in 4:
 		var id := String(h.ch.slots[i])
 		var r := Rect2(x0 + i * (w + 6.0), y0, w, 44)
 		draw_rect(r, Color(0, 0, 0, 0.6))
 		var ready := false
-		if id != "":
-			var sk: Dictionary = Jobs.SKILLS[id]
+		var sk := h.ch.skill_def(id) if id != "" else {}
+		if not sk.is_empty():
 			var cd := float(h.cds.get(id, 0.0))
 			ready = h.can_cast(id)
 			var full := float(sk["cd"])
 			if cd > 0.0 and full > 0.0:
 				draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(cd / full, 0.0, 1.0), r.size.y)), Color(0.3, 0.3, 0.35, 0.7))
 			var nocol := Color("e8dcb0") if ready else Color(0.6, 0.6, 0.65)
-			UI.text(self, r.position + Vector2(8, 18), "[%d] %s" % [i + 1, sk["name"]], 14, nocol, false)
+			UI.text(self, r.position + Vector2(8, 18), "[%d] %s" % [i + 1, h.ch.skill_label(id)], 14, nocol, false)
 			var mp_ok := h.ch.mp >= float(sk["mp"])
 			UI.text(self, r.position + Vector2(8, 36), "MP %d" % int(sk["mp"]), 12, Color("7ab0ff") if mp_ok else Color("ff7a6a"), false)
 		else:

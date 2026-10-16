@@ -35,6 +35,13 @@ const BASE_ITEMS := {
 	"quarterstaff": {"name": "杖", "kind": "weapon", "cat": "staff", "power": 1.0, "price": 30, "desc": "ただの木の杖。"},
 	"crystal_staff": {"name": "魔晶の杖", "kind": "weapon", "cat": "staff", "power": 1.5, "spell": 2.0, "price": 300, "desc": "燐晶を嵌めた杖。呪文の威力+2。"},
 	"shortbow": {"name": "短弓", "kind": "weapon", "cat": "bow", "power": 1.5, "spell": 1.0, "price": 150, "desc": "軽い弓。矢の威力+1。"},
+	# 珍しい武器(店に無い。遺体から、まれに出る)。tech で固有の技
+	"shadow_dagger": {"name": "影縫いの短剣", "kind": "weapon", "cat": "dagger", "power": 2.0, "price": 600, "rare": true, "tech": "w_shadow",
+		"desc": "刃が光を吸う短剣。持ち主の影は、いつも少し遅れてついてくる。技「影縫い」。"},
+	"miner_pick": {"name": "坑夫の大鶴嘴", "kind": "weapon", "cat": "axe", "power": 5.5, "price": 650, "rare": true, "tech": "w_rend",
+		"desc": "錆鉄の坑道で使われていた、両手の鶴嘴。技「大地割り」。"},
+	"comet_spear": {"name": "流星の槍", "kind": "weapon", "cat": "spear", "power": 3.5, "price": 700, "rare": true, "tech": "w_comet",
+		"desc": "穂先に燐晶の欠片が嵌まった槍。投げても手元へ戻る。技「流星投げ」。"},
 	"longbow": {"name": "長弓", "kind": "weapon", "cat": "bow", "power": 3.0, "spell": 2.5, "price": 380, "desc": "長い弓。矢の威力+2.5。"},
 	# --- 防具 ---
 	"robe": {"name": "ローブ", "kind": "armor", "type": "none", "ac": 1, "price": 30, "desc": "ただの布。"},
@@ -72,6 +79,7 @@ const SHOPS := {
 	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash"],
 }
 
+const RARE_WEAPONS := ["shadow_dagger", "miner_pick", "comet_spear"]
 const WEAPON_CAT_JP := {"sword": "剣", "dagger": "短剣", "blunt": "鈍器", "axe": "斧", "spear": "槍", "staff": "杖", "bow": "弓"}
 const ARMOR_TYPE_JP := {"none": "布", "light": "軽装", "medium": "中装", "heavy": "重装"}
 
@@ -108,7 +116,7 @@ static func roll_gear(floor_no: int, rng: RandomNumberGenerator) -> String:
 	for id in BASE_ITEMS:
 		var it: Dictionary = BASE_ITEMS[id]
 		var k := String(it["kind"])
-		if (k == "weapon" or k == "armor" or k == "acc") and int(it["price"]) <= cap:
+		if (k == "weapon" or k == "armor" or k == "acc") and int(it["price"]) <= cap and not it.get("rare", false):
 			pool.append(id)
 	return "" if pool.is_empty() else String(pool[rng.randi_range(0, pool.size() - 1)])
 
@@ -121,6 +129,11 @@ static func detail(id: String) -> String:
 	match String(it["kind"]):
 		"weapon":
 			s += "\n種類: %s   体当たり +%.1f" % [WEAPON_CAT_JP[it["cat"]], float(it["power"])]
+			var sw: Dictionary = Balance.SWING.get(String(it["cat"]), Balance.SWING["none"])
+			s += "\n振り方: 届く %d   待ち ×%.2f   押し返し ×%.1f%s" % [int(sw["reach"]), float(sw["cd"]), float(sw["knock"]), ("   怯ませ %d%%" % int(float(sw["stun"]) * 100.0)) if sw.has("stun") else ""]
+			var tid := String(it.get("tech", Jobs.WEAPON_TECH.get(String(it["cat"]), "")))
+			if tid != "":
+				s += "\n武器の技: %s%s(MP%d) %s" % ["[珍品] " if it.get("rare", false) else "", Jobs.SKILLS[tid]["name"], int(Jobs.SKILLS[tid]["mp"]), Jobs.SKILLS[tid]["desc"]]
 			if it.has("spell"):
 				s += "   技の威力 +%.1f" % float(it["spell"])
 		"armor":

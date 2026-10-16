@@ -49,6 +49,7 @@ var shown_alert := 0.0
 var slow_t := 0.0
 var slow_v := 0.5
 var stun_t := 0.0
+var sunder_t := 0.0          # 守りを割られている秒(受けるダメージが Balance.SUNDER_MULT 倍)
 var target: Hero = null
 var _tex: Texture2D = null
 var _is_sheet := false
@@ -147,6 +148,8 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	if dead:
 		return
 	var red := clampf((ac - 10) * 0.03, 0.0, 0.45)
+	if sunder_t > 0.0:
+		amount *= Balance.SUNDER_MULT
 	if src is Hero and is_instance_valid(src):
 		amount *= (src as Hero).ch.dealt_mult(mon_type())
 	var final := maxf(0.05, amount * (1.0 - red))
@@ -171,6 +174,9 @@ func apply_slow(secs: float, v: float = 0.45) -> void:
 
 func apply_stun(secs: float) -> void:
 	stun_t = maxf(stun_t, secs)
+
+func apply_sunder(secs: float) -> void:
+	sunder_t = maxf(sunder_t, secs)
 
 func _die() -> void:
 	dead = true
@@ -247,6 +253,7 @@ func _physics_process(delta: float) -> void:
 	atk_cd = maxf(0.0, atk_cd - delta)
 	slow_t = maxf(0.0, slow_t - delta)
 	stun_t = maxf(0.0, stun_t - delta)
+	sunder_t = maxf(0.0, sunder_t - delta)
 	pop_update(delta)
 	apply_knock(delta)
 	var c := game_floor.map.cell_of(position)

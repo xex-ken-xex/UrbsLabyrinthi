@@ -116,9 +116,35 @@ const SKILLS := {
 		"desc": "前方の敵を3秒間、眠らせて動けなくする。"},
 	"regen_light": {"name": "再生の光", "mp": 6, "cd": 20.0, "kind": "regen_party", "dur": 12.0, "amount": 1.0, "stat": 0.4, "spell": true,
 		"desc": "12秒間、仲間全員のHPがじわじわ回復する。"},
+	# 武器の技(装備している武器の種類で決まる。WEAPON_TECH。珍しい武器は items.gd の tech で固有の技)
+	# kind strike: 正面へ打つ。reach(体の縁から届く画素)、arc(左右の角度)、hits(当たる回数)、stun / slow / sunder(被ダメージ増の秒)
+	"w_spin": {"name": "回転斬り", "mp": 3, "cd": 8.0, "kind": "burst_self", "dmg": 6.0, "stat": 0.8, "lv": 1.0, "radius": 60.0, "knock": 140.0, "weapon": true,
+		"desc": "剣の技。その場で回り、周りの敵をまとめて斬る。"},
+	"w_twin": {"name": "二連突き", "mp": 2, "cd": 4.0, "kind": "strike", "dmg": 3.0, "stat": 0.7, "lv": 0.6, "reach": 20.0, "arc": 35.0, "hits": 2, "weapon": true,
+		"desc": "短剣の技。正面の敵を素早く二度突く。"},
+	"w_cleave": {"name": "叩き割り", "mp": 3, "cd": 8.0, "kind": "strike", "dmg": 7.0, "stat": 0.9, "lv": 1.1, "reach": 24.0, "arc": 50.0, "sunder": 6.0, "knock": 120.0, "weapon": true,
+		"desc": "斧の技。重い一撃で守りを割り、6秒間、受けるダメージを増やす。"},
+	"w_stun": {"name": "気絶打ち", "mp": 3, "cd": 8.0, "kind": "strike", "dmg": 4.0, "stat": 0.7, "lv": 0.8, "reach": 22.0, "arc": 45.0, "stun": 1.5, "knock": 160.0, "weapon": true,
+		"desc": "鈍器の技。頭を打ち、1.5秒間、気絶させる。"},
+	"w_pierce": {"name": "突き通し", "mp": 3, "cd": 6.0, "kind": "strike", "dmg": 6.0, "stat": 0.9, "lv": 1.0, "reach": 80.0, "arc": 10.0, "knock": 160.0, "weapon": true,
+		"desc": "槍の技。一列に並んだ敵をまとめて、遠くまで突き通す。"},
+	"w_aim": {"name": "狙い撃ち", "mp": 3, "cd": 6.0, "kind": "projectile", "dmg": 9.0, "stat": 1.1, "lv": 1.2, "range": 400.0, "speed": 560.0, "pierce": true, "weapon": true,
+		"desc": "弓の技。狙いを定めた一矢が、敵を貫いて遠くまで飛ぶ。"},
+	"w_focus": {"name": "魔力の溜め", "mp": 0, "cd": 20.0, "kind": "buff_self", "dur": 8.0, "mult": {"spell": 1.4}, "weapon": true,
+		"desc": "杖の技。8秒間、呪文の威力が1.4倍になる。"},
+	# 珍しい武器の固有の技
+	"w_shadow": {"name": "影縫い", "mp": 3, "cd": 7.0, "kind": "strike", "dmg": 3.0, "stat": 0.7, "lv": 0.6, "reach": 20.0, "arc": 40.0, "hits": 3, "stun": 0.8, "weapon": true,
+		"desc": "影縫いの短剣の技。影を三度刺し、0.8秒間、縫い止める。"},
+	"w_rend": {"name": "大地割り", "mp": 5, "cd": 10.0, "kind": "burst_ahead", "dmg": 11.0, "stat": 1.0, "lv": 1.4, "radius": 70.0, "ahead": 50.0, "knock": 220.0, "sunder": 6.0, "weapon": true,
+		"desc": "坑夫の大鶴嘴の技。前の床ごと叩き割り、まわりの敵の守りも割る。"},
+	"w_comet": {"name": "流星投げ", "mp": 4, "cd": 7.0, "kind": "projectile", "dmg": 12.0, "stat": 1.0, "lv": 1.4, "range": 360.0, "speed": 600.0, "pierce": true, "slow": 2.0, "weapon": true,
+		"desc": "流星の槍の技。光る穂先を投げ、一列を貫いて足を止める(槍は手元に戻る)。"},
 	"flash": {"name": "閃光", "mp": 4, "cd": 12.0, "kind": "burst_self", "dmg": 0.0, "radius": 100.0, "stun": 1.8, "spell": true,
 		"desc": "周囲の敵を1.8秒間、怯ませて止める。"},
 }
+
+## 武器の種類 → 武器の技
+const WEAPON_TECH := {"sword": "w_spin", "dagger": "w_twin", "axe": "w_cleave", "blunt": "w_stun", "spear": "w_pierce", "bow": "w_aim", "staff": "w_focus"}
 
 static func class_color(cls: String) -> Color:
 	return Color.html(String(CLASSES[cls]["color"]))

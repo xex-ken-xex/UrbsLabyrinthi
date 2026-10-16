@@ -309,6 +309,8 @@ func search_corpse(e: Dictionary) -> Array:
 		fl.message.emit("遺体の陰から、%sが現れた!" % nm, "danger")
 	return made
 
+const RARE_WEAPON_CHANCE := 0.04     # 遺体から、珍しい武器(固有の技つき)が出る確率
+
 func _loot_corpse(e: Dictionary) -> void:
 	var pos: Vector2 = e["pos"]
 	fl.message.emit("遺体を調べた", "info")
@@ -323,6 +325,8 @@ func _loot_corpse(e: Dictionary) -> void:
 		var gid := ItemDB.roll_gear(fl.layer_no, Dice.rng)
 		if gid != "":
 			add_item(pos, gid, 1, _burst(110.0))
+	if Dice.rng.randf() < RARE_WEAPON_CHANCE:
+		add_item(pos, String(ItemDB.RARE_WEAPONS[Dice.rng.randi_range(0, ItemDB.RARE_WEAPONS.size() - 1)]), 1, _burst(110.0))
 	var rows := _forage_table()
 	if not rows.is_empty() and Dice.rng.randf() < 0.2:
 		add_item(pos, String((rows[Dice.rng.randi_range(0, rows.size() - 1)] as Array)[0]), 1, _burst(110.0))

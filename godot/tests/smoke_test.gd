@@ -1474,6 +1474,88 @@ func _test_encounter_gen() -> void:
 		xs.append(t / 80)
 	check(xs[0] < xs[1] and xs[1] < xs[2] and xs[2] < xs[3], "レベルが上がるほど遭遇が大きい (平均XP %s)" % [str(xs)])
 
+## 武器の振り方と、武器の技
+func _test_weapons(main: Node, ar: Arena) -> void:
+	print("[weapons]")
+	ar.auto_waves = false
+	var h: Hero = main.heroes[0]
+	var c: Character = h.ch
+	c.equip["weapon"] = "dagger"
+	var cd_dagger := h.attack_cd()
+	c.equip["weapon"] = "greataxe"
+	var cd_axe := h.attack_cd()
+	c.equip["weapon"] = "spear"
+	var reach_spear := float(h.swing()["reach"])
+	check(cd_dagger < Balance.ATTACK_CD and cd_axe > Balance.ATTACK_CD and reach_spear > Balance.ATTACK_REACH, "武器の種類で振り方が変わる(短剣 %.2f秒、斧 %.2f秒、槍の届き %d)" % [cd_dagger, cd_axe, int(reach_spear)])
+	check(c.skills.has(Character.WEAPON_SKILL), "武器の技を覚えている")
+	c.equip["weapon"] = "longsword"
+	check(c.weapon_tech_id() == "w_spin", "剣の技は回転斬り")
+	c.equip["weapon"] = "comet_spear"
+	check(c.weapon_tech_id() == "w_comet", "珍しい武器は固有の技")
+	c.equip["weapon"] = ""
+	check(c.skill_def(Character.WEAPON_SKILL).is_empty() and not h.can_cast(Character.WEAPON_SKILL), "素手では武器の技が無い")
+	# 得意武器
+	var fav := String(c.class_data()["weapons"][0])
+	var other := ""
+	for cat in Jobs.WEAPON_TECH:
+		if cat != fav and (c.class_data()["weapons"] as Array).has(cat) and Jobs.SKILLS[Jobs.WEAPON_TECH[cat]].has("dmg"):
+			other = cat
+	var fav_id := ""
+	var other_id := ""
+	for id in ItemDB.BASE_ITEMS:
+		var it: Dictionary = ItemDB.BASE_ITEMS[id]
+		if String(it["kind"]) == "weapon" and not it.get("rare", false):
+			if String(it["cat"]) == fav and fav_id == "":
+				fav_id = id
+			if String(it["cat"]) == other and other_id == "":
+				other_id = id
+	c.equip["weapon"] = fav_id
+	check(c.favored_weapon() and c.skill_label(Character.WEAPON_SKILL).contains("得意"), "クラスの得意武器(%s)なら「得意」" % fav)
+	if other_id != "":
+		c.equip["weapon"] = other_id
+		check(not c.favored_weapon(), "得意でない武器(%s)" % other)
+	# 斧の叩き割り: 当てると、守りが割れる
+	c.equip["weapon"] = "greataxe"
+	ar.clear_enemies()
+	ar.enc_level = 3
+	ar.pop()
+	await _step(2)
+	var en: Enemy = main.current.enemies[0]
+	en.hp = 9999.0
+	h.position = en.position - Vector2(h.radius + en.radius + 6.0, 0)
+	h.facing = Vector2.RIGHT
+	h.cds.clear()
+	c.mp = c.max_mp()
+	var hp0 := en.hp
+	check(h.use_skill(Character.WEAPON_SKILL) and en.hp < hp0 and en.sunder_t > 0.0, "叩き割りが当たり、守りが割れる")
+	var hp1 := en.hp
+	en.take_damage(10.0, Vector2.RIGHT, null)
+	check(is_equal_approx(hp1 - en.hp, maxf(0.05, 10.0 * Balance.SUNDER_MULT * (1.0 - clampf((en.ac - 10) * 0.03, 0.0, 0.45)))), "守りが割れていると、受けるダメージが増える")
+	# 鈍器の気絶打ち
+	c.equip["weapon"] = "mace"
+	h.cds.clear()
+	c.mp = c.max_mp()
+	check(h.use_skill(Character.WEAPON_SKILL) and en.stun_t > 0.0, "気絶打ちで気絶させる")
+	# 杖の魔力の溜め
+	c.equip["weapon"] = "quarterstaff"
+	h.cds.clear()
+	check(h.use_skill(Character.WEAPON_SKILL) and h.buff("spell") > 1.0, "魔力の溜めで、呪文が強まる")
+	ar.clear_enemies()
+	c.equip["weapon"] = fav_id
+	# 古い記録には、武器の技が足される
+	var dd := c.to_dict()
+	dd["skills"] = (dd["skills"] as Array).filter(func(x): return x != Character.WEAPON_SKILL)
+	dd["slots"] = ["", "", "", ""]
+	var c2 := Character.from_dict(dd)
+	check(c2.skills.has(Character.WEAPON_SKILL) and c2.slots[0] == Character.WEAPON_SKILL, "古い記録を読むと、武器の技が足される")
+	# 珍しい武器は店に無く、遺体から出る
+	var in_shop := false
+	for sid in ItemDB.SHOPS:
+		for id in ItemDB.RARE_WEAPONS:
+			if (ItemDB.SHOPS[sid] as Array).has(id):
+				in_shop = true
+	check(not in_shop and ItemDB.detail("miner_pick").contains("大地割り"), "珍しい武器は店に無く、説明に技が出る")
+
 func _test_arena(main: Node) -> void:
 	print("[arena]")
 	_test_encounter_gen()
@@ -1543,6 +1625,7 @@ func _test_arena(main: Node) -> void:
 		if h.down:
 			revived = false
 	check(revived and main.current.enemies.is_empty() and not ar.auto_waves and main.phase == "dungeon", "全滅しても、記録して全快し、止まらない")
+	await _test_weapons(main, ar)
 	main.exit_arena()
 	await _step(5)
 	var same := true
