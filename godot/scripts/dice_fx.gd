@@ -1,7 +1,7 @@
 class_name DiceFx
 extends Node2D
 ## ロール式で能力値を振ったときの擬音。サイコロ3つぶんの「ゴロゴロ」「ゴロ」「ゴロゴロゴロ」が、
-## 画面を横切って跳ねながら転がる。音ありの設定では文字を出さない(Sfx.sound_on())。
+## 画面を横切って跳ねながら転がる。文字は一文字ずつ跳ねる(CueText の bounce)。
 
 const WORDS := ["dice_1", "dice_2", "dice_3"]
 const LIFE := 1.25
@@ -21,8 +21,6 @@ var size := 30
 static func throw(parent: CanvasItem, area: Rect2) -> void:
 	if parent == null:
 		return
-	if Sfx.sound_on():
-		return       # ここで音を鳴らす(#22)
 	for i in WORDS.size():
 		var id: String = WORDS[i]
 		var f := DiceFx.new()
@@ -62,4 +60,4 @@ func _draw() -> void:
 	var t := clampf((age - delay) / LIFE, 0.0, 1.0)
 	var a := 1.0 - clampf((t - 0.75) / 0.25, 0.0, 1.0)
 	var pop := 1.0 + 0.3 * (1.0 - clampf(t / 0.1, 0.0, 1.0))
-	UI.text_center(self, 0.0, 0.0, text, int(size * pop), Color(color.r, color.g, color.b, a))
+	CueText.draw_word(self, CueText.split(text), "wave", age - delay, 99.0, size * pop, Color(color.r, color.g, color.b, a))

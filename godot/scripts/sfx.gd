@@ -1,7 +1,10 @@
 class_name Sfx
 extends Node2D
-## 効果音の代わりの、ベタな擬音の文字(「ギィ…」「バチン!」)。その場で少し浮いて消える。
-## 音はまだ無い(#22)。音を入れたら、音ありの設定のときは cue() で鳴らし、文字は出さない。
+## ベタな擬音の文字(「ギィ…」「バチン!」)。このゲームの手ごたえの本体(ken 10/16: 音は入れない)。
+## 文字は擬音用のフォント(UI.cue_font)で、一文字ずつ動く。動き方は STYLE(擬音ごと)で決める:
+##   pop 弾けて浮く / slam 大きく叩きつけて縮み、揺れる / bounce 一文字ずつ跳ねながら出る /
+##   shake 震え続ける / stretch 一文字ずつ伸びて出る(… や ー が間延びする) / soft ふわっと出て消える /
+##   snap 横から素早く滑り込む / wave 波打つ
 
 const CUES := {
 	"door": ["ギィ…", Color(0.9, 0.85, 0.75)],
@@ -76,42 +79,64 @@ const CUES := {
 	"dice_2": ["ゴロ", Color(0.95, 0.85, 0.65)],
 	"dice_3": ["ゴロゴロゴロ", Color(1.0, 0.95, 0.8)],
 }
+## 擬音ごとの動き方(無いものは pop)
+const STYLE := {
+	"door": "stretch", "door_secret": "shake", "unlock": "pop", "unlock_fail": "shake",
+	"trap": "slam", "trap_alarm": "shake", "trap_found": "soft", "disarm": "pop", "disarm_fail": "slam",
+	"corpse": "bounce", "drink": "pop", "stairs": "bounce", "search": "bounce", "rest": "bounce",
+	"crystal": "soft", "crystal_big": "slam", "stun": "wave", "sunder": "slam", "exhale": "shake", "sealed": "slam",
+	"charge_full": "pop", "charge_hit": "slam", "charge_miss": "snap",
+	"sizzle": "stretch", "simmer": "bounce", "burnt": "soft", "munch": "bounce", "growl": "wave", "growl_hard": "wave", "bellyache": "shake",
+	"click": "pop", "fuse": "stretch", "boom": "slam", "spikes": "snap", "rumble": "shake", "smash": "slam", "creak": "shake",
+	"rubble": "shake", "thud": "slam", "clang": "slam", "flame": "stretch", "dart": "snap", "grind": "shake", "crush": "slam",
+	"net": "snap", "gas": "stretch", "swing": "snap", "jet": "pop", "pit": "slam", "warp": "soft", "warp_out": "soft",
+	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
+	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
+	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce",
+}
 const LIFE := 0.9
 
 var text := ""
 var color := Color.WHITE
 var size := 1.0
+var style := "pop"
 var age := 0.0
+var _chars: PackedStringArray = []
+var _seed := 0.0
 
-## 音を鳴らす設定か(音を入れるまでは、いつも false)
-static func sound_on() -> bool:
-	return false
-
-## 擬音を出す(音ありなら、音を鳴らす)。parent は層(FloorInstance)など、pos はその中の位置
+## 擬音を出す。parent は層(FloorInstance)など、pos はその中の位置
 static func cue(parent: Node, pos: Vector2, id: String) -> void:
 	if parent == null or not CUES.has(id):
 		return
-	if sound_on():
-		return       # ここで音を鳴らす(#22)
 	var f := Sfx.new()
 	f.text = String(CUES[id][0])
 	f.color = CUES[id][1]
 	f.size = float(CUES[id][2]) if (CUES[id] as Array).size() > 2 else 1.0
+	f.style = String(STYLE.get(id, "pop"))
 	f.position = pos + Vector2(0, -22)
 	f.z_index = 21
 	parent.add_child(f)
 
+func _ready() -> void:
+	_chars = PackedStringArray()
+	for i in text.length():
+		_chars.append(text.substr(i, 1))
+	_seed = randf() * 10.0
+
+## 消えるまでの秒(大きいもの、文字の多いもの、伸びるものは長め)
+func life() -> float:
+	var l := LIFE * (1.0 + (size - 1.0) * 0.3)
+	match style:
+		"bounce", "stretch": l += 0.06 * _chars.size()
+		"slam", "shake", "wave": l += 0.2
+	return l
+
 func _process(delta: float) -> void:
 	age += delta
-	if age >= LIFE * (1.0 + (size - 1.0) * 0.3):
+	if age >= life():
 		queue_free()
 		return
 	queue_redraw()
 
 func _draw() -> void:
-	var life := LIFE * (1.0 + (size - 1.0) * 0.3)
-	var a := 1.0 - clampf((age - (life - 0.4)) / 0.4, 0.0, 1.0)
-	var pop := 1.0 + 0.25 * (1.0 - clampf(age / 0.12, 0.0, 1.0))
-	if size >= 2.0 and age < 0.3:
-		pop += 0.4 * (1.0 - age / 0.3)     # 大きな擬音は、最初にもう一回り大きく弾ける
-	UI.text_center(self, 0.0, -age * 14.0, text, int(14 * size * pop), Color(color.r, color.g, color.b, a))
+	CueText.draw_word(self, _chars, style, age, life(), 14.0 * size, color, _seed, size >= 2.0)

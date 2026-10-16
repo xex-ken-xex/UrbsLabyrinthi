@@ -264,6 +264,7 @@ godot --headless --path godot -s res://tests/cooking_test.gd               # 料
 godot --headless --path godot -s res://tests/home_test.gd                  # 自宅と魔法実験と鍛冶だけ
 godot --headless --path godot -s res://tests/bot_test.gd -- 6 4 0          # 自動プレイで難しさを見る(日数、層、開始日)
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- /tmp   # 各画面を撮る
+xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- /tmp  # 擬音の動き方を並べて撮る
 ```
 
 `smoke_test.gd` が見るもの(闘技場: 遭遇の生成、ポップ、レベル変更、係数の即時反映、波の記録、連戦、全滅、本編への非影響): ダイス式、6クラス×4種族、装備の制限、売買とセーブ、全280層の連結、
@@ -308,7 +309,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 ## ライセンス
 
 魔物データは SRD 5.1(CC-BY-4.0)から縮めたもの。帰属表示は F1 のクレジット画面にある(原文は `docs/srd-data-sources.md` §3)。
-フォントは、本文が M+ 1p(Medium と Bold)、見出しとタイトルがしっぽり明朝 SemiBold。どちらも SIL OFL 1.1(`assets/fonts/OFL-MPLUS1p.txt`、`assets/fonts/OFL-ShipporiMincho.txt`)。
+フォントは、本文が M+ 1p(Medium と Bold)、見出しとタイトルがしっぽり明朝 SemiBold、擬音が Dela Gothic One。どれも SIL OFL 1.1(`assets/fonts/OFL-MPLUS1p.txt`、`assets/fonts/OFL-ShipporiMincho.txt`、`assets/fonts/OFL-DelaGothicOne.txt`)。
 
 ## マップチップ
 
@@ -320,6 +321,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shot
 - 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
 - 拾うと、その物の絵が拾った仲間の頭の上へ跳ね上がり、右の地図の下に絵つきで知らせが出る(続けて同じ物を拾うと、数や重さをまとめる。`pickup_pop.gd`、`hud.gd`)。
 - 施錠された扉の解錠は、成功すると錠前の弓が外れて金の光が散り、失敗すると錠前が揺れて赤く光る(`unlock_fx.gd`)。
+- 擬音はこのゲームの看板で、効果音は入れない(ken 10/16)。擬音は Dela Gothic One で一文字ずつ動く。動き方は8つ(pop 弾ける / slam 叩きつけて揺れる / bounce 一文字ずつ跳ねる / shake 震える / stretch 一文字ずつ伸びる / soft ふわっと / snap 横から滑り込む / wave 波打つ)で、擬音ごとに `Sfx.STYLE` で決める(`sfx.gd`、`cue_text.gd`)。
   地上へ戻るとき、純度ごとに査定され、**3割が燐晶税**。
 - 茸や苔、魔物の素材、遺品は、**燐晶ではないので、税がかからない**。持ち物に入り、食べる・使う・売る。一覧は `docs/items-and-forage.md`。
 - アイテムの絵は、16列のシート(`assets/items/items_sheet.png`、`tools/make-items.py`)。プロンプトは `docs/item-prompts.md`。
