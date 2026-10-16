@@ -110,25 +110,38 @@ func _run() -> void:
 			best = e
 	var flow := m.compute_flow(m.cell_of(best.position).x, m.cell_of(best.position).y, 400)
 	var lead: Hero = main.leader()
+	main.scripted_input = true      # 下の cmd を、キーの読み取りで上書きさせない
 	for i in 1500:
 		var c := m.cell_of(lead.position)
 		if lead.position.distance_to(best.position) < 90.0:
 			break
 		var nx := m.flow_step(flow, c, true)
 		if nx.x >= 0:
-			lead.cmd = {"move": (m.center_of(nx) - lead.position).normalized(), "guard": false, "dodge": false}
+			lead.cmd = {"move": (m.center_of(nx) - lead.position).normalized(), "attack": false, "dodge": false}
 		await physics_frame
-	lead.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	lead.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 	for i in 50:
 		await physics_frame
 	await shot("fight")
 	for i in 70:
-		lead.cmd = {"move": (best.position - lead.position).normalized() if is_instance_valid(best) and not best.dead else Vector2.ZERO, "guard": false, "dodge": false}
+		lead.cmd = {"move": (best.position - lead.position).normalized() if is_instance_valid(best) and not best.dead else Vector2.ZERO, "attack": false, "dodge": false}
 		lead.attack()
 		await physics_frame
 	await shot("fight2")
+	# 溜め(押し続ける)と、選んだスキル(Ctrl)
+	lead.ch.skill_sel = 0
+	lead.next_skill()
+	lead.cmd = {"move": Vector2.ZERO, "attack": true, "dodge": false}
+	for i in 75:
+		await physics_frame
+	await shot("charge")
+	lead.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
+	for i in 6:
+		await physics_frame
+	await shot("charge_hit")
+	lead.ch.skill_sel = 0
 	# 拾ったものと、解錠の演出
-	lead.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	lead.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 	main._on_ground_picked({"kind": "crystal", "purity": "high", "kg": 0.42, "pos": lead.position + Vector2(40, 10)}, lead)
 	main._on_ground_picked({"kind": "crystal", "purity": "high", "kg": 0.12, "pos": lead.position + Vector2(30, 20)}, lead)
 	main._on_ground_picked({"kind": "item", "id": "potion", "qty": 1, "pos": lead.position + Vector2(-40, 10)}, lead)

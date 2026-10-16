@@ -26,14 +26,21 @@ static var PUSH_SCALE := 2.2                # 押し合いの速さにかける�
 static var HP_FLOOR := 0.35                 # HPが0に近いときの押す力の下限(これに 0.65×HP割合 を足す)
 static var HP_SCALE := 1.5                  # キャラクターの最大HPにかける係数
 static var AC_REDUCTION := 0.035            # 防御1点あたりの軽減率
-const GUARD_MASS := 2.0                # 構え(Ctrl)の間、押されにくくなる倍率
 
 # 通常攻撃(ボタンで正面へ一撃)。体当たりの自動攻撃の代わり
 static var ATTACK_SCALE := 1.3              # 一撃のダメージ = 体当たり火力 × 待ち時間 × これ
-static var ATTACK_CD := 0.7                 # 次に振れるまでの待ち時間(秒)
+static var ATTACK_CD := 0.5                 # 次に振れるまでの待ち時間(秒)。0.7 から縮めた(ken 10/16)。一撃は待ち時間に比例するので、毎秒の威力は変わらない
 const ATTACK_REACH := 22.0             # 体の縁から届く距離(画素)
 const ATTACK_ARC := 70.0               # 正面から左右に届く角度(度)
 const ATTACK_KNOCK := 140.0            # 当たった相手を押し返す強さ
+# 溜め攻撃: 攻撃を押し続けると溜まり、離すと強い一撃(押した瞬間は、ふつうに一度振る)
+const CHARGE_START := 0.2              # 押してから溜め始めるまで(秒)。これより短く離せば、ただの一撃
+const CHARGE_MIN := 0.25               # 溜めがこれ未満で離すと、何も出ない(秒)
+static var CHARGE_TIME := 0.9               # 溜めきるまで(秒。CHARGE_START の後から数える)
+static var CHARGE_MULT := [1.6, 3.0]        # 溜めの一撃の倍率(溜め始め → 溜めきり)。ふつうの一撃に掛ける
+const CHARGE_REACH := 1.3              # 溜めの一撃の届く距離の倍率
+const CHARGE_KNOCK := 2.2              # 溜めの一撃の押し返しの倍率
+const CHARGE_SPEED := 0.6              # 溜めている間の移動の速さの倍率
 ## 武器の種類ごとの、通常攻撃の振り方。reach: 体の縁から届く距離(画素)、arc: 正面から左右の角度(度)、
 ## cd: 待ち時間の倍率、knock: 押し返しの倍率、dmg: 一撃の倍率(一撃は待ち時間に比例するので、毎秒の威力は dmg だけで変わる)、
 ## stun: 当たった相手を怯ませる確率(0.6秒)。数字は仮。闘技場で直す
@@ -76,6 +83,10 @@ const WANDER_EVERY := 10.0
 static var WANDER_CHANCE := 1.0 / 12.0      # 起きているとき
 static var REST_WANDER_CHANCE := 0.012      # 休んでいるとき(7時間でおよそ4割)
 const WANDER_MAX := 3                  # 層に同時にいる、ワンダリングの群れの上限
+# 吐く夜(第三節・第五節の夜。層のデータの meta.exhale)。日が落ちると迷宮が魔物を吐き、夜明けまで階段が塞がる
+const EXHALE_BURST := 5                # 日が落ちたときに、いっせいに湧く群れの数
+const EXHALE_WANDER_MULT := 4.0        # 吐く夜の間、ワンダリングが出る見込みの倍率(起きていても、休んでいても)
+const EXHALE_WANDER_MAX := 10          # 吐く夜の間の、ワンダリングの群れの上限
 const SURPRISE_TIME := 1.5             # 寝込みを襲われたとき、動けない秒
 
 ## 闘技場で、実行中に動かして調整できる係数。[初期値, 最小, 最大, 説明]
@@ -84,7 +95,7 @@ const TUNABLE := {
 	"ENEMY_ATTACK_INTERVAL": [1.6, 0.4, 4.0, "敵の攻撃の間隔・秒(大きいほど痛くない)"],
 	"BUMP_SCALE": [0.55, 0.15, 1.5, "仲間の火力の係数(通常攻撃の元)"],
 	"ATTACK_SCALE": [1.3, 0.3, 3.0, "通常攻撃の一撃の係数"],
-	"ATTACK_CD": [0.7, 0.2, 2.0, "通常攻撃の待ち時間・秒"],
+	"ATTACK_CD": [0.5, 0.2, 2.0, "通常攻撃の待ち時間・秒"],
 	"ENEMY_SPEED_SCALE": [0.85, 0.4, 1.5, "魔物の移動の速さの係数"],
 	"ENEMY_HP_SCALE": [1.5, 0.5, 4.0, "魔物の最大HPの係数(次に出る魔物から)"],
 	"PUSH_SCALE": [2.2, 0.5, 5.0, "押し合いの強さの係数"],

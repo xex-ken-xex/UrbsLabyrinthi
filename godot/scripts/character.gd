@@ -18,7 +18,9 @@ var hp := 1.0
 var mp := 0.0
 var equip := {"weapon": "", "armor": "", "acc": ""}
 var skills: Array = []              # 覚えているスキルのid
-var slots: Array = ["", "", "", ""] # ショートカット 1〜4
+var slots: Array = ["", "", "", "", "", ""] # スキル 1〜6(数字キー。Ctrl で選んで右クリックでも使う)。0 番目(スキル1)は武器の技
+var skill_sel := 0                  # Ctrl で選んでいるスキル(0 = 通常攻撃、1〜6 = slots の 0〜5)。記録しない
+const SLOTS := 6
 const WEAPON_SKILL := "@weapon"     # 武器の技。skills と slots には、この名前で入る(中身は装備している武器で決まる)
 var max_hp_cache := 1
 var max_mp_cache := 0
@@ -36,8 +38,8 @@ static func create(nm: String, race_id: String, cls_id: String, point_stats: Dic
 	c.profs = picks.duplicate() if Talents.picks_valid(cls_id, picks) else Talents.default_picks(cls_id, race_id)
 	c.recalc_stats()
 	c.give_starting_kit()
+	c.learn(WEAPON_SKILL)      # スキル1 は武器の技
 	c.learn_class_skills()
-	c.learn(WEAPON_SKILL)
 	c.hp = c.max_hp()
 	c.mp = c.max_mp()
 	return c
@@ -427,6 +429,19 @@ func learn(id: String) -> bool:
 			break
 	return true
 
+## 武器の技をスキル1へ置き、ほかの割り当てはその後ろへ順に詰める(覚えていて枠の空きがあるものも入れる)
+func _weapon_first() -> void:
+	var rest: Array = []
+	for id in slots:
+		if String(id) != "" and String(id) != WEAPON_SKILL:
+			rest.append(String(id))
+	for id in skills:
+		if String(id) != WEAPON_SKILL and not rest.has(String(id)):
+			rest.append(String(id))
+	slots = [WEAPON_SKILL]
+	for i in SLOTS - 1:
+		slots.append(String(rest[i]) if i < rest.size() else "")
+
 func learn_class_skills() -> Array:
 	var gained: Array = []
 	for entry in class_data()["skills"]:
@@ -490,12 +505,16 @@ static func from_dict(d: Dictionary) -> Character:
 	c.skills = []
 	for s in d.get("skills", []):
 		c.skills.append(String(s))
-	c.slots = ["", "", "", ""]
+	c.slots = []
+	c.slots.resize(SLOTS)
+	c.slots.fill("")
 	var sl: Array = d.get("slots", [])
-	for i in mini(4, sl.size()):
+	for i in mini(SLOTS, sl.size()):
 		c.slots[i] = String(sl[i])
 	if not c.skills.has(WEAPON_SKILL):
-		c.learn(WEAPON_SKILL)      # 武器の技より前の記録。空いている枠があれば入れる
+		c.skills.append(WEAPON_SKILL)      # 武器の技より前の記録
+	if sl.size() < SLOTS:
+		c._weapon_first()          # 枠が4つだった頃の記録: 武器の技をスキル1へ寄せ、ほかを後ろへ詰める
 	c.hp = float(d.get("hp", c.max_hp()))
 	c.mp = float(d.get("mp", c.max_mp()))
 	c.clamp_resources()

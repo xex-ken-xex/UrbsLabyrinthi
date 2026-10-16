@@ -380,7 +380,8 @@ func start_day() -> void:
 func _apply_control() -> void:
 	for i in heroes.size():
 		heroes[i].controlled = i == active
-		heroes[i].cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+		heroes[i].cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
+		heroes[i].cancel_charge()
 	if current != null:
 		current.leader = leader()
 
@@ -530,21 +531,23 @@ func _read_input() -> void:
 		return
 	var mv := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	lead.cmd["move"] = mv
-	lead.cmd["guard"] = Input.is_action_pressed("guard")
 	if Input.is_action_just_pressed("dodge"):
 		lead.cmd["dodge"] = true
-	if Input.is_action_pressed("attack"):
-		var mb: Dictionary = Controls.binds.get("attack", {}).get("mouse", {})
-		var by_mouse := not mb.is_empty() and Input.is_mouse_button_pressed(int(mb["m"]))
-		if by_mouse and _menu_cd > 0.0:
-			pass               # 画面のボタンを押した、そのクリックでは振らない
-		else:
-			if by_mouse:
-				var to := lead.get_global_mouse_position() - lead.position
-				if to.length() > 4.0:
-					lead.facing = to.normalized()      # マウスの方向へ振る
-			lead.attack()      # 押し続けると、待ち時間ごとに振る
-	for i in 4:
+	# 攻撃: 押した瞬間に一度振り、押し続けると溜まり、離すと溜めの一撃(Hero._attack_input)。
+	# 選んでいるスキルが 0(通常攻撃)なら、「選んだスキルを使う」(右クリック)でも同じ
+	if Input.is_action_just_pressed("skill_next"):
+		lead.next_skill()
+	var sel0 := lead.ch.skill_sel == 0
+	var held := false
+	for act in (["attack", "skill_use"] if sel0 else ["attack"]):
+		if Input.is_action_pressed(act) and not (_by_mouse(act) and _menu_cd > 0.0):     # 画面のボタンを押した、そのクリックでは振らない
+			held = true
+			_face_mouse(lead, act)
+	lead.cmd["attack"] = held
+	if not sel0 and Input.is_action_just_pressed("skill_use") and not (_by_mouse("skill_use") and _menu_cd > 0.0):
+		_face_mouse(lead, "skill_use")
+		lead.cast_slot(lead.ch.skill_sel - 1)
+	for i in Character.SLOTS:
 		if Input.is_action_just_pressed("skill%d" % (i + 1)):
 			lead.cast_slot(i)
 	if Input.is_action_just_pressed("switch"):
@@ -565,6 +568,19 @@ func _read_input() -> void:
 		minimap_step(-1)
 	if Input.is_action_just_pressed("inventory") and _menu_cd <= 0.0:
 		open_inventory()
+
+## その操作を、割り当てたマウスのボタンで押しているか
+func _by_mouse(act: String) -> bool:
+	var mb: Dictionary = Controls.binds.get(act, {}).get("mouse", {})
+	return not mb.is_empty() and Input.is_mouse_button_pressed(int(mb["m"]))
+
+## マウスで押しているなら、マウスの方向を向く(振る・撃つ向き)
+func _face_mouse(lead: Hero, act: String) -> void:
+	if not _by_mouse(act):
+		return
+	var to := lead.get_global_mouse_position() - lead.position
+	if to.length() > 4.0:
+		lead.facing = to.normalized()
 
 ## ミニマップ(仲間のまわり)を拡大・縮小する。段は保存する
 func minimap_step(d: int) -> void:
@@ -635,6 +651,7 @@ func _check_wipe() -> void:
 		return
 	var lost := bag_value()
 	_clear_bag()
+	var lost_items := gs.lose_everything()     # 持ち物も装備も、全部失う(ken 10/16)
 	phase = "overlay"
 	overlay_kind = "wipe"
 	hud.hint = ""
@@ -642,6 +659,7 @@ func _check_wipe() -> void:
 		{"text": "全滅した…", "size": 30, "color": Color("ff6a5a")},
 		{"text": "", "size": 8},
 		{"text": "未査定の燐晶 %d銀貨相当 を失った" % lost, "size": 16},
+		{"text": "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items, "size": 16, "color": Color("ff9a8a")},
 		{"text": "灯手隊が、倒れた仲間を担ぎ出してくれた。", "size": 16, "color": Color("f1d98a")},
 		{"text": "", "size": 8},
 		{"text": "%s: 街へ" % Controls.hint("confirm"), "size": 18, "color": Color("9ad8ff")},
@@ -652,7 +670,7 @@ func _after_overlay() -> void:
 	if overlay_kind == "wipe":
 		gs.day += 1
 		phase = "transition"
-		call_deferred("go_town", ["全滅した。未査定の燐晶は失ったが、預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は、神殿で蘇らせよう。"])
+		call_deferred("go_town", ["全滅した。未査定の燐晶も、持ち物も装備も、すべて迷宮に残してきた。預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせ、鍛冶屋で装備を整え直そう。"])
 
 # ---------- 部屋、扉、罠 ----------
 
@@ -842,6 +860,8 @@ func _update_hint() -> void:
 		h = "%s: 遺体を調べる" % Controls.hint("interact")
 	elif arena != null:
 		h = "E: 闘技場を出る" if _near(current.up_cell, 1.4) else ""
+	elif (_near(current.down_cell, 1.4) or _near(current.up_cell, 1.4)) and dtime != null and dtime.stairs_sealed():
+		h = "階段は吐息に塞がれている(夜明けまで)"
 	elif _near(current.down_cell, 1.4):
 		h = "E: 下へ降りる" if current.floor_no < Balance.MAX_FLOOR else "この先は未踏(まだ道がない)"
 	elif _near(current.up_cell, 1.4):
@@ -868,6 +888,10 @@ func interact() -> void:
 	if arena != null:
 		if _near(current.up_cell, 1.4):
 			exit_arena()
+		return
+	if (_near(current.down_cell, 1.4) or _near(current.up_cell, 1.4)) and dtime != null and dtime.stairs_sealed():
+		Sfx.cue(current, leader().position, "sealed")
+		log_msg("階段は、重い吐息に塞がれている。夜明けを待つしかない。", Color("c9b6ff"))
 		return
 	if _near(current.down_cell, 1.4):
 		if current.floor_no >= Balance.MAX_FLOOR:

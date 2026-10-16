@@ -101,7 +101,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		closed.emit()
 		return
 	if tab == "skill":
-		for i in 4:
+		for i in Character.SLOTS:
 			if e.is_action_pressed("skill%d" % (i + 1)):
 				get_viewport().set_input_as_handled()
 				_assign(i)
@@ -213,7 +213,7 @@ func _fill_equip() -> void:
 
 func _fill_skills() -> void:
 	var c := _ch()
-	for i in 4:
+	for i in Character.SLOTS:
 		var id := String(c.slots[i])
 		var r := UIKit.hbox(6)
 		var l := UIKit.label("[%d]" % (i + 1), 16, UIKit.ACCENT)
@@ -332,19 +332,19 @@ func _show_detail() -> void:
 		"skill":
 			if sel_id == Character.WEAPON_SKILL and c.skill_def(sel_id).is_empty():
 				t = "[b][color=#e8dcb0]武器の技[/color][/b]\n\n武器を持っていない。装備している武器の種類で、技が決まる。"
-				for i in 4:
+				for i in Character.SLOTS:
 					action_box.add_child(UIKit.button("[%d]" % (i + 1), _assign.bind(i)))
 				action_box.add_child(UIKit.button("外す", _unassign))
 			elif sel_id != "" and not c.skill_def(sel_id).is_empty():
 				var sk := c.skill_def(sel_id)
-				t = "[b][color=#e8dcb0]%s[/color][/b]\nMP %d   再使用 %.1f秒\n\n%s\n\n[color=#8a90a0]数字キー 1〜4 か、下のボタンでショートカットに割り当てる。[/color]" % [c.skill_label(sel_id), sk["mp"], sk["cd"], sk["desc"]]
+				t = "[b][color=#e8dcb0]%s[/color][/b]\nMP %d   再使用 %.1f秒\n\n%s\n\n[color=#8a90a0]数字キー 1〜6 か、下のボタンでスキル1〜6に割り当てる。戦闘中は数字キーか、Ctrl で選んで右クリックで使う。[/color]" % [c.skill_label(sel_id), sk["mp"], sk["cd"], sk["desc"]]
 				if sel_id == Character.WEAPON_SKILL:
 					t += "\n[color=#5bc0de]武器の技: 装備している武器の種類で変わる(珍しい武器は固有の技)。クラスの得意武器(%s)なら、威力が%.1f倍。[/color]" % [ItemDB.WEAPON_CAT_JP[c.class_data()["weapons"][0]], Balance.FAVORED_TECH]
-				for i in 4:
+				for i in Character.SLOTS:
 					action_box.add_child(UIKit.button("[%d]" % (i + 1), _assign.bind(i)))
 				action_box.add_child(UIKit.button("外す", _unassign))
 			else:
-				t = "スキルを選ぶ。戦闘中は、数字キー 1〜4 で使う。"
+				t = "スキルを選ぶ。戦闘中は、数字キー 1〜6 か、Ctrl で選んで右クリックで使う。"
 		_:
 			if sel_id != "" and ItemDB.ITEMS.has(sel_id):
 				t = "[b][color=#e8dcb0]%s[/color][/b]  所持 %d\n%s" % [ItemDB.item_name(sel_id), gs.count(sel_id), ItemDB.detail(sel_id)]
@@ -480,7 +480,7 @@ func _equip_sel() -> void:
 	_refresh()
 
 func _assign(i: int) -> void:
-	if tab != "skill" or sel_id == "" or not Jobs.SKILLS.has(sel_id):
+	if tab != "skill" or sel_id == "" or not _ch().skills.has(sel_id):
 		return
 	var c := _ch()
 	var old := c.slots.find(sel_id)

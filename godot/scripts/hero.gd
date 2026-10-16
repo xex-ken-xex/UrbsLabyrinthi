@@ -1,8 +1,8 @@
 class_name Hero
 extends Body
 ## パーティの一人の体。操作中の一人は Main が cmd に入力を入れ、それ以外は自分で考えて動く。
-## 攻撃はボタンで正面へ一撃(待ち時間あり)。触れると押し合う(Contact)が、仲間の体当たりではダメージは入らない。
-## スキルはショートカット 1〜4。
+## 攻撃はボタンで正面へ一撃(待ち時間あり)。押し続けると溜まり、離すと強い一撃。触れると押し合う(Contact)が、仲間の体当たりではダメージは入らない。
+## スキルは数字キー 1〜6。Ctrl で選んで(0 = 通常攻撃)、右クリックで選んだものを使うこともできる。
 
 signal downed(hero: Hero)
 
@@ -10,7 +10,7 @@ const BUFF_COLORS := {"power": Color("ff9a5a"), "guard": Color("7ab8ff"), "speed
 
 var ch: Character
 var controlled := false
-var cmd := {"move": Vector2.ZERO, "guard": false, "dodge": false}
+var cmd := {"move": Vector2.ZERO, "attack": false, "dodge": false}   # attack: 攻撃を押している(操作中の一人だけ)
 var facing := Vector2.DOWN
 var roll_t := 0.0
 var atk_cd := 0.0             # 通常攻撃の残りの待ち時間
@@ -35,7 +35,9 @@ var ai_t := 0.0
 var ai_target: Enemy = null
 var ai_move := Vector2.ZERO
 var ai_catchup := false
-var guarding := false
+var atk_held := false          # 前のフレームで攻撃を押していたか
+var hold_t := 0.0              # 攻撃を押し続けている秒
+var _full_cued := false        # 溜めきった擬音を出したか
 var last_stand := true         # 不屈の特技を、この潜入でまだ使っていない
 var stat_dealt := 0.0         # 闘技場の記録: 与えたダメージ、受けたダメージ
 var stat_taken := 0.0
@@ -69,8 +71,6 @@ func buff(key: String, default: float = 1.0) -> float:
 
 func body_mass() -> float:
 	var m := ch.mass() * buff("mass")
-	if guarding:
-		m *= Balance.GUARD_MASS
 	if rush_t > 0.0:
 		m *= 5.0
 	return m
@@ -80,20 +80,20 @@ func body_speed() -> float:
 
 func _speed_now() -> float:
 	var s := ch.speed() * buff("speed")
-	if guarding:
-		s *= 0.55
+	if charging():
+		s *= Balance.CHARGE_SPEED
 	return s
 
-## 仲間は体当たりではダメージを与えない(通常攻撃で殴る)。盾構えの特技だけ、構えの間に触れている敵へ反撃する
+## 仲間は体当たりではダメージを与えない(通常攻撃で殴る)。盾構えの特技だけ、溜めている間に触れている敵へ反撃する
 func contact_dps() -> float:
-	if down or not guarding:
+	if down or not charging():
 		return 0.0
 	return ch.bump_power() * buff("power") * 0.4 if ch.has_feat("shield_master") else 0.0
 
 func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
 	damage(amount, from_pos, false, (src as Enemy).mon_type() if src is Enemy else "")
 
-## 魔物の体当たり、飛び道具、罠から受けるダメージ。防具の軽減、鉄壁や構えがここで効く
+## 魔物の体当たり、飛び道具、罠から受けるダメージ。防具の軽減、鉄壁や盾構え(溜めている間)がここで効く
 ## src_type は、ダメージを与えた魔物の種別(〈動物使い〉〈看破〉が見る。罠などは空)
 func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_type: String = "") -> void:
 	if down or iframes > 0.0 or roll_t > 0.0 or rush_t > 0.0:
@@ -101,8 +101,8 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 	var n := amount * buff("guard") * ch.taken_mult(src_type)
 	if not ignore_armor:
 		n *= 1.0 - ch.damage_reduction()
-	if guarding:
-		n *= 0.25 if ch.has_feat("shield_master") else 0.5
+	if charging() and ch.has_feat("shield_master"):
+		n *= 0.5
 	n = maxf(0.05, n)
 	stat_taken += n
 	ch.hp -= n
@@ -120,6 +120,7 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		down = true
 		buffs.clear()
 		rush_t = 0.0
+		cancel_charge()
 		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
 		downed.emit(self)
 
@@ -181,7 +182,7 @@ func _tick(delta: float) -> void:
 		ch.hp = minf(ch.max_hp(), ch.hp + float(buffs["regen"]["v"]) * delta)
 
 func _move(delta: float) -> void:
-	guarding = bool(cmd.get("guard", false)) and roll_t <= 0.0 and rush_t <= 0.0
+	_attack_input(delta)
 	var mv: Vector2 = cmd.get("move", Vector2.ZERO)
 	if rush_t > 0.0:
 		rush_t -= delta
@@ -199,12 +200,14 @@ func _move(delta: float) -> void:
 		facing = intent
 		var sp := _speed_now() * (1.12 if ai_catchup and not controlled else 1.0)
 		walk(intent * sp * delta)
-	if bool(cmd.get("dodge", false)) and roll_cd <= 0.0 and not guarding:
+	if bool(cmd.get("dodge", false)) and roll_cd <= 0.0:
 		roll_dir = facing if mv.length() <= 0.1 else mv.normalized()
 		roll_t = Balance.ROLL_TIME
 		roll_cd = ch.roll_cooldown()
 		iframes = Balance.ROLL_TIME + 0.08
 	cmd["dodge"] = false
+	if roll_t > 0.0:
+		cancel_charge()      # 転がると、溜めは消える
 
 func _rush_hits() -> void:
 	for en in game_floor.enemies:
@@ -225,18 +228,66 @@ func can_attack() -> bool:
 func attack() -> bool:
 	if not can_attack():
 		return false
+	_swing_hit(_aim(), 1.0, 1.0, 1.0, 0.18)
+	return true
+
+## 攻撃の押し方を読む(操作中の一人)。押した瞬間に一度振り、押し続けると溜まり、離すと溜めの一撃
+func _attack_input(delta: float) -> void:
+	var held := bool(cmd.get("attack", false))
+	if held and not atk_held:
+		attack()
+		hold_t = 0.0
+	if held:
+		if roll_t > 0.0 or rush_t > 0.0:
+			hold_t = 0.0
+		else:
+			hold_t += delta
+			if charge_frac() >= 1.0 and not _full_cued:
+				_full_cued = true
+				Sfx.cue(game_floor, position, "charge_full")
+	elif atk_held:
+		if charging() and hold_t - Balance.CHARGE_START >= Balance.CHARGE_MIN:
+			charged_attack(charge_frac())
+		cancel_charge()
+	atk_held = held
+
+## 溜めている最中か(押してから CHARGE_START 秒たった)
+func charging() -> bool:
+	return not down and atk_held and hold_t >= Balance.CHARGE_START
+
+## 溜めの進み具合(0〜1)
+func charge_frac() -> float:
+	return clampf((hold_t - Balance.CHARGE_START) / Balance.CHARGE_TIME, 0.0, 1.0)
+
+func cancel_charge() -> void:
+	hold_t = 0.0
+	_full_cued = false
+
+## 溜めの一撃。ふつうの一撃より強く、遠くまで届き、よく押し返す。待ち時間は無視する(撃った後は待ち時間になる)
+func charged_attack(frac: float) -> bool:
+	if down or rush_t > 0.0 or roll_t > 0.0 or sleep_t > 0.0:
+		return false
+	var mult := lerpf(float(Balance.CHARGE_MULT[0]), float(Balance.CHARGE_MULT[1]), frac)
 	var aim := _aim()
+	var hit := _swing_hit(aim, mult, Balance.CHARGE_REACH, Balance.CHARGE_KNOCK, 0.28)
+	lunge = aim * 11.0
+	Sfx.cue(game_floor, position + aim * (radius + 14.0), "charge_hit" if hit > 0 else "charge_miss")
+	return true
+
+## 振る。届く範囲の魔物に当て、当たった数を返す。dmg_mult・reach_mult・knock_mult は溜めの一撃で使う
+func _swing_hit(aim: Vector2, dmg_mult: float, reach_mult: float, knock_mult: float, draw_t: float) -> int:
 	var sw := swing()
 	facing = aim
 	swing_dir = aim
-	swing_t = 0.18
-	swing_reach = float(sw["reach"])
+	swing_t = draw_t
+	swing_reach = float(sw["reach"]) * reach_mult
 	swing_arc = float(sw["arc"])
 	atk_cd_max = attack_cd()
 	atk_cd = atk_cd_max
 	lunge = aim * 6.0
-	var dmg := ch.bump_power() * buff("power") * atk_cd_max * Balance.ATTACK_SCALE * float(sw["dmg"])
+	var dmg := ch.bump_power() * buff("power") * atk_cd_max * Balance.ATTACK_SCALE * float(sw["dmg"]) * dmg_mult
 	var arc := deg_to_rad(swing_arc)
+	var n := 0
 	for en in game_floor.enemies.duplicate():
 		if en.dead:
 			continue
@@ -245,14 +296,15 @@ func attack() -> bool:
 			continue
 		if to.length() > 4.0 and absf(aim.angle_to(to)) > arc:
 			continue
+		n += 1
 		var dir := to.normalized() if to.length() > 0.5 else aim
 		en.take_damage(dmg, dir, self)
 		if not en.dead:
-			en.knock = dir * Balance.ATTACK_KNOCK * float(sw["knock"]) / maxf(0.5, en.body_mass())
+			en.knock = dir * Balance.ATTACK_KNOCK * float(sw["knock"]) * knock_mult / maxf(0.5, en.body_mass())
 			if Dice.rng.randf() < float(sw.get("stun", 0.0)):
 				en.apply_stun(0.6)
-		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0, Color("ffe0a0"), 0.14))
-	return true
+		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0 * sqrt(dmg_mult), Color("ffe0a0"), 0.14))
+	return n
 
 ## 装備している武器の種類の、通常攻撃の振り方(Balance.SWING)
 func swing() -> Dictionary:
@@ -277,6 +329,20 @@ func can_cast(id: String) -> bool:
 	if sk.is_empty():
 		return false
 	return float(cds.get(id, 0.0)) <= 0.0 and ch.mp >= float(sk["mp"]) and rush_t <= 0.0
+
+## Ctrl: 選ぶスキルを次へ(0 = 通常攻撃 → スキル1〜6 の割り当てのあるもの → 0 …)
+func next_skill() -> void:
+	for k in range(1, Character.SLOTS + 2):
+		var i := (ch.skill_sel + k) % (Character.SLOTS + 1)
+		if i == 0 or String(ch.slots[i - 1]) != "":
+			ch.skill_sel = i
+			return
+
+## いま選んでいるスキルの id。0(通常攻撃)なら ""
+func selected_skill() -> String:
+	if ch.skill_sel <= 0 or ch.skill_sel > ch.slots.size():
+		return ""
+	return String(ch.slots[ch.skill_sel - 1])
 
 func cast_slot(i: int) -> bool:
 	if i < 0 or i >= ch.slots.size() or sleep_t > 0.0:
@@ -487,7 +553,7 @@ func _ai(delta: float) -> void:
 		ai_t = 0.15
 		_ai_think()
 	cmd["move"] = ai_move
-	cmd["guard"] = false
+	cmd["attack"] = false
 
 func _ai_think() -> void:
 	var map := game_floor.map
@@ -547,7 +613,7 @@ func _count_enemies_within(center: Vector2, r: float) -> int:
 	return n
 
 func _ai_skills() -> void:
-	for i in 4:
+	for i in ch.slots.size():
 		var id := String(ch.slots[i])
 		if id == "" or not can_cast(id):
 			continue
@@ -622,12 +688,24 @@ func _draw_attack() -> void:
 		var a := swing_dir.angle()
 		var arc := deg_to_rad(swing_arc)
 		var rr := radius + swing_reach * 0.7
-		draw_arc(Vector2.ZERO, rr, a - arc, a + arc, 16, Color(1.0, 0.92, 0.7, swing_t / 0.18), 3.0)
+		draw_arc(Vector2.ZERO, rr, a - arc, a + arc, 16, Color(1.0, 0.92, 0.7, minf(1.0, swing_t / 0.18)), 3.0 if swing_t <= 0.18 else 5.0)
 	if controlled and atk_cd > 0.0:
 		var w := 26.0
 		var y := radius + 20.0
 		draw_rect(Rect2(-w / 2.0, y, w, 4.0), Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(-w / 2.0, y, w * attack_ready_frac(), 4.0), Color("ffe9a8"))
+	if charging():
+		# 溜め: 足もとの棒と、向いている側の弧。溜めきると明るく脈打つ
+		var f := charge_frac()
+		var w2 := 30.0
+		var y2 := radius + 26.0
+		var full := f >= 1.0
+		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 70.0) if full else 1.0
+		var cc := Color(1.0, 0.85, 0.35, pulse) if full else Color(1.0, 0.6, 0.25)
+		draw_rect(Rect2(-w2 / 2.0, y2, w2, 5.0), Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(-w2 / 2.0, y2, w2 * f, 5.0), cc)
+		var a2 := facing.angle()
+		draw_arc(Vector2.ZERO, radius + 6.0 + 4.0 * f, a2 - 0.9, a2 + 0.9, 12, Color(cc.r, cc.g, cc.b, 0.4 + 0.5 * f), 2.0 + 3.0 * f)
 
 ## 眠っている間は「z」、寝込みを襲われて動けない間は「!」
 func _draw_sleep() -> void:
@@ -657,8 +735,6 @@ func _draw() -> void:
 		if roll_t > 0.0:
 			tint.a = 0.55
 		_draw_sprite(tex, tint, facing.x)
-		if guarding:
-			draw_arc(Vector2.ZERO, radius + 5.0, facing.angle() - 1.0, facing.angle() + 1.0, 12, Color("a8d8ff"), 4.0)
 		if controlled:
 			var my := -radius - (30.0 if _is_sheet else 14.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
@@ -679,8 +755,6 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, radius, c)
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0, 0, 0, 0.8), 2.0)
 	draw_line(Vector2.ZERO, facing * (radius + 5.0), Color("5bc0de"), 3.0)
-	if guarding:
-		draw_arc(Vector2.ZERO, radius + 5.0, facing.angle() - 1.0, facing.angle() + 1.0, 12, Color("a8d8ff"), 4.0)
 	UI.text_center(self, 0.0, 4.0, Jobs.class_initial(ch.cls), 11, Color(0.05, 0.05, 0.08), false)
 	if controlled:
 		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 12), Vector2(5, -radius - 20), Vector2(-5, -radius - 20)]), Color("ffe9a8"))

@@ -48,6 +48,20 @@ func _order(id: String) -> String:
 	var rank := {"consumable": "1", "weapon": "2", "armor": "3", "acc": "4", "tome": "5", "material": "6"}
 	return String(rank.get(String(it.get("kind", "")), "9")) + id
 
+## 全滅したときに失う。持ち物と、仲間が着けている装備を全部(武器・防具も)。失った数を返す
+func lose_everything() -> int:
+	var n := 0
+	for id in inventory:
+		n += int(inventory[id])
+	inventory.clear()
+	for c in party:
+		for slot in c.equip:
+			if String(c.equip[slot]) != "":
+				n += 1
+				c.equip[slot] = ""
+		c.clamp_resources()
+	return n
+
 # ---------- 装備 ----------
 
 ## 装備する。いま着けているものは持ち物へ戻る。できなければ理由を返す("" なら成功)

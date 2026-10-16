@@ -149,7 +149,10 @@ func _test_controls() -> void:
 	var rc := InputEventMouseButton.new()
 	rc.button_index = MOUSE_BUTTON_RIGHT
 	rc.pressed = true
-	check(InputMap.event_is_action(lc, "attack") and InputMap.event_is_action(rc, "guard"), "左クリックで攻撃、右クリックで構え")
+	check(InputMap.event_is_action(lc, "attack") and InputMap.event_is_action(rc, "skill_use"), "左クリックで攻撃、右クリックで選んだスキル")
+	var ck := InputEventKey.new()
+	ck.physical_keycode = KEY_CTRL
+	check(InputMap.event_is_action(ck, "skill_next") and not InputMap.has_action("guard"), "Ctrl でスキルを選ぶ。構えは無い")
 	check(Controls.from_event(lc) == {"t": "mouse", "m": MOUSE_BUTTON_LEFT} and Controls.label(Controls.from_event(rc)) == "右クリック", "マウスのボタンを記録できる")
 	var wh := InputEventMouseButton.new()
 	wh.button_index = MOUSE_BUTTON_WHEEL_UP
@@ -664,11 +667,20 @@ func _test_tempo() -> void:
 	var saved := Controls.binds.duplicate(true)
 	Controls.binds["inventory"]["keys"] = [Controls._k(KEY_TAB), Controls._k(KEY_ESCAPE)]
 	Controls.binds["skill1"]["pad"] = Controls._b(JOY_BUTTON_X)
-	Controls.binds["guard"]["keys"] = [Controls._k(KEY_SPACE), {}]
 	Controls.binds["attack"]["keys"] = [Controls._k(KEY_J), {}]
 	Controls._migrate_v1()
-	check(Controls.binds["attack"]["keys"][0].get("c", 0) == KEY_SPACE and Controls.binds["guard"]["keys"][0].get("c", 0) == KEY_CTRL, "古い割り当ての Space は攻撃へ、構えは Ctrl へ")
-	check(Controls.binds["inventory"]["keys"][1].get("c", 0) != KEY_ESCAPE and Controls.binds["skill1"]["pad"] == Controls._b(JOY_BUTTON_Y), "古い割り当てを読み替える")
+	check(Controls.binds["attack"]["keys"][0].get("c", 0) == KEY_SPACE, "古い割り当ての Space は攻撃へ")
+	check(Controls.binds["inventory"]["keys"][1].get("c", 0) != KEY_ESCAPE and Controls.binds["skill1"]["pad"] != Controls._b(JOY_BUTTON_X), "古い割り当てを読み替える")
+	# 版3の構えの割り当て(Ctrl・LB・右クリック)は、スキルを選ぶ・使うへ移る
+	Controls.binds = Controls.defaults()
+	Controls.binds["skill_next"]["keys"] = [{}, {}]
+	Controls.binds["skill_use"]["mouse"] = {}
+	Controls.binds["skill1"]["pad"] = Controls._b(JOY_BUTTON_Y)
+	var cf3 := ConfigFile.new()
+	cf3.set_value("binds", "guard", {"keys": [Controls._k(KEY_CTRL), Controls._k(KEY_SPACE)], "pad": Controls._b(JOY_BUTTON_LEFT_SHOULDER), "mouse": Controls._m(MOUSE_BUTTON_RIGHT)})
+	Controls._migrate_v3(cf3)
+	check(Controls.binds["skill_next"]["keys"][0].get("c", 0) == KEY_CTRL and (Controls.binds["skill_next"]["keys"][1] as Dictionary).is_empty() \
+		and Controls.binds["skill_use"]["mouse"] == Controls._m(MOUSE_BUTTON_RIGHT) and (Controls.binds["skill1"]["pad"] as Dictionary).is_empty(), "版3の構えの割り当ては、スキルを選ぶ・使うへ移る")
 	Controls.binds = saved
 	Controls.apply()
 	var made := _make_floor(4, 1)
@@ -704,11 +716,11 @@ func _test_tempo() -> void:
 		var worst_y := 1e9
 		for off in [-11.0, 11.0]:
 			hero.position = m.center_of(entry) + Vector2(off, 0)
-			hero.cmd = {"move": Vector2.DOWN, "guard": false, "dodge": false}
+			hero.cmd = {"move": Vector2.DOWN, "attack": false, "dodge": false}
 			var y0 := hero.position.y
 			await _step(40)
 			worst_y = minf(worst_y, hero.position.y - y0)
-		hero.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+		hero.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 		check(worst_y > 40.0, "壁の角に掛かっても、滑って通路へ入れる (下へ %.1f px)" % worst_y)
 	# 仲間どうしは、動いている間すり抜ける
 	var spot := _open_spot(fl)
@@ -723,12 +735,12 @@ func _test_tempo() -> void:
 	b.controlled = true      # 自分では動かない
 	a.position = spot
 	b.position = spot + Vector2(40, 0)
-	a.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
-	b.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	a.cmd = {"move": Vector2.RIGHT, "attack": false, "dodge": false}
+	b.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 	await _step(40)
 	check(a.position.x > b.position.x + 5.0, "動いている仲間は、止まっている仲間をすり抜ける (%.1f / %.1f)" % [a.position.x, b.position.x])
 	# 止まると、重ならないように離れる
-	a.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	a.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 	a.position = b.position + Vector2(3, 0)
 	await _step(60)
 	check(a.position.distance_to(b.position) > a.radius + b.radius - 2.0, "止まっている仲間どうしは、重ならないように離れる (%.1f)" % a.position.distance_to(b.position))
@@ -739,10 +751,10 @@ func _test_tempo() -> void:
 	var nu := _fake_enemy(fl, spot + Vector2(40, 0), 50)
 	nu.state = "neutral"
 	var nx := nu.position.x
-	a.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
+	a.cmd = {"move": Vector2.RIGHT, "attack": false, "dodge": false}
 	await _step(40)
 	check(a.position.x > nu.position.x + 5.0 and is_equal_approx(nu.hp, 50.0), "中立の魔物はすり抜け、殴らない (%.1f / %.1f)" % [a.position.x, nu.position.x])
-	a.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	a.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 	b.controlled = false
 	_clear_enemies(fl)
 	# 魔物の速さと HP の係数
@@ -787,7 +799,7 @@ func _test_contact() -> void:
 			hero.ch.hp = hero.ch.max_hp() * 0.12
 		fl.heroes = [hero]
 		fl.leader = hero
-		hero.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
+		hero.cmd = {"move": Vector2.RIGHT, "attack": false, "dodge": false}
 		var x0 := hero.position.x
 		await _step(36)
 		results[case_id] = hero.position.x - x0
@@ -805,7 +817,7 @@ func _test_contact() -> void:
 	h0.position = spot
 	var en2 := _fake_enemy(fl, spot + Vector2(34, 0), 60)
 	fl.heroes = [h0]
-	h0.cmd = {"move": Vector2.RIGHT, "guard": false, "dodge": false}
+	h0.cmd = {"move": Vector2.RIGHT, "attack": false, "dodge": false}
 	var hp0 := h0.ch.hp
 	await _step(60)
 	check(is_equal_approx(en2.hp, 60.0), "押し込むだけでは敵のHPは削れない (60 → %.1f)" % en2.hp)
@@ -821,24 +833,58 @@ func _test_contact() -> void:
 	h0.ch.hp = float(h0.ch.max_hp())
 	h0.position = spot
 	var en3 := _fake_enemy(fl, spot + Vector2(34, 0), 300, "L")
-	h0.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+	h0.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 	var pos0 := h0.position.x
 	await _step(60)
 	var pushed_open := pos0 - h0.position.x
 	var dmg_open := h0.ch.max_hp() - h0.ch.hp
 	check(is_equal_approx(en3.hp, 300.0), "仲間は触れているだけでは攻撃しない(体当たりの自動攻撃はなし。敵HP 300 → %.1f)" % en3.hp)
 	check(dmg_open > 0.0, "魔物は触れていると殴ってくる (%.1f)" % dmg_open)
+	# 4. 攻撃を押した瞬間に一度振り、押し続けると溜まり、離すと強い一撃
 	_clear_enemies(fl)
 	h0.ch.hp = float(h0.ch.max_hp())
 	h0.position = spot
 	var en4 := _fake_enemy(fl, spot + Vector2(34, 0), 300, "L")
-	h0.cmd = {"move": Vector2.ZERO, "guard": true, "dodge": false}
-	pos0 = h0.position.x
-	await _step(60)
-	var pushed_guard := pos0 - h0.position.x
-	var dmg_guard := h0.ch.max_hp() - h0.ch.hp
-	print("  大型の敵の前で1秒: 構えなし 押された %.1f px / 被ダメージ %.1f、構えあり %.1f px / %.1f" % [pushed_open, dmg_open, pushed_guard, dmg_guard])
-	check(pushed_guard < pushed_open and dmg_guard < dmg_open, "構えると、押されにくく、ダメージも減る")
+	h0.facing = Vector2.RIGHT
+	h0.atk_cd = 0.0
+	h0.cmd = {"move": Vector2.ZERO, "attack": true, "dodge": false}
+	await _step(2)
+	var tap := 300.0 - en4.hp
+	check(tap > 0.0, "攻撃を押した瞬間に一度振る (%.1f)" % tap)
+	await _step(int((Balance.CHARGE_START + Balance.CHARGE_TIME) * 60.0) + 6)
+	check(h0.charging() and h0.charge_frac() >= 1.0 and h0._speed_now() < h0.ch.speed(), "押し続けると溜まり、溜めている間は遅くなる")
+	en4.position = h0.position + Vector2(34, 0)
+	var hp4 := en4.hp
+	h0.cmd["attack"] = false
+	await _step(2)
+	var charged := hp4 - en4.hp
+	check(charged > tap * 2.5 and not h0.charging(), "離すと溜めの一撃 (ふつう %.1f / 溜めきり %.1f)" % [tap, charged])
+	# 短く押して離しただけでは、溜めの一撃は出ない
+	await _step(int(Balance.ATTACK_CD * 60.0 * 1.6) + 4)
+	en4.position = h0.position + Vector2(34, 0)
+	h0.cmd["attack"] = true
+	await _step(3)
+	var hp5 := en4.hp
+	h0.cmd["attack"] = false
+	await _step(3)
+	check(is_equal_approx(en4.hp, hp5), "短く押して離すだけでは、溜めの一撃は出ない")
+	h0.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
+	# 5. Ctrl でスキルを選ぶ(0 = 通常攻撃 → 割り当てのあるスキル → 0)
+	h0.ch.skill_sel = 0
+	h0.next_skill()
+	check(h0.ch.skill_sel == 1 and h0.selected_skill() == Character.WEAPON_SKILL, "Ctrl で選ぶと、スキル1(武器の技)になる")
+	for k2 in Character.SLOTS + 1:
+		h0.next_skill()
+		if h0.ch.skill_sel == 0:
+			break
+	check(h0.ch.skill_sel == 0 and h0.selected_skill() == "", "選び続けると、通常攻撃に戻る")
+	var cw := Character.create("試し", "human", "wizard", Jobs.auto_stats("wizard"))
+	check(cw.slots.size() == Character.SLOTS and cw.slots[0] == Character.WEAPON_SKILL and String(cw.slots[1]) != "", "スキルは6枠で、スキル1は武器の技")
+	var dw := cw.to_dict()
+	var others: Array = cw.skills.filter(func(x): return x != Character.WEAPON_SKILL)
+	dw["slots"] = [others[0], Character.WEAPON_SKILL, "", ""]
+	var cw2 := Character.from_dict(dw)
+	check(cw2.slots.size() == Character.SLOTS and cw2.slots[0] == Character.WEAPON_SKILL and cw2.slots[1] == others[0], "4枠の頃の記録は、武器の技をスキル1へ寄せて読む")
 	# 4. 重ならない: 乱戦を回して、重なりの最大を測る
 	_clear_enemies(fl)
 	for h in heroes:
@@ -853,7 +899,7 @@ func _test_contact() -> void:
 		_fake_enemy(fl, spot + Vector2.from_angle(TAU * i / 9.0 + 0.3) * 90.0, 40 + i * 10, ["S", "M", "L"][i % 3], 0.3)
 	var worst := 0.0
 	for f in 600:
-		heroes[0].cmd = {"move": Vector2.from_angle(f * 0.05), "guard": f % 200 > 150, "dodge": f % 97 == 0}
+		heroes[0].cmd = {"move": Vector2.from_angle(f * 0.05), "attack": f % 200 > 150, "dodge": f % 97 == 0}
 		await physics_frame
 		var ov := _max_overlap(fl)
 		if ov > worst:
@@ -899,7 +945,7 @@ func _test_contact() -> void:
 		fl.heroes = [heroes[0]]
 		var big := _fake_enemy(fl, wall_spot + Vector2(40, 0), 500, "H")
 		heroes[0].ch.hp = float(heroes[0].ch.max_hp())
-		heroes[0].cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+		heroes[0].cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 		var worst2 := 0.0
 		for f in 120:
 			heroes[0].ch.hp = float(heroes[0].ch.max_hp())
@@ -1151,7 +1197,7 @@ func _test_game() -> void:
 	var xp0: int = main.gs.party[0].xp
 	var worst := 0.0
 	for f in 900:
-		lead.cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+		lead.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 		await physics_frame
 		worst = maxf(worst, _max_overlap(fl))
 		if f % 100 == 0 and not fl.enemies.is_empty():
@@ -1210,10 +1256,12 @@ func _test_game() -> void:
 	main._on_dive()
 	await _step(3)
 	main.bag_silver = 500
+	check(not main.gs.inventory.is_empty() and String(main.gs.party[0].equip["weapon"]) != "", "全滅の前は、持ち物と武器がある")
 	for h in main.heroes:
 		h.damage(99999.0, h.position, true)
 	await _step(3)
 	check(main.phase == "overlay" and main.overlay_kind == "wipe" and main.bag_silver == 0, "全滅すると未査定の燐晶を失う")
+	check(main.gs.inventory.is_empty() and main.gs.party.all(func(c): return c.equip.values().all(func(v): return String(v) == "")), "全滅すると持ち物と装備(武器・防具も)を全部失う")
 	main._after_overlay()
 	await _step(3)
 	var alive := 0
@@ -1307,12 +1355,38 @@ func _test_time(main: Node) -> void:
 	check(dt._alive_wanderers() == 1, "出たワンダリングを数える")
 	_clear_enemies(fl)
 	fl.wanderers.clear()
-	# 夜: 起きていると、どこかの部屋へ放り出され、朝になる
+	# 夜: 起きていると、どこかの部屋へ放り出され、朝になる(吐く夜でない日)
+	var ex0: bool = fl.exhale
+	fl.exhale = false
 	var room0: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(h0.position).x, fl.map.cell_of(h0.position).y)]
 	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + Balance.NIGHT_MIN - 0.01
 	await _step(3)
 	var room1: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
 	check(not dt.is_night() and dt.phase_name() == "朝" and room1 >= 0 and room1 != room0, "夜を迎えると、別の部屋へ放り出され、朝になる (部屋 %d → %d)" % [room0, room1])
+	# 吐く夜: 日が落ちると魔物が大量に湧き、夜明けまで階段が塞がる(放り出されない)
+	fl.exhale = true
+	var wm := Balance.WANDER_CHANCE
+	Balance.WANDER_CHANCE = 0.0
+	var room2: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
+	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + Balance.NIGHT_MIN - 0.01
+	await _step(3)
+	var room3: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
+	check(dt.is_night() and dt.exhaling() and room3 == room2, "吐く夜に日が落ちても、放り出されない")
+	check(dt._alive_wanderers() >= 3, "吐く夜に日が落ちると、魔物が大量に湧く (%d組)" % dt._alive_wanderers())
+	_clear_enemies(fl)
+	fl.wanderers.clear()
+	var fno: int = fl.floor_no
+	main.leader().position = fl.map.center_of(fl.down_cell)
+	main.interact()
+	await _step(2)
+	check(main.current == fl and fl.floor_no == fno and dt.stairs_sealed(), "吐く夜の夜は、階段が塞がっている")
+	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + 1440.0 + Balance.DAWN_MIN - 0.01 if dt.clock() >= Balance.NIGHT_MIN else floorf(dt.minutes / 1440.0) * 1440.0 + Balance.DAWN_MIN - 0.01
+	await _step(3)
+	check(not dt.is_night() and not dt.stairs_sealed(), "夜が明けると、階段が通れる")
+	Balance.WANDER_CHANCE = wm
+	fl.exhale = ex0
+	_clear_enemies(fl)
+	fl.wanderers.clear()
 	# 夕方から休むと、夜明けまで休み続ける
 	Balance.REST_WANDER_CHANCE = 0.0
 	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + 18 * 60

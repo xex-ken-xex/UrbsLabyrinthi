@@ -24,7 +24,7 @@ func _run() -> void:
 	ar.pop()
 	ar.pop()
 	for i in 150:
-		main.leader().cmd = {"move": Vector2.ZERO, "guard": false, "dodge": false}
+		main.leader().cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
 		await physics_frame
 	for i in 3:
 		await process_frame

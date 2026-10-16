@@ -98,7 +98,7 @@ func _clear_floor(fl_no: int) -> Array:
 			var nx2 := m.flow_step(flow, m.cell_of(lead.position), true)
 			if nx2.x >= 0:
 				mv = (m.center_of(nx2) - lead.position).normalized()
-		lead.cmd = {"move": mv, "guard": false, "dodge": false}
+		lead.cmd = {"move": mv, "attack": false, "dodge": false}
 	return ["timeout", frames / 60, total0 - fl.enemies.size(), _hp_pct()]
 
 func _hp_pct() -> int:
