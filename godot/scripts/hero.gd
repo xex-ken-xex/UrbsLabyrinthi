@@ -202,7 +202,7 @@ func _lose_hp(n: float, col: Color) -> void:
 
 func _struggle(delta: float) -> void:
 	var a := bool(cmd.get("attack", false))
-	if stuck_kind in ["net", "teeth", "glue", "web"]:
+	if stuck_kind in ["net", "teeth", "glue", "web", "vine"]:
 		if a and not atk_held:
 			stuck_t -= 0.3
 			lunge = Vector2.from_angle(Dice.rng.randf() * TAU) * 3.0
@@ -413,6 +413,18 @@ func _swing_hit(aim: Vector2, dmg_mult: float, reach_mult: float, knock_mult: fl
 		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0 * sqrt(dmg_mult), Color("ffe0a0"), 0.14))
 	return n
 
+## 武器の傷の種類(魔物の耐性が見る)。斬る・突く・叩く
+const WEAPON_DTYPE := {"sword": "slashing", "axe": "slashing", "dagger": "piercing", "spear": "piercing", "bow": "piercing",
+	"blunt": "bludgeoning", "staff": "bludgeoning", "none": "bludgeoning"}
+
+func weapon_dtype() -> String:
+	return String(WEAPON_DTYPE.get(ch.weapon_cat(), "bludgeoning"))
+
+## 魔力を帯びた武器か(珍しい武器と、魔晶の杖)。「魔法でない武器」への耐性を抜ける
+func weapon_magic() -> bool:
+	var w := ch.equip_item("weapon")
+	return bool(w.get("rare", false)) or bool(w.get("magic", false))
+
 ## 装備している武器の種類の、通常攻撃の振り方(Balance.SWING)
 func swing() -> Dictionary:
 	return Balance.SWING.get(ch.weapon_cat(), Balance.SWING["none"])
@@ -554,7 +566,7 @@ func _skill_effects(en: Enemy, sk: Dictionary, away: Vector2) -> void:
 	if float(sk.get("stun", 0.0)) > 0.0:
 		if sk.get("weapon", false) and en.stun_t <= 0.0:
 			Sfx.cue(game_floor, en.position, "stun")      # 武器の技で気絶させたとき(呪文の眠りや閃光は、前からのまま)
-		en.apply_stun(float(sk["stun"]))
+		en.apply_stun(float(sk["stun"]), String(sk.get("cond", "stun")))
 	if float(sk.get("sunder", 0.0)) > 0.0:
 		if en.sunder_t <= 0.0:
 			Sfx.cue(game_floor, en.position, "sunder")
@@ -865,7 +877,7 @@ func _draw_sleep() -> void:
 	else:
 		UI.text_center(self, 0.0, y, "!", 16, Color("ff6a5a"))
 
-const STUCK_LABEL := {"glue": "張りついた", "teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた", "stone": "石化"}
+const STUCK_LABEL := {"glue": "張りついた", "teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた", "stone": "石化", "hold": "金縛り", "vine": "蔓"}
 
 ## 罠の効き目を、体の上に描く
 func _draw_status() -> void:

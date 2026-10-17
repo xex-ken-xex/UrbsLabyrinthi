@@ -421,6 +421,7 @@ func start_arena() -> void:
 	current.shake.connect(func(v: float): _shake = maxf(_shake, v))
 	current.enemy_killed.connect(_on_enemy_killed)
 	current.ground_picked.connect(_on_ground_picked)
+	current.darkened.connect(_refresh_view)
 	var center := current.map.center_of(current.up_cell)
 	for i in heroes.size():
 		var h: Hero = heroes[i]
@@ -503,6 +504,7 @@ func _make_floor(n: int) -> FloorInstance:
 	fl.enemy_killed.connect(_on_enemy_killed)
 	fl.enemy_seen.connect(_on_enemy_seen)
 	fl.stat.connect(_on_floor_stat)
+	fl.darkened.connect(_refresh_view)
 	fl.ground_picked.connect(_on_ground_picked)
 	floors[n] = fl
 	return fl
@@ -1716,7 +1718,7 @@ func use_special(id: String, _c: Character) -> bool:
 			var n := 0
 			for e in current.enemies:
 				if not e.dead and e.position.distance_to(lead.position) <= r * Balance.CELL:
-					e.apply_stun(float(it2["v"]))
+					e.apply_stun(float(it2["v"]), "sleep" if String(it2["use"]) == "sleep_throw" else "stun")
 					n += 1
 			_menu_fx.append(["glass", lead, Vector2(0, 22)])
 			if String(it2["use"]) == "shriek":
