@@ -68,6 +68,7 @@ LOOKS = {
     "tetsukuzu": "a pile of grey-blue scrap iron plates, jagged",
     "ma_ha": "a leafy green magical herb sprig, darker and richer than the cave herb",
     "yakeishi": "a charcoal-black stone with glowing orange cracks and a tiny flame",
+    "iou_hana": "a cluster of bright yellow sulfur crystals on a dark scorched stone",
     "uroko": "a cluster of four teal-green scales, glossy",
     "doku_sen": "a lime-green venom gland sac with a small tube and a brown cap",
     "hane": "a single long off-white feather",

@@ -20,6 +20,8 @@ var fl: FloorInstance
 var entries: Array = []
 var theme := "generic"
 var base := "mid"
+var kg_factor := 1.0            # 階の燐晶を、層の目安(PhosFlow.kg_floor)に合わせた倍率(テストと測る道具が見る)
+const OUTCROP_MAX := 150        # 露頭の数の上限
 var _room_cells: Array = []     # Vector2i(部屋のマス)
 var _corr_cells: Array = []
 var _wall_cells: Array = []     # 壁に接している床のマス
@@ -126,12 +128,25 @@ func _pick_cell(prefer_wall: bool, corr_p: float = 0.0) -> Vector2i:
 func spawn_all() -> void:
 	if String(fl.map.data["meta"].get("floor_label", "")) == "闘技場":
 		return
-	var treasure_value := 0
+	var trs: Array = []
+	var dep_kg := 0.0          # 宝の部屋の山(生成器の宝の kg)
 	for r in fl.map.rooms:
 		var tr: Variant = r.get("treasure")
 		if typeof(tr) == TYPE_DICTIONARY:
-			treasure_value += _spawn_deposit(r, tr)
-	_spawn_outcrops(treasure_value)
+			trs.append(r)
+			dep_kg += _deposit_kg(tr)
+	var out_kg := 0.5 * dep_kg  # 壁ぎわの露頭は、宝の半分
+	# 燐の流れ: 階の燐晶(宝の山 + 露頭)を、層ごとの目安(数理モデルの kg_floor)に合わせる。山と露頭の割合はそのまま
+	kg_factor = 1.0
+	var target := PhosFlow.kg_floor(fl.layer_no)
+	if target > 0.0:
+		if dep_kg + out_kg > 0.0:
+			kg_factor = target / (dep_kg + out_kg)
+		else:
+			out_kg = target       # 宝の部屋が無い階は、露頭だけで
+	for r in trs:
+		_spawn_deposit(r, r["treasure"], kg_factor)
+	_spawn_outcrops(out_kg * kg_factor)
 	_spawn_forage()
 	_spawn_corpses()
 	for r in fl.map.rooms:
@@ -152,14 +167,18 @@ func _spawn_sump(room: Dictionary) -> void:
 	for i in Dice.rng.randi_range(4, 8):
 		add_crystal(_free_pos(cen, 38.0), Crystal.roll(base, Dice.rng), Dice.rng.randf_range(0.05, 0.2) * Balance.CRYSTAL_SCALE)
 
-## 宝のある部屋に、光る石の山を置く。持ち物(治療薬、灯具、遺品)も、そばに落ちている
-func _spawn_deposit(room: Dictionary, tr: Dictionary) -> int:
+## 宝の部屋の山の量(生成器の宝の kg。Balance.CRYSTAL_SCALE をかける前)
+func _deposit_kg(tr: Dictionary) -> float:
+	var silver := int(tr.get("silver", 0))
+	return float(silver) / float(Crystal.price(base)) if silver > 0 else 1.0
+
+## 宝のある部屋に、光る石の山を置く。持ち物(治療薬、灯具、遺品)も、そばに落ちている。f は層の目安に合わせる倍率
+func _spawn_deposit(room: Dictionary, tr: Dictionary, f: float = 1.0) -> void:
 	var avoid: Array = [fl.up_cell, fl.down_cell]
 	var cell := fl.map.free_cell_in_room(room, avoid)
 	if cell.x < 0:
-		return 0
-	var silver := int(tr.get("silver", 0))
-	var kg_total := (float(silver) / float(Crystal.price(base)) if silver > 0 else 1.0) * Balance.CRYSTAL_SCALE
+		return
+	var kg_total := _deposit_kg(tr) * f * Balance.CRYSTAL_SCALE
 	var n := clampi(int(round(kg_total / 0.1)), 2, 6)
 	var ws: Array = []
 	var wsum := 0.0
@@ -185,16 +204,19 @@ func _spawn_deposit(room: Dictionary, tr: Dictionary) -> int:
 		var gid := ItemDB.roll_gear(fl.layer_no, Dice.rng)
 		if gid != "":
 			add_item(_free_pos(cen, 22.0), gid)
-	return silver
 
-## 壁ぎわの露頭(小さな光る石)。宝の量に比例する
-func _spawn_outcrops(treasure_value: int) -> void:
-	var n := int(round(0.5 * float(treasure_value) / (0.1 * float(Crystal.price(base)))))   # 数は宝に比例。1個の量は、下で Balance.CRYSTAL_SCALE をかける
+## 壁ぎわの露頭(小さな光る石)。kg は合わせて置く量(Balance.CRYSTAL_SCALE をかける前)。
+## 1個はおよそ 0.1kg。深い層で量が多いときは、数を OUTCROP_MAX までにして、1個を大きくする
+func _spawn_outcrops(kg: float) -> void:
+	var n := mini(OUTCROP_MAX, int(round(kg / 0.1)))
+	if n <= 0:
+		return
+	var each := kg / n
 	for i in n:
 		var c := _pick_cell(true, 0.12)
 		if c.x < 0:
 			return
-		add_crystal(_jitter_in_cell(c), Crystal.roll(base, Dice.rng), Dice.rng.randf_range(0.04, 0.16) * Balance.CRYSTAL_SCALE)
+		add_crystal(_jitter_in_cell(c), Crystal.roll(base, Dice.rng), each * Dice.rng.randf_range(0.4, 1.6) * Balance.CRYSTAL_SCALE)
 
 func _forage_table() -> Array:
 	var rows: Array = []
@@ -371,8 +393,11 @@ func draw(ci: CanvasItem, view: Rect2) -> void:
 					tex = ItemIcons.texture("corpse")
 				var up := 12.0 if String(e.get("look", "")) == "hang" else 0.0     # 吊るされた体は、上へ高く描く
 				var kk := k * (0.75 if bool(e.get("searched", false)) else 1.0)
+				var tint := Color(kk, kk, kk)
+				if bool(e.get("scorched", false)):
+					tint = Color(kk * 0.42, kk * 0.33, kk * 0.28)      # 竜の熱で焦げた遺体(PhosFlow)
 				if tex != null:
-					ci.draw_texture_rect(tex, Rect2(pos - Vector2(15, 16 + up), Vector2(30, 30)), false, Color(kk, kk, kk))
+					ci.draw_texture_rect(tex, Rect2(pos - Vector2(15, 16 + up), Vector2(30, 30)), false, tint)
 				if not bool(e.get("searched", false)):
 					_glint(ci, pos + Vector2(4, -2), tms, ph, Color("b9d8ff"), k * 0.8)
 			_:

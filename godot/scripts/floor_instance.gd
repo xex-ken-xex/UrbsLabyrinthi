@@ -32,6 +32,7 @@ var enc_total := {}
 var enc_dead := {}
 var light_pos := Vector2.ZERO
 var exhale := false
+var hot := false              # 竜の気配で、縦穴の縁が熱い(吐く夜の夜の間、第7層から下。DungeonTime → PhosFlow)
 var arena := false            # 闘技場(階段は上りだけ。魔物は後から出す)
 var enc_serial := 5000
 var lamp_on := false           # 燐晶の灯油を灯している(光に弱い魔物が弱る)
@@ -437,6 +438,8 @@ func _draw() -> void:
 		var ri := map.idx(rc.x, rc.y)
 		if map.explored[ri] == 1 and vr.has_point(map.center_of(rc)):
 			_draw_rope(rc, 1.0 if map.visible[ri] == 1 else 0.4)
+	if hot:
+		_draw_heat(vr)
 	# 蜘蛛の巣
 	for i in webs:
 		var wc := Vector2i(int(i) % map.w, int(i) / map.w)
@@ -467,6 +470,37 @@ func _draw() -> void:
 		var cc2 := Color(0.9, 0.25, 0.2, a)
 		draw_line(cen + Vector2(-8, -8), cen + Vector2(8, 8), cc2, 2.5)
 		draw_line(cen + Vector2(-8, 8), cen + Vector2(8, -8), cc2, 2.5)
+
+## 竜の気配: 縦穴の縁から立ちのぼる陽炎(吐く夜の夜の間、第7層から下)。底の赤い光は見せない(ken 10/17)ので、縁の床だけを揺らす
+func _draw_heat(vr: Rect2) -> void:
+	var sh: Dictionary = map.data.get("shaft", {})
+	if not sh.has("x"):
+		return
+	var C := float(Balance.CELL)
+	var hole := Rect2(float(sh["x"]) * C, float(sh["y"]) * C, float(sh["w"]) * C, float(sh["h"]) * C)
+	if not vr.intersects(hole.grow(C * 3.0)):
+		return
+	var tms := float(Time.get_ticks_msec()) / 1000.0
+	for k in 3:
+		var r := hole.grow(C * (0.5 + k * 0.7))
+		var a := (0.22 - k * 0.06) * (0.75 + 0.25 * sin(tms * 3.0 + k * 1.7))
+		var pts := PackedVector2Array()
+		var per := r.size.x * 2.0 + r.size.y * 2.0
+		var n := 96
+		for i in n + 1:
+			var d := per * i / float(n)
+			var p: Vector2
+			if d < r.size.x:
+				p = r.position + Vector2(d, 0)
+			elif d < r.size.x + r.size.y:
+				p = r.position + Vector2(r.size.x, d - r.size.x)
+			elif d < r.size.x * 2.0 + r.size.y:
+				p = r.end - Vector2(d - r.size.x - r.size.y, 0)
+			else:
+				p = Vector2(r.position.x, r.end.y - (d - r.size.x * 2.0 - r.size.y))
+			p.y += sin(tms * 4.0 + i * 0.9 + k) * 2.5
+			pts.append(p)
+		draw_polyline(pts, Color(1.0, 0.62, 0.3, a), 3.0 - k * 0.6)
 
 func _draw_web(c: Vector2, k: float) -> void:
 	var col := Color(0.92, 0.92, 0.88, 0.55 * k)

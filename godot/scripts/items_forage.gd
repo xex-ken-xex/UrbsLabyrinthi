@@ -48,6 +48,7 @@ const ITEMS := {
 	"tetsukuzu": {"name": "鉄屑", "kind": "material", "price": 12, "free": true, "desc": "壊れた魔導体の部品。鍛冶組が溶かす。"},
 	"ma_ha": {"name": "魔草の葉", "kind": "material", "price": 14, "free": true, "desc": "動く草木から採れる葉。薬草より効く。"},
 	"yakeishi": {"name": "焼け石", "kind": "material", "price": 20, "free": true, "desc": "精霊が崩れた跡に残る、熱い石。燃料になる。"},
+	"iou_hana": {"name": "硫黄の華", "kind": "material", "price": 45, "free": true, "desc": "吐く夜、竜の息に焼かれた縦穴の縁に吹き出す、黄色い結晶。薬師組が、火薬と皮膚の薬に使う。"},
 	"uroko": {"name": "魔物の鱗", "kind": "material", "price": 40, "free": true, "desc": "硬い鱗。鎧の継ぎ目に使う。"},
 	"doku_sen": {"name": "毒腺", "kind": "material", "price": 32, "free": true, "desc": "蜘蛛や蛇の毒の袋。薬師組が、毒消しに加工する。"},
 	"hane": {"name": "羽", "kind": "material", "price": 12, "free": true, "desc": "飛ぶ魔物の羽。矢羽や、飾りになる。"},

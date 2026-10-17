@@ -15,6 +15,8 @@ var quests: Array = []         # 坑口館で受けた依頼 {"id", "n", "reward
 var food: Array = []           # 作った料理 {"id", "q"(出来ばえ), "until"(傷む時刻), "n"}。Cooking
 var home := {}                 # 自宅(Home)。空なら、まだ無い
 var journal := {}              # 冒険日記帳と実績(Journal、Trophies)
+var flow := PhosFlow.sanitize({})   # 燐の流れ(溜まり場に積もった落とし物、降りてくる骨亡者)。PhosFlow
+var last_lost := {}            # いちばん最近の全滅で失った品(id → 個数。料理は入らない)。溜まり場へ流す
 var clock := float(Balance.DIVE_START_MIN)   # 世界の時刻(通しの分)。潜った夜の数×24時間 + 迷宮の中の時刻。戻ることはない
 
 ## 坑口館の掲示板に出る依頼。[品物, 依頼主, 最少, 最多, 一言]
@@ -52,6 +54,7 @@ func new_game(chars: Array) -> void:
 	food = []
 	home = {}
 	journal = Journal.empty()
+	flow = PhosFlow.sanitize({})
 	clock = float(Balance.DIVE_START_MIN)
 	Cooking.clock = clock
 
@@ -139,6 +142,7 @@ func dismiss(ch: Character) -> bool:
 func lose_everything() -> int:
 	var n := food_count()
 	food.clear()
+	last_lost = inventory.duplicate()
 	for id in inventory:
 		n += int(inventory[id])
 	inventory.clear()
@@ -146,6 +150,8 @@ func lose_everything() -> int:
 		for slot in c.equip:
 			if String(c.equip[slot]) != "":
 				n += 1
+				var gid := String(c.equip[slot])
+				last_lost[gid] = int(last_lost.get(gid, 0)) + 1
 				c.equip[slot] = ""
 		c.clamp_resources()
 	return n
@@ -153,9 +159,12 @@ func lose_everything() -> int:
 ## 帰還積立に入っていて全滅したとき。装備は着けたまま戻り、持ち物は品ごとに半分(切り捨て)を失う。失った数を返す
 func lose_half() -> int:
 	var n := 0
+	last_lost = {}
 	for id in inventory.keys():
 		var lost := int(inventory[id]) - int(floor(int(inventory[id]) / 2.0))
 		n += lost
+		if lost > 0:
+			last_lost[id] = lost
 		remove_item(id, lost)
 	for i in range(food.size() - 1, -1, -1):
 		var lost_f := int(food[i]["n"]) - int(floor(int(food[i]["n"]) / 2.0))
@@ -355,7 +364,7 @@ func to_dict() -> Dictionary:
 	for c in party:
 		chars.append(c.to_dict())
 	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
-		"food": food, "clock": clock, "home": home, "journal": journal}
+		"food": food, "clock": clock, "home": home, "journal": journal, "flow": flow}
 
 func save() -> bool:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -397,6 +406,7 @@ func load_save() -> bool:
 			food.append({"id": String(f["id"]), "q": int(f.get("q", 1)), "until": float(f.get("until", 0.0)), "n": int(f.get("n", 1))})
 	home = Home.sanitize(parsed.get("home", {}))
 	journal = Journal.sanitize(parsed.get("journal", {}))
+	flow = PhosFlow.sanitize(parsed.get("flow", {}))
 	clock = 0.0
 	set_clock(maxf(float(parsed.get("clock", 0.0)), town_clock()))
 	return not party.is_empty()

@@ -170,7 +170,7 @@ pair: tools/dungeon-model.mjs(この表の元。--json で生成器の目安を�
 
 - 生成器(`docs/urbs-labyrinthi.html` の `Core.WIRE`)は、`node tools/dungeon-model.mjs --json` の層ごとの目安(1階の魔物の数 `mon_floor`、燐晶 `kg_floor`、遺体 `bodies_floor`、1体が落とす燐晶 `drop_kg`、値段)を持つ。`tools/check-floors.mjs` が、書き出した階がこの目安に収まるかを確かめる。
 - 魔物の数は、層の平均の2倍(ギルドが案内する一帯は巣が集まっている。docs/dungeon-ecology.md §5)。
-- 燐晶は、露頭と宝の部屋に `kg_floor`(拾える燐晶 + 鉱脈の 0.5% が露頭として顔を出す)。深い層ほど多い(手つかずの鉱脈)。Godot の `Balance.CRYSTAL_SCALE`(いま 0.3)は、そのまま。
+- 燐晶は、露頭と宝の部屋に `kg_floor`(拾える燐晶 + 鉱脈の 0.5% が露頭として顔を出す)。深い層ほど多い(手つかずの鉱脈)。Godot の `Balance.CRYSTAL_SCALE`(いま 0.3)は、そのまま。Godot は、階に置く燐晶(宝の山と露頭)を `kg_floor` × `CRYSTAL_SCALE` に合わせる(`scripts/ground_items.gd` の `kg_factor`。`tests/flow_test.gd` が確かめる)。`tools/check-floors.mjs` の「生成器の宝」の列は、倍率をかける前の量。
 - 区画(ゲームの地図、層の1〜2%)で1夜に育つ燐晶は 1kg ほど。プレイヤーの一行は平均の冒険者の何十倍も稼ぐ。これは「層の残り(魔物1.5万体、鉱脈)から区画へ流れ込む」と読む。同じ区画を毎夜掃除しつづければ層の魔物が減る、という手ざわりは、あとで入れられる(未実装)。
 - 遺体は層の死者から(第1〜2層の1階に約20体、第3〜4層に約2体、それより下はほぼ0。第7層以降は120年前の遠征隊だけ)。
 

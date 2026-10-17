@@ -356,9 +356,11 @@ godot --headless --path godot -s res://tests/bot_test.gd -- 6 4 0          # 自
 godot --headless --path godot -s res://tests/spawner_test.gd               # 魔物の出し方(近づいたら出す、遠くは眠らせる、歩き回る)
 godot --headless --path godot -s res://tests/perf_probe.gd                 # 重さの比べ(ワンダリングを30組まで出す)
 godot --headless --path godot -s res://tests/abyss_test.gd                 # 縦穴を覗く、縄梯子、溜まり場、迷宮の断面
+godot --headless --path godot -s res://tests/flow_test.gd                  # 燐の流れ(燐晶の量、下の層の魔物、骨亡者、溜まり場、竜の気配)
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- /tmp   # 各画面を撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- /tmp  # 擬音の動き方を並べて撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/abyss_shot.gd -- /tmp # 縦穴を覗く・縄梯子・迷宮の断面を撮る
+xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/flow_shot.gd -- /tmp  # 吐く夜の熱い縁、溜まり場の落とし物を撮る
 ```
 
 `smoke_test.gd` が見るもの(闘技場: 遭遇の生成、ポップ、レベル変更、係数の即時反映、波の記録、連戦、全滅、本編への非影響): ダイス式、6クラス×4種族、装備の制限、売買とセーブ、全280層の連結、
@@ -413,6 +415,13 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/abyss_s
 
 - 層(第N層)は、1〜5階のグループ(第1〜2層は5階、第3〜6層は4階、第7層からは1階。全30階、深さ約200m)。1階の広さは、第1〜2層が 192×128、第3〜6層が 128×86、第7層以降が 96×64。全階の中央を 20m四方の縦穴(虚空。歩けないが見通せる)が貫き、第10層(第30階)の底は竜の巣(縦穴の内側が部屋。赤竜が眠っていて、着くと実績。下り階段は無い)。第5〜6層(水鏡)には水路 `~`(歩けないが見通せる)と浅瀬 `=`(歩けるが速さ半分。水に棲む魔物は平気)と橋、第7層以降の骨と水鏡には柱 `I`(通れず見通せない)。階段は縦穴を囲む7つの候補地を夜ごとに巡る(下の階の上り階段は、この階の下り階段の真下)。第1〜6層には昔の竪坑の穴が4つあり、落とし穴は真下の階へ落ちる。魔物は、巣の間隔(縄張り)を取って置く。理由と数字は `docs/dungeon-scale.md`、`docs/dungeon-ecology.md`、`docs/dungeon-model.md`。
 - 縦穴の縁に立つと、縦穴の中に下の階の骨組みが4階ぶん、遠いほど小さく暗く重なって見える(深淵を覗く。`abyss.gd`)。その下と竜の巣は真っ黒。縁の角の杭から縄梯子が垂れていて、E で一階下りる・登る(一人ずつ〈運動〉、難易度は階の高さで 5m 10 〜 17m 15。外すと途中から落ちて 3m ごとに 1d6)。持ち物の画面の「迷宮の断面」は、縦穴の中心を通る切り口を地上から竜の巣まで描く(縦横同じ縮尺。まだ着いていない階は影だけ。`section_view.gd`)。どちらも `data/section.json`(7夜で変わらない骨組み。`tools/export-floors.mjs` が書き出す)を読む。第6層のいちばん下の階には竪坑の底の溜まり場があり、上の階から落ちてきた骨と遺品と燐晶が積もっている。
+
+燐の流れ(`phos_flow.gd`。設計メモ §5.6)。物は下へ、魔物は吐く夜に上へ流れる。
+- 第1〜6層で全滅すると、失った装備・持ち物と燐晶の半分が竪坑を落ちて、第26階の溜まり場に積もる(`GameState.flow["sump"]`、40品まで)。拾えば取り戻せる。
+- 見つけたのに調べずに放っておいた遺体は、夜のうちに起き上がり、次の夜、一つ下の階に骨亡者の群れ(遺体2体につき1体、4体まで)が歩き回る(`flow["risen"]`)。
+- 吐く夜の夜の間は、ワンダリング・モンスターの半分が一つ下の層の魔物になる(レベルはこの層 +2 まで)。
+- 第7層から下の吐く夜は、竜の気配がする。遺体の6割が焦げ、縦穴の縁に硫黄の華が吹き出し、夜の間は縁が熱い(2秒ごとに 1d4)。
+- 階に置く燐晶(宝の山と露頭)の量は、数理モデルの層ごとの目安 `kg_floor`(`data/manifest.json`)× `Balance.CRYSTAL_SCALE` に合わせる(`GroundItems.kg_factor`)。
 - 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
 - 拾うと、その物の絵が拾った仲間の頭の上へ跳ね上がり、右の地図の下に絵つきで知らせが出る(続けて同じ物を拾うと、数や重さをまとめる。`pickup_pop.gd`、`hud.gd`)。
 - 施錠された扉の解錠は、成功すると錠前の弓が外れて金の光が散り、失敗すると錠前が揺れて赤く光る(`unlock_fx.gd`)。
