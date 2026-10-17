@@ -541,6 +541,8 @@ func enter_floor(n: int, arrive: String, at: Vector2i = Vector2i.ZERO) -> void:
 	if arrive == "up" and not see.is_empty() and not fl.visited_rooms.has("floor"):
 		fl.visited_rooms["floor"] = true
 		log_msg(String(see[Dice.rng.randi_range(0, see.size() - 1)]), Color(0.8, 0.85, 0.9))
+	if arena == null:
+		PhosFlow.on_enter(self, fl)      # 溜まり場の落とし物、降りてきた骨亡者、竜の気配(その夜その階で一度だけ)
 
 ## 一行を center のまわりへ置き直す(層に着いたとき、夜に放り出されたとき)
 func place_party(center: Vector2) -> void:
@@ -789,11 +791,15 @@ func _check_wipe() -> void:
 		log_msg("全滅。記録して、全回復した", Color("ff9a8a"))
 		return
 	var lost := bag_value()
+	var lost_bag := bag_crystal.duplicate()
 	_clear_bag()
 	DiveSave.clear()      # 全滅を、迷宮の記録で取り消せないように
 	Journal.bump(gs, "wipes")
 	# 持ち物も装備も、全部失う(ken 10/16)。帰還積立に入っていれば、装備は戻り、持ち物は半分
 	var lost_items := gs.lose_half() if dive_insured else gs.lose_everything()
+	# 燐の流れ: 放っておいた遺体は骨亡者に。上の階で失った物は、竪坑を落ちて溜まり場へ
+	PhosFlow.end_dive(gs, floors)
+	var sunk := PhosFlow.to_sump(gs, current.floor_no, gs.last_lost, lost_bag)
 	var lost_line := "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items
 	var rescue_line := "灯手隊が、倒れた仲間を担ぎ出してくれた。"
 	if dive_insured:
@@ -808,6 +814,7 @@ func _check_wipe() -> void:
 		{"text": "未査定の燐晶 %d銀貨相当 を失った" % lost, "size": 16},
 		{"text": lost_line, "size": 16, "color": Color("ff9a8a")},
 		{"text": rescue_line, "size": 16, "color": Color("f1d98a")},
+		{"text": "残してきた物は、竪坑を落ちて、第6層の底の溜まり場に積もるだろう" if sunk else "", "size": 14, "color": Color(0.78, 0.82, 0.86)},
 		{"text": "", "size": 8},
 		{"text": "%s: 街へ" % Controls.hint("confirm"), "size": 18, "color": Color("9ad8ff")},
 	]
@@ -837,12 +844,37 @@ func _enter_room(pc: Vector2i) -> void:
 		_check_trophies()
 	elif String(r.get("kind", "")) == "sump":      # 竪坑の底。上の階から落ちてきた物が積もっている
 		log_msg("上の階から落ちてきた物が、底に積もっている。見上げると、竪坑の口が小さな四角に見える。", Color(0.78, 0.82, 0.86))
+		if PhosFlow.sump_has_lost(current, r):
+			log_msg("見覚えのある品が混じっている。上で失くした物が、ここまで落ちてきたらしい。", Color("f1d98a"))
+	else:
+		var fv := room_flavor(current, r)
+		if fv != "":
+			log_msg(fv, Color(0.74, 0.78, 0.82))
 	var feat: Variant = r.get("feature")
 	if typeof(feat) == TYPE_DICTIONARY:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))
 	var hook: Variant = r.get("hook")
 	if typeof(hook) == TYPE_STRING:
 		log_msg(hook, Color("c9b6ff"))
+
+## 部屋に初めて入ったときの描写(見える物と、聞こえる音かにおい。設計 §11.3)。部屋と夜で決まる(同じ部屋は同じ描写)
+static func room_flavor(fl: FloorInstance, r: Dictionary) -> String:
+	var see: Array = fl.style.get("see", [])
+	var hear: Array = fl.style.get("hear", [])
+	var smell: Array = fl.style.get("smell", [])
+	if see.is_empty():
+		return ""
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("flavor|%d|%d|%d" % [fl.floor_no, fl.night_no, int(r.get("id", 0))])
+	var out := String(see[rng.randi_range(0, see.size() - 1)])
+	var other: Array = hear if (rng.randf() < 0.5 or smell.is_empty()) else smell
+	if not other.is_empty():
+		out += String(other[rng.randi_range(0, other.size() - 1)])
+	if bool(r.get("lit", false)):
+		out += "灯守の灯が一つ、青い光を落としている。"
+	if String(r.get("kind", "")) == "pit":
+		out += "床の真ん中に、四角い穴が黒く口を開けている。下の階へ続いているらしい。"
+	return out
 
 func _open_doors_near_heroes() -> void:
 	var m := current.map
@@ -1260,6 +1292,9 @@ func interact() -> void:
 
 ## 落ちているものを拾った。燐晶は袋へ(税は持ち帰るときに)、自生物や遺品は持ち物へ(税なし)
 func _on_ground_picked(e: Dictionary, h: Hero) -> void:
+	var back := bool(e.get("sump", false))      # 溜まり場で、上で失くした物を取り戻した
+	if back:
+		PhosFlow.take_from_sump(gs, e)
 	if String(e["kind"]) == "crystal":
 		var pid := String(e["purity"])
 		var kg := float(e["kg"]) * (1.0 + party_skill_fx("sleight"))     # 盗賊の「手際」は、拾える燐晶を増やす
@@ -1284,9 +1319,11 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 	var rare := int(it.get("price", 0)) >= 40 or String(it.get("kind", "")) in ["weapon", "armor", "acc"]
 	var icol := Color("d8f0d8") if not rare else Color("ffe9a8")
 	var itex := ItemIcons.texture(id)
-	h.game_floor.add_child(PickupPop.make(itex, "%s%s" % [ItemDB.item_name(id), "" if qty == 1 else " ×%d" % qty], icol, e["pos"], h))
+	h.game_floor.add_child(PickupPop.make(itex, "%s%s%s" % [ItemDB.item_name(id), "" if qty == 1 else " ×%d" % qty, "(取り戻した)" if back else ""], icol, e["pos"], h))
 	hud.add_pickup("item_" + id, itex, ItemDB.item_name(id), icol, float(qty), "")
-	if rare:
+	if back:
+		log_msg("取り戻した: %s(上で失くした物)" % ItemDB.item_name(id), Color("f1d98a"))
+	elif rare:
 		log_msg("拾った: %s" % ItemDB.item_name(id), Color("ffe9a8"))
 
 func _clear_bag() -> void:
@@ -1916,6 +1953,7 @@ func return_to_surface() -> void:
 			detail.append("%s %.2fkg × %d銀" % [Crystal.jp(pid), float(bag_crystal[pid]), Crystal.price(pid)])
 	_clear_bag()
 	DiveSave.clear()
+	var risen := PhosFlow.end_dive(gs, floors)      # 放っておいた遺体は、夜のうちに骨亡者になって下の階へ
 	gs.day += 1
 	gs.set_clock(gs.town_clock())
 	var lines: Array = []
@@ -1943,6 +1981,8 @@ func return_to_surface() -> void:
 	var anvil := Smithing.anvil_ready(gs)
 	if anvil != "":
 		lines.append("自宅の鍛冶場で、%sが冷めて仕上がっている" % anvil)
+	if risen > 0:
+		lines.append("迷宮に、調べずに放ってきた遺体が%d体。夜のうちに起き上がり、骨亡者になって下の階へ降りていくだろう" % risen)
 	if rotten > 0:
 		lines.append("持ち帰った料理のうち%d皿が、くさっていた(持ち物の「料理」で捨てられる)" % rotten)
 	# 〈芸能〉: 宿で芸を見せて稼ぐ(倒れていない仲間のうち、いちばん高い人)

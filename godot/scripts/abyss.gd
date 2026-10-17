@@ -50,7 +50,7 @@ func setup(f: FloorInstance) -> void:
 	visible = false
 
 ## 縁に立っているか(縦穴を一マス広げた中で、縦穴の外)
-func _on_rim(p: Vector2) -> bool:
+func on_rim(p: Vector2) -> bool:
 	var C := float(Balance.CELL)
 	return _hole.grow(C * 1.6).has_point(p) and not _hole.has_point(p)
 
@@ -58,7 +58,7 @@ func _process(delta: float) -> void:
 	if not _ok or fl == null:
 		return
 	var lead := fl.leader
-	var want := lead != null and is_instance_valid(lead) and not lead.down and _on_rim(lead.position)
+	var want := lead != null and is_instance_valid(lead) and not lead.down and on_rim(lead.position)
 	var before := peer
 	peer = move_toward(peer, 1.0 if want else 0.0, delta / FADE)
 	if peer != before:

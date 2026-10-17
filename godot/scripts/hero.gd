@@ -60,6 +60,7 @@ var _poison_tick := 1.0
 var blind_t := 0.0            # 灯りが届かない(操作している一人なら、見える範囲が狭まる)
 var fear_t := 0.0             # 怯えて攻撃できない
 var confuse_t := 0.0          # 前後左右が逆になる
+var heat_t := 0.0             # 熱い縁(竜の気配)で、次に焼けるまでの秒(PhosFlow.heat)
 var rust := 0                 # 錆びた鎧。この潜行の間、守りが下がる(1につき防御1点)
 
 func setup(fl: FloorInstance, character: Character) -> void:

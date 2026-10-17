@@ -47,6 +47,14 @@ func update(delta: float) -> void:
 	_digest(dm, delta)
 	minutes += dm
 	_drain_queue(delta)
+	var fl: FloorInstance = main.current
+	if fl != null:
+		var hot := exhaling() and PhosFlow.hot_floor(fl)      # 竜の気配: 吐く夜の夜の間、縦穴の縁が熱い(第7層から下)
+		if hot != fl.hot:
+			fl.hot = hot
+			fl.queue_redraw()
+		if hot and not resting:
+			PhosFlow.heat(main, fl, delta)
 	_wander_acc += dm
 	while _wander_acc >= Balance.WANDER_EVERY:
 		_wander_acc -= Balance.WANDER_EVERY
@@ -180,17 +188,25 @@ func spawn_wanderer(ambush: bool, quiet: bool = false, hunt: bool = false) -> bo
 		if not h.down:
 			party_n += 1
 	var level := int(meta.get("party", {}).get("level", 1))
-	var enc := EncounterGen.generate(String(meta.get("theme", "generic")), level, 0 if Dice.rng.randf() < 0.6 else 1, maxi(1, party_n))
+	var theme := String(meta.get("theme", "generic"))
+	var activity := "うろついている"
+	# 燐の流れ: 吐く夜のワンダリングには、一つ下の層の魔物が混じる(PhosFlow)
+	if exhaling() and Dice.rng.randf() < PhosFlow.BELOW_P:
+		var b := PhosFlow.below(fl, level)
+		if not b.is_empty():
+			theme = String(b["theme"])
+			level = int(b["level"])
+			activity = "下の層から上がってきた"
+	var enc := EncounterGen.generate(theme, level, 0 if Dice.rng.randf() < 0.6 else 1, maxi(1, party_n))
 	if enc.is_empty():
-		return false
-	var lead: Hero = main.leader()
-	var at := _spawn_cell(fl, fl.map.cell_of(lead.position), 4 if ambush else 14, 9 if ambush else 40)
-	if at.x < 0:
 		return false
 	var lines: Array = []
 	for g in enc["groups"]:
-		lines.append(EncounterGen.mon_line(g))
-	var made: Array = fl.spawn_encounter(lines, String(enc["kind"]), fl.map.center_of(at), "うろついている", "chase" if ambush else "wander")
+		var line := EncounterGen.mon_line(g)
+		if activity != "うろついている":
+			line["below"] = true          # 一つ下の層から上がってきた(燐の流れ)
+		lines.append(line)
+	var made := _place_group(lines, String(enc["kind"]), activity, ambush)
 	if made.is_empty():
 		return false
 	fl.wanderers.append(made[0].enc_id)
@@ -205,6 +221,25 @@ func spawn_wanderer(ambush: bool, quiet: bool = false, hunt: bool = false) -> bo
 	elif not quiet:
 		main.log_msg(["どこかで、足音がした。", "遠くで、何かがうごめく気配がする。", "風向きが変わった。何かが近づいてくる。"][Dice.rng.randi_range(0, 2)], Color(0.85, 0.75, 0.7))
 	return true
+
+## 決まった魔物の群れを、見えない離れた所に、歩き回るワンダリングとして出す(燐の流れで降りてきた骨亡者など)。出せたら true
+func spawn_group(lines: Array, kind: String, activity: String) -> bool:
+	if lines.is_empty() or main.current == null or main.current.arena:
+		return false
+	var made := _place_group(lines, kind, activity, false)
+	if made.is_empty():
+		return false
+	main.current.wanderers.append(made[0].enc_id)
+	return true
+
+## 群れを置く。寝込みなら近く(すぐ襲ってくる)、そうでなければ見えない離れた所で歩き回る。置いた魔物を返す
+func _place_group(lines: Array, kind: String, activity: String, ambush: bool) -> Array:
+	var fl: FloorInstance = main.current
+	var lead: Hero = main.leader()
+	var at := _spawn_cell(fl, fl.map.cell_of(lead.position), 4 if ambush else 14, 9 if ambush else 40)
+	if at.x < 0:
+		return []
+	return fl.spawn_encounter(lines, kind, fl.map.center_of(at), activity, "chase" if ambush else "wander")
 
 ## 仲間からの道のり(マス)が lo〜hi で、いま見えていない床を選ぶ
 func _spawn_cell(fl: FloorInstance, from: Vector2i, lo: int, hi: int) -> Vector2i:
@@ -243,6 +278,8 @@ func _exhale() -> void:
 	Sfx.cue(fl, main.leader().position, "exhale")
 	main.log_msg("日が落ちた。今夜は吐く夜だ。迷宮が、魔物を吐き出した。", Color("ff8a6a"))
 	main.log_msg("階段は吐息に塞がれた。夜明けまで、この層から出られない。(%d組が湧き出してくる)" % Balance.EXHALE_BURST, Color("ff9a8a"))
+	if not PhosFlow.layer_info(fl.layer_no + 1).is_empty():
+		main.log_msg("吐息に乗って、下の層の魔物も上がってくる。", Color("ffb08a"))
 
 ## 順番待ちの群れ(吐く夜)を、上限に空きがあれば、EXHALE_QUEUE_EVERY 秒に一組ずつ出す。仲間のいる所を目指して歩く
 func _drain_queue(delta: float) -> void:
