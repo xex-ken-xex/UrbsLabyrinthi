@@ -80,7 +80,7 @@ func _ready() -> void:
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(row)
 	var tabs := UIKit.vbox(6)
-	for t in [["item", "アイテム"], ["food", "料理"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"]]:
+	for t in [["item", "アイテム"], ["food", "料理"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"], ["journal", "冒険日記帳"], ["trophy", "実績"]]:
 		var b := UIKit.button(t[1], _set_tab.bind(t[0]), 150)
 		tab_btns[t[0]] = b
 		tabs.add_child(b)
@@ -198,6 +198,8 @@ func _refresh() -> void:
 		"skill": _fill_skills()
 		"talent": _fill_talent()
 		"status": _fill_status()
+		"journal": _fill_journal()
+		"trophy": _fill_trophies()
 	_show_detail()
 
 func _fill_items() -> void:
@@ -322,6 +324,64 @@ func _fill_pick(c: Character) -> void:
 		if not c.has_feat(f):
 			_talent_add("take:feat:" + String(f), "特技: %s" % Talents.FEATS[f]["name"], UIKit.ACCENT)
 
+## 冒険日記帳: 層ごとに、その層に出る魔物(見かけていなければ ？？？)。層の外で出会った魔物は最後に
+func _fill_journal() -> void:
+	slot_box.add_child(UIKit.label("見かけた %d種   倒した %d体   実績 %d / %d" % [Journal.seen_species(gs), Journal.killed_total(gs), Trophies.count(gs), Trophies.ids().size()], 15, UIKit.GOLD))
+	for n in Journal.layer_ids():
+		var p := Journal.layer_progress(gs, n)
+		_journal_header("hdr:%d" % n, "── 第%d層 %s   倒した %d / %d種" % [n, String(Journal.layer(n).get("name", "")), p.x, p.y])
+		for id in Journal.layer(n).get("mons", []):
+			_journal_row(String(id))
+	var rest := Journal.others(gs)
+	if not rest.is_empty():
+		_journal_header("hdr:other", "── 層の外で出会った魔物")
+		for id in rest:
+			_journal_row(String(id))
+	if sel_id != "" and ids.has(sel_id):
+		item_list.select(ids.find(sel_id))
+
+func _journal_header(key: String, text: String) -> void:
+	ids.append(key)
+	item_list.add_item(text)
+	item_list.set_item_custom_fg_color(item_list.item_count - 1, UIKit.GOLD)
+	item_list.set_item_selectable(item_list.item_count - 1, false)
+
+func _journal_row(id: String) -> void:
+	ids.append(id)
+	var k := Journal.killed(gs, id)
+	if Journal.seen(gs, id) <= 0:
+		item_list.add_item("    ？？？")
+		item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.45, 0.47, 0.52))
+	else:
+		item_list.add_item("    %s%s" % [Journal.entry_name(gs, id), "   倒した %d" % k if k > 0 else "   見かけただけ"])
+		if k <= 0:
+			item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.75, 0.78, 0.82))
+
+## 実績: 取ったものは ★ と日付、まだのものは ☆ で暗く
+func _fill_trophies() -> void:
+	slot_box.add_child(UIKit.label("実績 %d / %d" % [Trophies.count(gs), Trophies.ids().size()], 15, UIKit.GOLD))
+	for id in Trophies.ids():
+		ids.append(id)
+		if Trophies.has(gs, id):
+			item_list.add_item("★ %s   %d日目" % [Trophies.name_of(id), int(gs.journal["trophies"][id])])
+			item_list.set_item_custom_fg_color(item_list.item_count - 1, UIKit.GOLD)
+		else:
+			item_list.add_item("☆ %s" % Trophies.name_of(id))
+			item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.55, 0.57, 0.62))
+	if sel_id != "" and ids.has(sel_id):
+		item_list.select(ids.find(sel_id))
+
+func _trophy_detail() -> String:
+	if sel_id == "" or not Trophies.ids().has(sel_id):
+		return "[b][color=#e8dcb0]実績[/color][/b]\n\nこれまでの歩み。取ったときは「パンパカパーン!」。\n\n取った %d / %d" % [Trophies.count(gs), Trophies.ids().size()]
+	var got := Trophies.has(gs, sel_id)
+	var t := "[b][color=%s]%s %s[/color][/b]\n\n%s\n\n" % ["#e8dcb0" if got else "#8a90a0", "★" if got else "☆", Trophies.name_of(sel_id), Trophies.desc_of(sel_id)]
+	t += "%d日目に取った" % int(gs.journal["trophies"][sel_id]) if got else "まだ取っていない"
+	if sel_id.begins_with(Trophies.LAYER_ALL):
+		var p := Journal.layer_progress(gs, int(sel_id.substr(Trophies.LAYER_ALL.length())))
+		t += "(倒した %d / %d種)" % [p.x, p.y]
+	return t
+
 func _fill_status() -> void:
 	item_list.add_item("(下の欄に表示)")
 	item_list.set_item_disabled(0, true)
@@ -359,6 +419,13 @@ func _show_detail() -> void:
 			t = _talent_detail(c)
 		"food":
 			t = _food_detail(c)
+		"journal":
+			if sel_id != "" and not sel_id.begins_with("hdr:"):
+				t = Journal.entry_text(gs, sel_id)
+			else:
+				t = "[b][color=#e8dcb0]冒険日記帳[/color][/b]\n\n見かけた魔物と倒した魔物を、層ごとに書き留めてある。見かけていない魔物は ？？？。\n層の魔物を全種類倒すと、実績「第N層 狩り尽くし」になる。\n\n見かけた %d種   倒した %d体" % [Journal.seen_species(gs), Journal.killed_total(gs)]
+		"trophy":
+			t = _trophy_detail()
 		"skill":
 			if sel_id == Character.WEAPON_SKILL and c.skill_def(sel_id).is_empty():
 				t = "[b][color=#e8dcb0]武器の技[/color][/b]\n\n武器を持っていない。装備している武器の種類で、技が決まる。"

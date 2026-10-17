@@ -792,7 +792,8 @@ func _buy_house() -> void:
 	if e != "":
 		_say(e, UIKit.BAD)
 		return
-	_after_guild("係が鍵を一本、窓口に置いた。「壁下区の長屋、三の路地の奥だ。前の住人は……まあ、戻らなかった。」(-%d銀貨)" % Home.HOUSE_PRICE, UIKit.GOOD)
+	_after_guild(("係が鍵を一本、窓口に置いた。「壁下区の長屋、三の路地の奥だ。前の住人は……まあ、戻らなかった。」(-%d銀貨)  " % Home.HOUSE_PRICE
+		+ Trophies.line(Trophies.evaluate(gs))).strip_edges(), UIKit.GOOD)
 
 func _content_home() -> void:
 	_head(String(LOCATIONS["home"]["name"]))

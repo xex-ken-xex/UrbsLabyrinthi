@@ -84,6 +84,7 @@ var _pack_t := 0.0
 var _pack_on := false
 var _in_wall := false
 var _emerge_cd := 0.0
+var seen_noted := false       # 冒険日記帳に「見かけた」と知らせたか
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
@@ -360,6 +361,9 @@ func _physics_process(delta: float) -> void:
 	apply_knock(delta)
 	var c := game_floor.map.cell_of(position)
 	visible = game_floor.map.in_bounds(c.x, c.y) and game_floor.map.visible[game_floor.map.idx(c.x, c.y)] == 1
+	if visible and not seen_noted and not disguised and not game_floor.arena:
+		seen_noted = true
+		game_floor.enemy_seen.emit(self)
 	_trait_look(c)
 	if game_floor.heroes.is_empty() or stun_t > 0.0:
 		queue_redraw()
@@ -661,6 +665,8 @@ func on_hit_hero(h: Hero) -> void:
 		grab_cd = 5.0
 		h.hold("glue", 1.6)
 		Sfx.cue(game_floor, h.position, "glue")
+		if traits.has("mimic"):
+			game_floor.stat.emit("mimic_bite")
 	if traits.has("rust") and rust_cd <= 0.0 and h.rust < 3:
 		rust_cd = 4.0
 		Sfx.cue(game_floor, h.position, "rust")

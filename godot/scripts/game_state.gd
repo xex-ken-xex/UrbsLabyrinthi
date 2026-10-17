@@ -14,6 +14,7 @@ var insured := false           # 坑口館の帰還積立。次に潜るとき�
 var quests: Array = []         # 坑口館で受けた依頼 {"id", "n", "reward", "client"}
 var food: Array = []           # 作った料理 {"id", "q"(出来ばえ), "until"(傷む時刻), "n"}。Cooking
 var home := {}                 # 自宅(Home)。空なら、まだ無い
+var journal := {}              # 冒険日記帳と実績(Journal、Trophies)
 var clock := float(Balance.DIVE_START_MIN)   # 世界の時刻(通しの分)。潜った夜の数×24時間 + 迷宮の中の時刻。戻ることはない
 
 ## 坑口館の掲示板に出る依頼。[品物, 依頼主, 最少, 最多, 一言]
@@ -50,6 +51,7 @@ func new_game(chars: Array) -> void:
 	quests = []
 	food = []
 	home = {}
+	journal = Journal.empty()
 	clock = float(Balance.DIVE_START_MIN)
 	Cooking.clock = clock
 
@@ -353,7 +355,7 @@ func to_dict() -> Dictionary:
 	for c in party:
 		chars.append(c.to_dict())
 	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
-		"food": food, "clock": clock, "home": home}
+		"food": food, "clock": clock, "home": home, "journal": journal}
 
 func save() -> bool:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -394,6 +396,7 @@ func load_save() -> bool:
 		if typeof(f) == TYPE_DICTIONARY and not Cooking.recipe(String(f.get("id", ""))).is_empty():
 			food.append({"id": String(f["id"]), "q": int(f.get("q", 1)), "until": float(f.get("until", 0.0)), "n": int(f.get("n", 1))})
 	home = Home.sanitize(parsed.get("home", {}))
+	journal = Journal.sanitize(parsed.get("journal", {}))
 	clock = 0.0
 	set_clock(maxf(float(parsed.get("clock", 0.0)), town_clock()))
 	return not party.is_empty()

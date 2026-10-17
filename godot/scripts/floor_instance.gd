@@ -7,6 +7,8 @@ signal message(text: String, kind: String)
 signal enemy_killed(enemy: Enemy)
 signal ground_picked(entry: Dictionary, hero: Hero)   # 落ちているものを拾った
 signal shake(strength: float)                         # 画面を揺らす(爆発の罠など)
+signal enemy_seen(enemy: Enemy)                       # 魔物が初めて見えた(冒険日記帳)
+signal stat(key: String)                              # 実績に数える出来事(Journal.bump)
 
 var map: FloorMap
 var style: Dictionary
