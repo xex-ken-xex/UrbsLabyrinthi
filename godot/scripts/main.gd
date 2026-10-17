@@ -641,6 +641,8 @@ func _dungeon_frame(delta: float) -> void:
 		_refresh_view()
 		if arena == null:
 			_enter_room(pc)
+			for s in FloorProps.near(current, pc):
+				log_msg(s, Color(0.8, 0.78, 0.68))
 	_open_doors_near_heroes()
 	if arena == null:
 		_check_traps()

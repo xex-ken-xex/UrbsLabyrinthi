@@ -203,7 +203,7 @@ const ROCK = 0, ROOM = 1, CORR = 2, DOOR = 3, VOID = 4, WATER = 5, SHALLOW = 6, 
 /* VOID 縦穴・竪坑の虚空('O'。歩けないが、見通せる)、WATER 深い水('~'。歩けない、見通せる。水の魔物は通れる)、
    SHALLOW 浅瀬('='。歩けるが遅い、見通せる)、PILLAR 柱('I'。通れず、見通せない。肋骨の柱、沈んだ列柱) */
 const SCHEMA = 'urbs-labyrinthi/0.3';                      // 書き出す JSON の形の版。項目を足したり変えたりしたら上げる
-const GENERATOR = '2.2.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
+const GENERATOR = '2.3.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
 
 /* ---------- 乱数 ---------- */
 function xmur3(str) {
@@ -1278,12 +1278,47 @@ function generate(opts, mons) {
       if (e) { e.activity = '通路をうろついている'; addEnc(e, near.length ? near : [k], -1, false); }
     } }
 
+  /* 世界の手ざわり(§11.5): 地図屋の印、壁の落書き、闇潜りの野営。夜の種で決まるので、夜ごとに変わる */
+  const world = [];
+  if (theme.vergha) {
+    const walk = k0 => { const d = new Int32Array(W * H).fill(-1), q = [k0]; d[k0] = 0;
+      for (let h = 0; h < q.length; h++) { const k = q[h]; for (const [dx, dy] of N4) { const x = k % W + dx, y = ((k / W) | 0) + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const n = I(x, y); if (d[n] < 0 && open(n)) { d[n] = d[k] + 1; q.push(n); } } }
+      return d; };
+    const cheb = (a, b) => Math.max(Math.abs(a % W - b % W), Math.abs(((a / W) | 0) - ((b / W) | 0)));
+    // 地図屋の印: 骨組みの通路の分かれ目に、前の夜の下り階段への矢印と、気づいた物の警告。夜が変わると古くなる(今夜の階段とは向きが違うことがある)
+    const prevDown = lairLayer ? null : sites[mirrorRoom((night + step) % 49)];
+    if (prevDown) {
+      const dPrev = walk(I(prevDown.cx, prevDown.cy)), dNow = downRoom ? walk(I(downRoom.cx, downRoom.cy)) : null;
+      const DIRS = [[1, 0, 'e', '→'], [-1, 0, 'w', '←'], [0, 1, 's', '↓'], [0, -1, 'n', '↑']];
+      const toward = (d, k) => { let b = null; for (const D of DIRS) { const n = I(k % W + D[0], ((k / W) | 0) + D[1]); if (d[n] >= 0 && (!b || d[n] < b.v)) b = { v: d[n], D }; } return b && b.D; };
+      const junc = [];
+      for (let k = 0; k < W * H; k++) { const x = k % W, y = (k / W) | 0; if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1 || !fixed[k] || tiles[k] !== CORR || trapAt.has(k) || calm.has(k) || dPrev[k] < 8) continue;
+        let n = 0; for (const [dx, dy] of N4) if (open(I(x + dx, y + dy))) n++; if (n >= 3) junc.push(k); }
+      const nM = Math.min(8, Math.max(2, Math.round(junc.length / 12))), picked = [];
+      for (const k of rn.shuffle(junc)) { if (picked.length >= nM) break; if (picked.some(q => cheb(q, k) < 10)) continue; picked.push(k);
+        const D = toward(dPrev, k), Dn = dNow ? toward(dNow, k) : null; if (!D) continue;
+        const warn = traps.some(t => cheb(I(t.x, t.y), k) <= 5) ? '罠あり' : encs.some(e => e.roomId >= 0 && !e.boss && cheb(I(rooms[e.roomId].cx, rooms[e.roomId].cy), k) <= 8) ? '巣' : '';
+        world.push({ kind: 'mark', x: k % W, y: (k / W) | 0, dir: D[2], text: '下り ' + D[3] + (warn ? '  ' + warn : ''), night: night - 1, stale: !Dn || Dn[2] !== D[2] }); }
+    }
+    // 壁の落書き: 目覚めの徒の七芒星と、静寂派の静印。深い層ほど七芒星が多い(目覚めの徒は深みを目指す)
+    const wallCells = []; for (const r of order) if (!r.kind && r !== master) for (const k of r.cells) if (k >= W && tiles[k - W] === ROCK && !trapAt.has(k) && !stairCells.has(k)) wallCells.push(k);
+    const nS = rn.int(2, 5), signs = [];
+    for (const k of rn.shuffle(wallCells)) { if (signs.length >= nS) break; if (signs.some(q => roomAt[q] === roomAt[k])) continue; signs.push(k);
+      world.push({ kind: 'sigil', x: k % W, y: (k / W) | 0, sign: rn.chance(Math.min(.85, .2 + .07 * floor)) ? 'seven' : 'quiet' }); }
+    // 闇潜りの野営: 許可証のない潜行者が夜を越した跡。腐葉と錆鉄(第1〜4層)の一画の奥の、何もいない部屋
+    if (floor <= 4 && rn.chance(.35)) {
+      const cs = order.filter(r => nestable(r) && r !== master && r.encId == null && !r.trapIds.length && r.area >= 9).sort((a, b) => b.deep - a.deep).slice(0, 3);
+      const r = cs.length ? rn.pick(cs) : null, k = r ? I(r.cx, r.cy) : -1;
+      if (r && !trapAt.has(k) && !stairCells.has(k)) world.push({ kind: 'camp', x: r.cx, y: r.cy, room: r.id });
+    }
+  }
   /* 骨組みと一画の指紋。tools/check-floors.mjs が、夜をまたいで変わらないことを確かめる(扉の種類は数えない) */
   const fnv = (h, v) => Math.imul(h ^ v, 16777619) >>> 0;
   let skelHash = 2166136261; for (let k = 0; k < W * H; k++) if (skel[k]) skelHash = fnv(skelHash, k * 8 + skel[k]);
   for (const d of districts) { let h = 2166136261; for (const k of d.cells) h = fnv(h, k * 8 + Math.min(tiles[k], 7)); d.hash = h.toString(16); }
   const lamps = props.filter(p => p.kind !== 'lamp' || tiles[I(p.x, p.y)] === CORR);
   for (const k of bridges) lamps.push({ kind: 'bridge', x: k % W, y: (k / W) | 0 });   // 水路を渡る橋(通路のマス。夜をまたいで残る)
+  for (const p of world) lamps.push(p);
   const mi = new Map((mons || []).map(m => [m.i, m]));
   return { schema: SCHEMA, floor, depth, opts: Object.assign({}, o, { level, party, floor, sub, subs, depth }), themeId: o.theme in THEMES ? o.theme : 'generic', theme, W, H, tiles, roomAt, rooms, order, doors, doorAt, traps, trapAt, encs, feats, stairs, deadEnds, exhale, night: ni, connected, monIndex: mi, I,
     shaft: Object.assign({ center: [CX, CY] }, shaft), sites: sites.map(r => ({ k: r.site, x: r.cx, y: r.cy, room: r.id })), verticals, districts: districts.map(d => ({ id: d.id, area: d.area, changed: d.changed, hash: d.hash, mirror: d.mirror })), districtOf, fixed, skeletonHash: skelHash.toString(16), props: lamps, skeleton: kind, wire: wireLayer, nSkeletonRooms,
@@ -1366,7 +1401,7 @@ function exportJSON(D) {
     stair_sites: D.sites,           // 階段の候補地7つ(k は候補地の番号。全階で同じ位置)
     verticals: D.verticals,         // 層をまたぐ縦の構造(竪坑の穴 hole、いちばん下は溜まり場)
     districts: D.districts,         // 一画: changed は最後に組み替わった夜、hash は通路と部屋の指紋
-    props: D.props,                 // 置き物(灯守の灯 lamp、縁の縄梯子 rope、水路の橋 bridge)。ゲームの見た目の手がかり
+    props: D.props,                 // 置き物(灯守の灯 lamp、縁の縄梯子 rope、水路の橋 bridge、地図屋の印 mark、壁の落書き sigil、闇潜りの野営 camp)。ゲームの見た目の手がかり
     lair: D.lair || undefined,      // 竜の巣(第10層。縦穴の底の部屋と、眠る竜の遭遇)
     rings: D.water.length ? D.water : undefined,   // 水鏡: 環ごとの水のマスの数
     traps: D.traps.map(trapOut),
