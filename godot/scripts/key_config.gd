@@ -15,6 +15,7 @@ var _arm_t := 0.0          # 枠を選んだ入力そのものを拾わないた
 var first: Button
 var speed_btns: Array = []
 var enemy_btns: Array = []
+var fps_btns: Array = []
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -56,6 +57,16 @@ func _ready() -> void:
 		es.add_child(eb)
 		enemy_btns.append(eb)
 	root.add_child(es)
+	# FPS の表示(重いときに、どれくらい落ちているかを見る)
+	var fs := UIKit.hbox(8)
+	var fl := UIKit.label("FPS の表示", 16)
+	fl.custom_minimum_size = Vector2(sp.get_child(0).get_minimum_size().x, 0)
+	fs.add_child(fl)
+	for on in [false, true]:
+		var fb := UIKit.button("出す" if on else "出さない", _on_fps.bind(on), 130)
+		fs.add_child(fb)
+		fps_btns.append(fb)
+	root.add_child(fs)
 	var panel := UIKit.panel()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(panel)
@@ -103,7 +114,18 @@ func _on_enemy_speed(i: int) -> void:
 	_refresh_speed()
 	msg.text = "魔物の速さを「%s」にした" % GameSettings.enemy_speed_name()
 
+func _on_fps(on: bool) -> void:
+	GameSettings.set_show_fps(on)
+	_refresh_speed()
+	msg.text = "FPS を、迷宮の画面の上に出す" if on else "FPS を出さない"
+
 func _refresh_speed() -> void:
+	for i in fps_btns.size():
+		var f: Button = fps_btns[i]
+		if (i == 1) == GameSettings.show_fps:
+			f.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
+		else:
+			f.remove_theme_stylebox_override("normal")
 	for i in enemy_btns.size():
 		var e: Button = enemy_btns[i]
 		if i == GameSettings.enemy_speed_index:

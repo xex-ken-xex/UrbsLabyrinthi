@@ -57,6 +57,7 @@ func _test_dungeon() -> void:
 	await _step(5)
 	var gs: GameState = main.gs
 	check(Journal.stat(gs, "deepest") == 1, "第1層に着いたことが残る")
+	main.current.spawner.spawn_all()      # 層の魔物は、近づくまで出ないので、先に全部出す
 	var en: Enemy = null
 	for e in main.current.enemies:
 		if not e.dead:

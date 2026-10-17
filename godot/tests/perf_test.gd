@@ -20,6 +20,8 @@ func _run() -> void:
 		heroes.append(h)
 	fl.heroes = heroes
 	fl.leader = heroes[0]
+	Spawner.off = true          # 最悪の場合: 層の魔物を全部出して、眠らせない
+	fl.spawner.spawn_all()
 	for e in fl.enemies:
 		e.state = "chase"
 		e.asleep = false

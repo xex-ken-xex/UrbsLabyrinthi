@@ -41,7 +41,7 @@ var xp := 0
 var size_key := "M"
 var color := Color.WHITE
 var asleep := false
-var state := "idle"            # idle / neutral / chase / flee
+var state := "idle"            # idle / neutral / chase / flee / wander(ワンダリング・モンスターが歩き回る)
 var timer := 0.0
 var atk_cd := 0.0
 var sense_t := 0.0
@@ -101,6 +101,9 @@ var squeeze_t := 0.0          # 扉の下をくぐっている
 var _trait2_t := 0.0
 var _note_cd := 0.0
 var _glow_vis := false
+# 眠らせる(Spawner)
+var dormant := false          # 仲間から遠いので、動きも描画も止めている
+var light := false            # ワンダリング・モンスターの軽い歩き方(位置だけ Spawner が進める)
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
@@ -136,6 +139,9 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	charge_cd = randf_range(0.5, 2.0)
 	web_attack = (m.get("attacks", []) as Array).any(func(a): return String(a.get("n", "")) == "Web")
 	web_cd = randf_range(1.0, 3.0)
+	# 出た瞬間から、見えるかを決めておく(暗がりに出た魔物が、最初のコマだけ見えないように)
+	var vc := fl.map.cell_of(pos)
+	visible = fl.map.in_bounds(vc.x, vc.y) and fl.map.visible[fl.map.idx(vc.x, vc.y)] == 1
 	if state == "idle" and not disguised:
 		if has_trait("shape"):
 			_set_shape()
@@ -285,7 +291,7 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	if hp <= 0.0:
 		_die()
 		return
-	if state == "idle" or state == "neutral":
+	if state == "idle" or state == "neutral" or state == "wander":
 		game_floor.alert_encounter(enc_id)
 	if src is Hero:
 		target = src
@@ -342,7 +348,7 @@ func wake() -> void:
 	if hidden_form():
 		_reveal()
 		return
-	if state == "idle" or state == "neutral":
+	if state == "idle" or state == "neutral" or state == "wander":
 		state = "chase"
 		shown_alert = 0.7
 		if traits.has("ambush"):
@@ -456,6 +462,18 @@ func _physics_process(delta: float) -> void:
 								_cue_seen("sniff")
 							game_floor.alert_encounter(enc_id)
 							break
+		"wander":
+			sense_t -= delta
+			if sense_t <= 0.0:
+				sense_t = 0.2
+				for h in game_floor.heroes:
+					if not h.down and _can_sense(h):
+						game_floor.alert_encounter(enc_id)
+						break
+			if state == "wander":
+				var to := game_floor.spawner.wander_next(self)
+				if to.x < INF:
+					_steer(delta, to, move_speed() * Spawner.WANDER_SPEED)
 		"chase":
 			_chase(delta)
 		"flee":
@@ -481,9 +499,25 @@ func _steer(delta: float, to: Vector2, spd: float) -> void:
 		return
 	walk(intent * sp * delta)
 	if (Engine.get_physics_frames() + int(get_instance_id() % 6)) % 6 == 0:     # 毎コマでなくてよい(広い層で、魔物が多いとき)
-		_open_doors()
+		open_doors()
 
-func _open_doors() -> void:
+## 動きと描画を止める / 戻す(Spawner。仲間から遠い魔物)
+func set_dormant(on: bool) -> void:
+	if on == dormant:
+		return
+	dormant = on
+	set_physics_process(not on)
+	if on:
+		visible = false
+		self_move = Vector2.ZERO
+		intent = Vector2.ZERO
+
+## ワンダリング・モンスターの軽い歩き方に替える / 戻す。眠らせるのと同じく止めるが、位置は Spawner が進める
+func set_light(on: bool) -> void:
+	light = on
+	set_dormant(on)
+
+func open_doors() -> void:
 	for d in game_floor.map.doors_near(position, 28.0):
 		if d["open"]:
 			continue

@@ -36,6 +36,7 @@ var enc_serial := 5000
 var lamp_on := false           # 燐晶の灯油を灯している(光に弱い魔物が弱る)
 var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
+var spawner := Spawner.new(self)   # 魔物を近づいたときに出し、遠くでは眠らせる
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
 var _tex_ver := -1
 
@@ -43,13 +44,15 @@ func _init() -> void:
 	process_physics_priority = 100     # 魔物と仲間が動いたあとに、押し合いを決める
 
 func _physics_process(delta: float) -> void:
+	Spawner.watch_fps(delta)
+	spawner.tick(delta)
 	var bodies: Array = []
 	for h in heroes:
 		if h.is_alive():
 			bodies.append(h)
 	# 広い層では、仲間から遠い魔物(動かない)を、押し合いの計算に入れない
 	for e in enemies:
-		if not e.dead and _near_hero(e.position, NEAR_SIM):
+		if not e.dead and not e.dormant and _near_hero(e.position, NEAR_SIM):
 			bodies.append(e)
 	Contact.step(delta, bodies)
 	ground.update(delta)
@@ -69,8 +72,8 @@ func set_style(st: Dictionary) -> void:
 		col[k] = Color.html(String(st["col"][k]))
 	queue_redraw()
 
-## 遭遇を、center のまわりに出す。出した魔物の数を返す
-func spawn_encounter(monsters: Array, kind: String, center: Vector2, activity: String = "") -> Array:
+## 遭遇を、center のまわりに出す。出した魔物を返す。state は、出たときの動き(追う chase / 歩き回る wander)
+func spawn_encounter(monsters: Array, kind: String, center: Vector2, activity: String = "", state: String = "chase") -> Array:
 	enc_serial += 1
 	var eid := enc_serial
 	enc_total[eid] = 0
@@ -88,7 +91,7 @@ func spawn_encounter(monsters: Array, kind: String, center: Vector2, activity: S
 				if not map.circle_blocked(pos, 12.0):
 					break
 			en.setup(self, m, {"id": eid, "kind": kind, "attitude": "敵対", "activity": activity}, pos)
-			en.state = "chase"
+			en.state = state
 			en.disguised = false
 			en.lurk = ""
 			en.died.connect(_on_enemy_died)
@@ -133,20 +136,24 @@ func setup(m: FloorMap) -> void:
 	_spawn_enemies()
 	_spawn_webs()
 
+## 層の遭遇は、まだ出さずに控えておく(Spawner が、仲間が近づいたら出す)。数だけは先に数える
 func _spawn_enemies() -> void:
 	for e in map.data["encounters"]:
 		var eid := int(e["id"])
-		enc_total[eid] = 0
+		enc_total[eid] = (e["tokens"] as Array).size()
 		enc_dead[eid] = 0
-		for t in e["tokens"]:
-			var mons: Array = e["monsters"]
-			var m: Dictionary = mons[int(t["g"])]
-			var en := Enemy.new()
-			en.setup(self, m, e, map.center_of(Vector2i(int(t["x"]), int(t["y"]))))
-			en.died.connect(_on_enemy_died)
-			add_child(en)
-			enemies.append(en)
-			enc_total[eid] += 1
+		spawner.pending[eid] = e
+
+## 控えていた遭遇の魔物を、書き出しの位置に出す
+func spawn_tokens(e: Dictionary) -> void:
+	for t in e["tokens"]:
+		var mons: Array = e["monsters"]
+		var m: Dictionary = mons[int(t["g"])]
+		var en := Enemy.new()
+		en.setup(self, m, e, map.center_of(Vector2i(int(t["x"]), int(t["y"]))))
+		en.died.connect(_on_enemy_died)
+		add_child(en)
+		enemies.append(en)
 
 ## 巣を張る魔物(大蜘蛛など)の遭遇のまわりに、蜘蛛の巣を張る
 func _spawn_webs() -> void:

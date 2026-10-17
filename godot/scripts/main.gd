@@ -545,6 +545,8 @@ func place_party(center: Vector2) -> void:
 	camera.reset_smoothing()
 	_last_cell = Vector2i(-99, -99)
 	_refresh_view()
+	if current != null:
+		current.spawner.refresh()
 
 ## 休む(野営)。休めないときは、理由をログへ
 func start_rest() -> void:
@@ -1546,9 +1548,10 @@ func _drop_cage(t: Dictionary) -> void:
 func random_room_pos(fl: FloorInstance, avoid: int) -> Vector2:
 	var m := fl.map
 	var rooms: Array = []
+	var waiting := fl.spawner.pending_rooms()      # まだ出していない魔物がいる部屋
 	for r in m.rooms:
 		var rid := int(r["id"])
-		if rid == avoid or not m.room_cells.has(rid) or (m.room_cells[rid] as Array).is_empty():
+		if rid == avoid or waiting.has(rid) or not m.room_cells.has(rid) or (m.room_cells[rid] as Array).is_empty():
 			continue
 		var occupied := false
 		for e in fl.enemies:
