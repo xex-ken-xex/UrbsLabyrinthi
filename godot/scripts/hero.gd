@@ -50,7 +50,9 @@ var growl_t := 20.0           # 次に腹が鳴るまでの秒(空腹のとき�
 var sleep_t := 0.0            # 眠っている(休息中)、または寝込みを襲われて動けない残り秒
 # 罠の効き目(TrapFx、Main._trap_effect)
 var stuck_t := 0.0            # 動けない残り秒(網、眠りの煙、転倒、閉じる歯列、逆さの重み)
-var stuck_kind := ""          # net / teeth / sleep / prone / lift / glue(魔物に張りつかれた)
+var stuck_kind := ""          # net / teeth / sleep / prone / lift / glue(魔物に張りつかれた) / web(蜘蛛の糸) / stone(石化)
+var stone_m := 0.0            # 石化の視線を浴びた量(GAZE_FULL で石になる。目をそらすと減る)
+const GAZE_FULL := 1.5
 var poison_t := 0.0
 var poison_dps := 0.0
 var _poison_tick := 1.0
@@ -126,6 +128,8 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		n *= 1.0 - maxf(0.0, ch.damage_reduction() - rust * Balance.AC_REDUCTION)
 	if charging() and ch.has_feat("shield_master"):
 		n *= 0.5
+	if stuck_t > 0.0 and stuck_kind == "stone":
+		n *= 0.5           # 石になった体は硬い
 	n = maxf(0.05, n)
 	stat_taken += n
 	ch.hp -= n
@@ -161,6 +165,17 @@ func hold(why: String, secs: float) -> void:
 	rush_t = 0.0
 	cancel_charge()
 
+## 石化の視線を浴びる(Enemy._gaze)。溜まりきると、しばらく石になる
+func gaze_by(amount: float, who: String) -> void:
+	if down:
+		return
+	stone_m += amount
+	if stone_m >= GAZE_FULL:
+		stone_m = 0.0
+		hold("stone", 3.0)
+		Sfx.cue(game_floor, position, "stone")
+		game_floor.message.emit("%sは%sの視線で石になった。目をそらせば防げる" % [ch.name, who], "danger")
+
 func poison(secs: float, dps: float) -> void:
 	if down:
 		return
@@ -187,7 +202,7 @@ func _lose_hp(n: float, col: Color) -> void:
 
 func _struggle(delta: float) -> void:
 	var a := bool(cmd.get("attack", false))
-	if stuck_kind in ["net", "teeth", "glue"]:
+	if stuck_kind in ["net", "teeth", "glue", "web"]:
 		if a and not atk_held:
 			stuck_t -= 0.3
 			lunge = Vector2.from_angle(Dice.rng.randf() * TAU) * 3.0
@@ -244,6 +259,7 @@ func _tick(delta: float) -> void:
 	iframes = maxf(0.0, iframes - delta)
 	sleep_t = maxf(0.0, sleep_t - delta)
 	stuck_t = maxf(0.0, stuck_t - delta)
+	stone_m = maxf(0.0, stone_m - delta * 0.35)
 	blind_t = maxf(0.0, blind_t - delta)
 	fear_t = maxf(0.0, fear_t - delta)
 	confuse_t = maxf(0.0, confuse_t - delta)
@@ -450,7 +466,7 @@ func _aim() -> Vector2:
 	var best: Enemy = null
 	var bd := 1e9
 	for en in game_floor.enemies:
-		if en.dead:
+		if en.dead or en.hidden_form():
 			continue
 		var to: Vector2 = en.position - position
 		if to.length() > 420.0 or absf(facing.angle_to(to)) > deg_to_rad(32.0):
@@ -531,6 +547,8 @@ func _skill_effects(en: Enemy, sk: Dictionary, away: Vector2) -> void:
 	var kn := float(sk.get("knock", 0.0))
 	if kn > 0.0:
 		en.knock = away * kn / maxf(0.5, en.body_mass() * 0.7)
+	if (float(sk.get("slow", 0.0)) > 0.0 or float(sk.get("stun", 0.0)) > 0.0) and bool(sk.get("spell", false)) and en.spell_resisted():
+		return      # 魔法への抵抗: 呪文の眠りや足止めを弾いた
 	if float(sk.get("slow", 0.0)) > 0.0:
 		en.apply_slow(float(sk["slow"]))
 	if float(sk.get("stun", 0.0)) > 0.0:
@@ -558,6 +576,8 @@ func _sk_projectile(sk: Dictionary, aim: Vector2) -> bool:
 		var p := Projectile.new()
 		p.setup_hero(game_floor, self, aim.rotated(ang), d, Jobs.class_color(ch.cls).lightened(0.2),
 			float(sk["range"]) * (1.25 if ch.has_feat("sharpshooter") else 1.0), float(sk["speed"]), bool(sk.get("pierce", false)), float(sk.get("slow", 0.0)), float(sk.get("stun", 0.0)))
+		p.elem = String(sk.get("elem", ""))
+		p.spell = bool(sk.get("spell", false))
 		game_floor.add_child(p)
 	facing = aim
 	return true
@@ -575,7 +595,7 @@ func _sk_burst(sk: Dictionary, center: Vector2) -> bool:
 			continue
 		var away := to.normalized() if to.length() > 0.5 else facing
 		if d > 0.0:
-			en.elem_hit(String(sk.get("elem", "")))
+			en.elem_hit(String(sk.get("elem", "")), bool(sk.get("spell", false)))
 			en.take_damage(d, away, self)
 		if en.dead:
 			continue
@@ -659,7 +679,7 @@ func _ai_think() -> void:
 	var best := 1e9
 	var mc := map.cell_of(position)
 	for en in game_floor.enemies:
-		if en.dead or en.state == "neutral":
+		if en.dead or en.state == "neutral" or en.hidden_form():
 			continue
 		var d := position.distance_to(en.position)
 		if d > 240.0:
@@ -845,7 +865,7 @@ func _draw_sleep() -> void:
 	else:
 		UI.text_center(self, 0.0, y, "!", 16, Color("ff6a5a"))
 
-const STUCK_LABEL := {"glue": "張りついた", "teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた"}
+const STUCK_LABEL := {"glue": "張りついた", "teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた", "stone": "石化"}
 
 ## 罠の効き目を、体の上に描く
 func _draw_status() -> void:
@@ -863,11 +883,26 @@ func _draw_status() -> void:
 					draw_line(Vector2(-r, o), Vector2(r, o), Color(0.8, 0.7, 0.5, 0.85), 1.0)
 				if controlled:
 					UI.text_center(self, 0.0, y, "連打で抜ける", 10, Color("ffe9a8"))
+			"web":
+				var r2 := radius + 5.0
+				for i in 6:
+					var a2 := TAU * i / 6.0 + 0.3
+					draw_line(Vector2.ZERO, Vector2.from_angle(a2) * r2, Color(0.95, 0.95, 0.9, 0.8), 1.0)
+				draw_arc(Vector2.ZERO, r2 * 0.55, 0.0, TAU, 12, Color(0.95, 0.95, 0.9, 0.7), 1.0)
+				draw_arc(Vector2.ZERO, r2, 0.0, TAU, 14, Color(0.95, 0.95, 0.9, 0.7), 1.0)
+				if controlled:
+					UI.text_center(self, 0.0, y, "連打で抜ける", 10, Color("ffe9a8"))
 			"sleep":
 				UI.text_center(self, 6.0 + sin(tm * 2.0) * 2.0, y - fmod(tm * 6.0, 6.0), "z", 12, Color(0.8, 0.85, 1.0, 0.9))
 			_:
 				UI.text_center(self, 0.0, y, String(STUCK_LABEL.get(stuck_kind, "!")), 10, Color("ffb070"))
 		return
+	if stone_m > 0.0:
+		# 石化の視線を浴びている: 灰色の弧が満ちると石になる
+		draw_arc(Vector2.ZERO, radius + 4.0, -PI / 2.0, -PI / 2.0 + TAU * stone_m / GAZE_FULL, 20, Color(0.75, 0.75, 0.72, 0.9), 2.5)
+		if controlled:
+			UI.text_center(self, 0.0, y, "目をそらせ", 10, Color(0.85, 0.85, 0.8))
+			return
 	if fear_t > 0.0:
 		UI.text_center(self, 0.0, y, "怯え", 10, Color(0.75, 0.7, 1.0))
 	elif confuse_t > 0.0:
@@ -889,6 +924,8 @@ func _draw() -> void:
 			if BUFF_COLORS.has(k):
 				draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 22, BUFF_COLORS[k], 2.0)
 		var tint := Color(1, 0.55, 0.5) if flash > 0.0 else Color.WHITE
+		if stuck_t > 0.0 and stuck_kind == "stone":
+			tint = Color(0.62, 0.62, 0.6)       # 石になった
 		if roll_t > 0.0:
 			tint.a = 0.55
 		_draw_sprite(tex, tint, facing.x)

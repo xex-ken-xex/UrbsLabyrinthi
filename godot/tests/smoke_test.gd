@@ -1509,7 +1509,7 @@ func _test_game() -> void:
 	make._on_roll_stats()
 	var rs: Dictionary = make._cur()["stats"]
 	check(make._cur()["method"] == "roll" and Jobs.ABILS.all(func(x): return int(rs[x]) >= 3 and int(rs[x]) <= 18), "ふると、各能力値を3d6で振る")
-	check(make.get_children().any(func(n): return n is DiceFx), "ふると、ゴロゴロの擬音が出る")
+	check(make.get_children().any(func(n): return n is DiceFx), "ふると、コロコロの擬音が出る")
 	make._rolling = 0.0
 	var before: Dictionary = make._cur()["stats"].duplicate()
 	make._on_class(CharaMake.CLASS_IDS.find("wizard"))

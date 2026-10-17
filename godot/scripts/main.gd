@@ -609,6 +609,7 @@ func _dungeon_frame(delta: float) -> void:
 	_search_cd = maxf(0.0, _search_cd - delta)
 	_pick_cd = maxf(0.0, _pick_cd - delta)
 	light_t = maxf(0.0, light_t - delta)
+	current.lamp_on = light_t > 0.0       # 光に弱い魔物が見る
 	_menu_cd = maxf(0.0, _menu_cd - delta)
 	_read_input()
 	# 入力で街へ戻った(heroes が空になった)あとは、迷宮の処理を続けない。

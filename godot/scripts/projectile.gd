@@ -15,6 +15,9 @@ var stun := 0.0
 var src: Hero = null
 var src_type := ""             # 魔物の撃った弾の、魔物の種別(〈動物使い〉〈看破〉が見る)
 var hit_set := {}
+var elem := ""                 # 仲間の呪文の種類(火・雷など。魔物の再生や、雷を吸う特徴が見る)
+var spell := false             # 呪文か(魔物の、魔法への抵抗が見る)
+var web := false               # 魔物の吐いた糸(当たると絡まって動けない。傷はない)
 
 func setup_enemy(fl: FloorInstance, pos: Vector2, d: Vector2, damage: float, col: Color, mon_type: String = "") -> void:
 	game_floor = fl
@@ -55,10 +58,12 @@ func _physics_process(delta: float) -> void:
 				continue
 			if position.distance_to(en.position) < en.radius + 3.0:
 				hit_set[en] = true
+				en.elem_hit(elem, spell)
 				en.take_damage(dmg, dir, src)
-				if slow > 0.0:
+				var resist: bool = spell and (slow > 0.0 or stun > 0.0) and not en.dead and en.spell_resisted()
+				if slow > 0.0 and not resist:
 					en.apply_slow(slow)
-				if stun > 0.0:
+				if stun > 0.0 and not resist:
 					en.apply_stun(stun)
 				if not pierce:
 					queue_free()
@@ -68,12 +73,22 @@ func _physics_process(delta: float) -> void:
 			if h.down:
 				continue
 			if position.distance_to(h.position) < h.radius + 4.0:
+				if web:
+					if not h.is_rolling():
+						h.hold("web", 1.6)
+						Sfx.cue(game_floor, h.position, "web")
+					queue_free()
+					return
 				h.damage(dmg, position - dir * 10.0, false, src_type)
 				queue_free()
 				return
 	queue_redraw()
 
 func _draw() -> void:
+	if web:
+		draw_line(-dir * 14.0, Vector2.ZERO, Color(0.95, 0.95, 0.9, 0.5), 1.0)
+		draw_circle(Vector2.ZERO, 3.5, Color(0.95, 0.95, 0.9, 0.9))
+		return
 	if from_hero:
 		draw_line(-dir * 8.0, Vector2.ZERO, Color(color.r, color.g, color.b, 0.6), 3.0)
 	draw_circle(Vector2.ZERO, 4.0, color)

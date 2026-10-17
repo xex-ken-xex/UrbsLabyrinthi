@@ -135,7 +135,12 @@ const TRAIT_JP := {"pack": "群れで囲む", "smell": "鼻が利く(壁越し�
 	"swarm": "群れで重なり合う", "mimic": "物のふりをする", "ambush": "不意を突く", "grapple": "張りつく", "ghost": "壁を抜ける",
 	"fortitude": "倒れても起き上がる", "relentless": "一度だけ踏みとどまる", "charge": "構えて突進する", "trample": "突進して踏みつける",
 	"leap": "跳びかかる", "regen": "傷が塞がる(火や光で止まる)", "burst": "死に際に弾ける", "rust": "鎧を錆びさせる", "shadow": "闇にまぎれる",
-	"flyby": "当てて離れる", "frenzy": "血に狂う", "reckless": "捨て身で来る"}
+	"flyby": "当てて離れる", "frenzy": "血に狂う", "reckless": "捨て身で来る",
+	"sun": "灯りの中で弱る", "sun_weak": "灯りの中で弱り、傷も深くなる", "aquatic": "水たまりに沈んで待つ(陸では鈍い)",
+	"amphib": "水たまりに沈んで待つ", "climb": "天井から落ちてくる", "webwalk": "巣を張る", "websense": "巣の揺れで気づく",
+	"shape": "人や鼠に化ける", "magic_res": "魔法に強い", "amorph": "扉の下をくぐる", "gaze": "見つめると石になる(目をそらせ)",
+	"stench": "ひどい臭い", "glow": "体が光る", "absorb_lightning": "雷を吸う", "water_sus": "冷気に弱い",
+	"recall": "迷宮の道を覚えている", "siege": "扉を壊す"}
 
 ## 日記帳に載る魔物の名前(見かけていなければ ？？？)
 static func entry_name(gs: GameState, index: String) -> String:

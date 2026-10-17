@@ -490,6 +490,8 @@ static func hold(b: Body, why: String, secs: float) -> void:
 	if b is Hero:
 		(b as Hero).hold(why, secs)
 	elif b is Enemy:
+		if why == "net" and (b as Enemy).has_trait("webwalk"):
+			return        # 巣を歩く魔物は、網に絡まらない
 		(b as Enemy).apply_stun(secs * 0.8)
 		if why == "sleep":
 			b.game_floor.spawn_text(b.position + Vector2(0, -b.radius - 14), "z", Color(0.8, 0.85, 1.0))
