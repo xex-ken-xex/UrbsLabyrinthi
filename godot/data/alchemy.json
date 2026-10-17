@@ -1,0 +1,185 @@
+{
+ "recipes": [
+  {
+   "id": "potion",
+   "out": "potion",
+   "n": 1,
+   "in": {
+    "yakusou": 2,
+    "shizuku_goke": 1
+   },
+   "nights": 0,
+   "dc": 10,
+   "desc": "薬草を雫苔の水で煮詰める。薬師組の標準の処方。"
+  },
+  {
+   "id": "ether",
+   "out": "ether",
+   "n": 1,
+   "in": {
+    "hikari_goke": 2,
+    "sabi_mizu": 1
+   },
+   "nights": 0,
+   "dc": 11,
+   "desc": "光苔を鉱水に溶かす。青く光るうちに瓶へ。"
+  },
+  {
+   "id": "antidote",
+   "out": "antidote",
+   "n": 2,
+   "in": {
+    "doku_sen": 1,
+    "yakusou": 1
+   },
+   "nights": 0,
+   "dc": 11,
+   "desc": "毒の袋から、毒を以て毒を制す薬を取り出す。"
+  },
+  {
+   "id": "lamp_oil",
+   "out": "lamp_oil",
+   "n": 1,
+   "in": {
+    "byakuro": 1,
+    "jushi": 1
+   },
+   "nights": 0,
+   "dc": 10,
+   "desc": "白蝋と獣脂を溶かし合わせる。"
+  },
+  {
+   "id": "sleep_bottle",
+   "out": "sleep_bottle",
+   "n": 1,
+   "in": {
+    "nemuri_take": 2,
+    "nenneki": 1
+   },
+   "nights": 0,
+   "dc": 12,
+   "desc": "眠り茸の胞子を、粘液で閉じこめる。吸い込まないこと。"
+  },
+  {
+   "id": "shriek_bottle",
+   "out": "shriek_bottle",
+   "n": 1,
+   "in": {
+    "sakebi_take": 2,
+    "nenneki": 1
+   },
+   "nights": 0,
+   "dc": 12,
+   "desc": "叫び茸の声を、粘液の膜で封じる。割れば鳴る。"
+  },
+  {
+   "id": "power_draught",
+   "out": "power_draught",
+   "n": 1,
+   "in": {
+    "kodo_nira": 2,
+    "uroko": 1
+   },
+   "nights": 1,
+   "dc": 13,
+   "desc": "坑道韮と魔物の鱗を、一夜寝かせる。"
+  },
+  {
+   "id": "stone_draught",
+   "out": "stone_draught",
+   "n": 1,
+   "in": {
+    "tetsu_take": 2,
+    "honekuzu": 2
+   },
+   "nights": 1,
+   "dc": 13,
+   "desc": "鉄茸と骨片を、一夜寝かせる。"
+  },
+  {
+   "id": "wind_draught",
+   "out": "wind_draught",
+   "n": 1,
+   "in": {
+    "kagami_goke": 2,
+    "hane": 2
+   },
+   "nights": 1,
+   "dc": 13,
+   "desc": "鏡苔と羽を、一夜寝かせる。"
+  },
+  {
+   "id": "hi_potion",
+   "out": "hi_potion",
+   "n": 1,
+   "in": {
+    "potion": 2,
+    "inori_goke": 1
+   },
+   "nights": 2,
+   "dc": 14,
+   "desc": "治療薬に祈りの苔を沈めて、二夜寝かせる。"
+  },
+  {
+   "id": "hi_ether",
+   "out": "hi_ether",
+   "n": 1,
+   "in": {
+    "ether": 2,
+    "mizukagami_so": 1
+   },
+   "nights": 2,
+   "dc": 14,
+   "desc": "魔力水に水鏡草を浮かべて、二夜寝かせる。"
+  },
+  {
+   "id": "return_scroll",
+   "out": "return_scroll",
+   "n": 1,
+   "in": {
+    "furui_ko": 1,
+    "sui_sho_mo": 1
+   },
+   "nights": 2,
+   "dc": 15,
+   "desc": "古い香を焚きしめた紙に、水晶藻の粉で道を書く。二夜かかる。"
+  },
+  {
+   "id": "regen_elixir",
+   "out": "regen_elixir",
+   "n": 1,
+   "in": {
+    "iki_take": 1,
+    "hone_no_hana": 1
+   },
+   "nights": 3,
+   "dc": 16,
+   "desc": "息茸と骨の花を、三夜寝かせる。"
+  },
+  {
+   "id": "revive_charm",
+   "out": "revive_charm",
+   "n": 1,
+   "in": {
+    "hone_no_hana": 2,
+    "hakatsuchi": 2,
+    "shinju": 1
+   },
+   "nights": 3,
+   "dc": 17,
+   "desc": "骨の花と墓土を真珠に込める。三夜かかる。"
+  },
+  {
+   "id": "marrow_elixir",
+   "out": "marrow_elixir",
+   "n": 1,
+   "in": {
+    "zui_mitsu": 1,
+    "nanashi_no_mi": 1
+   },
+   "nights": 5,
+   "dc": 18,
+   "desc": "髄蜜と名なしの実を、五夜寝かせる。いちばん難しい。"
+  }
+ ]
+}

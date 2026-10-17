@@ -20,6 +20,7 @@ const LOCATIONS := {
 	"pleasure": {"name": "寝息通り", "art": "pleasure"},
 	"guild": {"name": "坑口館・冒険者ギルド", "art": "guild"},
 	"market": {"name": "壁下市場「灰の辻」", "art": "market"},
+	"home": {"name": "我が家(壁下区の長屋)", "art": "home"},
 }
 const QUOTES := {
 	"smith": "「炉火の神ヘルグの槌は、嘘をつかねえ。いい鋼を持っていきな。」",
@@ -28,6 +29,7 @@ const QUOTES := {
 	"temple": "「眠りは誰にも訪れる。静寂の母が、あなたの夜を守りますように。」",
 	"inn": "「あいよ、湯と寝床だ。今夜も、何人戻ってきたかね。」",
 	"guild": "「おかえり。戻ってきた者は、まずここで名を書く。遺品があれば、遺品課の窓口へ。」",
+	"home": "壁下区の長屋の一間。戸を閉めると、迷宮の息も、街の喧騒も、少しだけ遠くなる。",
 	"market": "「灰麦も豆も、今朝の隊商で入ったばかりだ。迷宮で火を焚くなら、焚き木も持っていきな。」",
 	"pleasure": "縁環区と壁下区の境に伸びる通り。迷宮の「息」に対して、人の寝息の通りと呼ばれる。",
 }
@@ -74,6 +76,7 @@ const SIGNS := [
 	["guild", "坑口館", "冒険者ギルド", Vector2(0.64, 0.42), "大穴の縁に、ギルドの本部が建っている。窓口の灯は、夜通し消えない。"],
 	["inn", "止まり木亭", "宿・酒場・仲間", Vector2(0.70, 0.66), "笑い声と、焼いた肉の匂いが漏れてくる。"],
 	["temple", "静寂派の神殿", "癒し・蘇り", Vector2(0.12, 0.76), "鐘は鳴らない。静寂の母の神殿は、いつも静かだ。"],
+	["home", "我が家", "台所・寝床ほか", Vector2(0.46, 0.50), "坑口の灯の届かない路地の奥に、自分の家の戸口がある。"],
 	["market", "灰の辻", "市場・食材", Vector2(0.88, 0.76), "壁下区へ下る辻に、麦と豆と干物の露店が並んでいる。"],
 	["dive", "坑口", "迷宮へ降りる", Vector2(0.50, 0.80), "大穴から、青白い光が昇っている。今夜の通路は、どう組み替わっただろう。"],
 ]
@@ -87,6 +90,7 @@ const ENTER_LINES := {
 	"pleasure": "広場の東から、提灯の続く通りへ入った。",
 	"guild": "坑口館の扉を押した。査定課の秤の音と、帰還を書き込む筆の音がする。",
 	"market": "坂を下って、灰の辻へ出た。焼いた芋の匂いと、売り声がする。",
+	"home": "路地を抜けて、長屋の戸を開けた。自分の家のにおいがする。",
 }
 ## 坑口館の掲示板(入るたびに2枚)
 const NOTICES := [
@@ -379,6 +383,9 @@ func _refresh_all() -> void:
 	art.set_style(String(LOCATIONS[location]["art"]))
 	var hub := location == "hub"
 	signs.visible = hub
+	var hs := signs.find_child("sign_home", true, false)
+	if hs != null:
+		hs.get_parent().visible = Home.owned(gs)
 	place_box.visible = not hub
 	_build_content()
 	call_deferred("_refocus")
@@ -433,6 +440,7 @@ func _build_content() -> void:
 		"inn": _content_inn()
 		"pleasure": _content_pleasure()
 		"guild": _content_guild()
+		"home": _content_home()
 
 ## 中身の見出し(店の人の一言は、左の札に出す)
 func _head(title: String, _quote: String = "") -> void:
@@ -713,6 +721,7 @@ func _content_guild() -> void:
 	cols.add_child(rc)
 	_guild_relics(lc)
 	_guild_insurance(lc)
+	_guild_house(lc)
 	_guild_report(lc)
 	_guild_board(rc)
 
@@ -766,6 +775,30 @@ func _guild_insurance(box: VBoxContainer) -> void:
 	b.disabled = gs.bank_silver < cost
 	box.add_child(b)
 	box.add_child(_wrap("次の潜行一回ぶん。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。掛け金は仲間のレベルで決まる。", 13, UIKit.DIM))
+
+## 空き家の札: 壁下区の長屋の一間を買う(生産系②)
+func _guild_house(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("空き家の札  住まいの斡旋", 18, UIKit.ACCENT))
+	if Home.owned(gs):
+		box.add_child(_wrap("壁下区の長屋に、自分の家がある(広場の看板「我が家」)。", 14, UIKit.GOOD))
+		return
+	var b := UIKit.button("壁下区の長屋の一間を買う(%d銀貨)" % Home.HOUSE_PRICE, _buy_house)
+	b.disabled = gs.bank_silver < Home.HOUSE_PRICE
+	box.add_child(b)
+	box.add_child(_wrap("台所と寝床つき。台所では全部の料理を作れ、寝床ではただで休める。食料庫・物置・実験室は、あとから増築できる。", 13, UIKit.DIM))
+
+func _buy_house() -> void:
+	var e := Home.buy_house(gs)
+	if e != "":
+		_say(e, UIKit.BAD)
+		return
+	_after_guild("係が鍵を一本、窓口に置いた。「壁下区の長屋、三の路地の奥だ。前の住人は……まあ、戻らなかった。」(-%d銀貨)" % Home.HOUSE_PRICE, UIKit.GOOD)
+
+func _content_home() -> void:
+	_head(String(LOCATIONS["home"]["name"]))
+	var hp := HomePanel.new()
+	hp.setup(self, gs, "kitchen")
+	content.add_child(hp)
 
 func _guild_report(box: VBoxContainer) -> void:
 	box.add_child(UIKit.label("査定課  前回の査定", 18, UIKit.ACCENT))

@@ -97,6 +97,7 @@ func _draw_procedural() -> void:
 		"pleasure": _draw_pleasure()
 		"guild": _draw_guild()
 		"market": _draw_market()
+		"home": _draw_home()
 		_: _grad(Rect2(Vector2.ZERO, size), Color("101018"), Color("202030"))
 
 func _draw_vignette() -> void:
@@ -560,3 +561,46 @@ func _draw_market() -> void:
 		draw_line(Vector2(lx - W * 0.1, H * 0.12), Vector2(lx + W * 0.1, H * 0.12), Color("1a1410"), 1.5)
 		_glow(Vector2(lx, H * 0.15), 26.0 * _flick(float(i) * 2.1), Color("ffb060"), 0.45, 6)
 		draw_circle(Vector2(lx, H * 0.15), 6.0, Color("ffd090"))
+
+## 我が家: 長屋の一間。土間のかまど、棚の瓶、小さな窓から見える坑口の光
+func _draw_home() -> void:
+	var W := _w()
+	var H := _h()
+	_grad(Rect2(0, 0, W, H), Color("1c1612"), Color("2e241c"))
+	# 板壁
+	for i in 14:
+		var x := W * i / 14.0
+		draw_line(Vector2(x, 0), Vector2(x, H * 0.66), Color("1a120c"), 2.0)
+	# 小窓と坑口の光
+	var wn := _p(0.62, 0.12)
+	draw_rect(Rect2(wn.x, wn.y, W * 0.12, H * 0.16), Color("0a1420"))
+	_glow(wn + Vector2(W * 0.06, H * 0.16), W * 0.06, Color("6ad0ff"), 0.3, 6)
+	draw_line(wn + Vector2(W * 0.06, 0), wn + Vector2(W * 0.06, H * 0.16), Color("3a2a1a"), 3.0)
+	draw_rect(Rect2(wn.x, wn.y, W * 0.12, H * 0.16), Color("3a2a1a"), false, 5.0)
+	# 棚と瓶
+	for row in 2:
+		var sy := H * (0.18 + row * 0.14)
+		draw_rect(Rect2(W * 0.08, sy, W * 0.3, 6), Color("4a3420"))
+		_rng.seed = 7 + row
+		for k in 7:
+			var bx := W * 0.09 + k * W * 0.04
+			var bc := Color.from_hsv(_rng.randf(), 0.5, 0.7)
+			draw_rect(Rect2(bx, sy - 22, 14, 22), bc.darkened(0.3))
+			draw_rect(Rect2(bx + 2, sy - 14, 10, 12), bc)
+	# 土間とかまど
+	var gy := H * 0.66
+	draw_rect(Rect2(0, gy, W, H - gy), Color("2a221c"))
+	var kx := W * 0.22
+	draw_rect(Rect2(kx - 60, gy - 50, 120, 70), Color("5a4a40"))
+	draw_rect(Rect2(kx - 22, gy - 20, 44, 26), Color("120a06"))
+	_glow(Vector2(kx, gy - 6), 46.0 * _flick(1.7, 8.0), Color("ff9040"), 0.55, 7)
+	draw_circle(Vector2(kx, gy - 62), 28.0, Color("3a3a40"))
+	for m in motes:
+		var k := fmod(t * m[2] * 0.25 + m[3], 1.0)
+		draw_circle(Vector2(kx + (m[0] - 0.5) * 30.0, gy - 90 - k * H * 0.3), 5.0 + 10.0 * k, Color(0.7, 0.7, 0.7, 0.15 * (1.0 - k)))
+	# 寝床
+	draw_rect(Rect2(W * 0.66, gy - 30, W * 0.28, 44), Color("6a5a48"))
+	draw_rect(Rect2(W * 0.66, gy - 36, W * 0.08, 14), Color("c8b8a0"))
+	# 吊り灯
+	_glow(Vector2(W * 0.5, H * 0.1), 40.0 * _flick(4.2), Color("ffc060"), 0.45, 7)
+	draw_circle(Vector2(W * 0.5, H * 0.1), 6.0, Color("ffe0a0"))

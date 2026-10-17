@@ -1016,7 +1016,9 @@ func _trap_effect(t: Dictionary, fx: String, victim: Body, pos: Vector2) -> void
 		"summon": _trap_summon(pos)
 		"squeak": pass          # 鳴るだけ(alarm で魔物が来る)
 		"rust":
-			if hero != null:
+			if hero != null and bool(hero.ch.equip_item("armor").get("rustproof", false)):
+				log_msg("%sの鎧は、錆の雨を弾いた。" % hero.ch.name, Color("c8d8e8"))
+			elif hero != null:
 				hero.rust = mini(3, hero.rust + 1)
 				log_msg("%sの鎧が錆びた。この潜行の間、守りが %d 下がる" % [hero.ch.name, hero.rust], Color("ffb070"))
 			else:
@@ -1670,10 +1672,34 @@ func use_special(id: String, _c: Character) -> bool:
 					if String(it["buff"]) == "regen":
 						v = h.ch.max_hp() * v / float(it["t"])      # 時間をかけて、最大HPの v 割
 					h.buffs[String(it["buff"])] = {"t": float(it["t"]), "v": v}
+					_menu_fx.append(["drink", h])
 					return true
 			return false
 		"return":
 			pending_return = true
+			return true
+		"cure":
+			var hc := _hero_of(_c)
+			if hc == null or hc.poison_t <= 0.0:
+				return false
+			hc.poison_t = 0.0
+			_menu_fx.append(["drink", hc])
+			return true
+		"sleep_throw", "shriek":
+			var it2: Dictionary = ItemDB.ITEMS[id]
+			var lead := leader()
+			var r := 4.0 if String(it2["use"]) == "sleep_throw" else 5.0
+			var n := 0
+			for e in current.enemies:
+				if not e.dead and e.position.distance_to(lead.position) <= r * Balance.CELL:
+					e.apply_stun(float(it2["v"]))
+					n += 1
+			if String(it2["use"]) == "shriek":
+				current.alert_radius(lead.position, 14.0)
+				_menu_fx.append(["trap_alarm", lead])
+			else:
+				_menu_fx.append(["gas", lead])
+			log_msg("%sを割った。%d体の魔物が動きを止めた。" % [it2["name"], n], Color("e8dcb0"))
 			return true
 	return false
 
@@ -1731,6 +1757,12 @@ func return_to_surface() -> void:
 	for f in gs.food:
 		if Cooking.rotten(f, gs.clock):
 			rotten += int(f["n"])
+	var pots := Home.ready_pots(gs)
+	if not pots.is_empty():
+		lines.append("自宅の実験室で、%sが仕上がっている" % "、".join(pots))
+	var anvil := Smithing.anvil_ready(gs)
+	if anvil != "":
+		lines.append("自宅の鍛冶場で、%sが冷めて仕上がっている" % anvil)
 	if rotten > 0:
 		lines.append("持ち帰った料理のうち%d皿が、くさっていた(持ち物の「料理」で捨てられる)" % rotten)
 	# 〈芸能〉: 宿で芸を見せて稼ぐ(倒れていない仲間のうち、いちばん高い人)

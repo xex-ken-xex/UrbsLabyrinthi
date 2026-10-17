@@ -85,6 +85,8 @@ func buff(key: String, default: float = 1.0) -> float:
 		"chill":
 			if v < 1.0 and ch.meal_v("chill") > 0.0:
 				v = 1.0 - (1.0 - v) * ch.meal_v("chill")     # 寒さ除け
+			if v < 1.0 and ch.equip_fx("chill") > 0.0:
+				v = 1.0 - (1.0 - v) * (1.0 - ch.equip_fx("chill"))     # 獣皮の外套
 	return v
 
 func body_mass() -> float:

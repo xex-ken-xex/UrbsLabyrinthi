@@ -176,7 +176,7 @@ func mass() -> float:
 	if not a.is_empty():
 		match String(a["type"]):
 			"heavy": m += 0.25
-			"medium": m += 0.1
+			"medium": m += 0.0 if a.get("light_mass", false) else 0.1
 	m *= 1.0 + skill_fx("athletics")
 	if has_feat("grappler"):
 		m *= 1.25

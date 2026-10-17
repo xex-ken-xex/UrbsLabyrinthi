@@ -22,6 +22,34 @@ const BASE_ITEMS := {
 		"desc": "180秒間、灯りの届く半径が2マス広がる。"},
 	"return_scroll": {"name": "帰還の札", "kind": "consumable", "price": 150, "use": "return", "v": 0.0,
 		"desc": "迷宮の中から、荷物を持ったまま地上へ戻る。"},
+	# --- 魔法実験で作る薬(店には無い。data/alchemy.json) ---
+	"antidote": {"name": "毒消し", "kind": "consumable", "price": 50, "use": "cure", "v": 0.0, "brewed": true,
+		"desc": "毒を消す。薬師組の処方を、自分の手で写したもの。"},
+	"sleep_bottle": {"name": "眠り薬の瓶", "kind": "consumable", "price": 70, "use": "sleep_throw", "v": 6.0, "brewed": true,
+		"desc": "足もとに叩きつけると、眠りの胞子が広がる。まわり4マスの魔物が、6秒ほど動けなくなる。"},
+	"shriek_bottle": {"name": "叫び瓶", "kind": "consumable", "price": 60, "use": "shriek", "v": 3.0, "brewed": true,
+		"desc": "割ると、叫び茸の甲高い声が響く。まわり5マスの魔物がすくむ(3秒)。ただし、遠くの魔物も目を覚ます。"},
+	"power_draught": {"name": "力の水薬", "kind": "consumable", "price": 120, "use": "buff", "buff": "power", "v": 1.25, "t": 90.0, "brewed": true,
+		"desc": "90秒間、体当たりと武器の威力が 25% 上がる。坑道韮の辛さが、喉を焼く。"},
+	"stone_draught": {"name": "石肌の水薬", "kind": "consumable", "price": 120, "use": "buff", "buff": "guard", "v": 0.75, "t": 90.0, "brewed": true,
+		"desc": "90秒間、受けるダメージが 25% 減る。肌が、少し灰色になる。"},
+	"wind_draught": {"name": "疾風の水薬", "kind": "consumable", "price": 120, "use": "buff", "buff": "speed", "v": 1.25, "t": 60.0, "brewed": true,
+		"desc": "60秒間、足が 25% 速くなる。"},
+	"hi_ether": {"name": "上級魔力水", "kind": "consumable", "price": 240, "use": "mp_pct", "v": 1.0, "brewed": true,
+		"desc": "MPを全快させる。"},
+	"regen_elixir": {"name": "再生の霊薬", "kind": "consumable", "price": 300, "use": "buff", "buff": "regen", "v": 1.0, "t": 60.0, "brewed": true,
+		"desc": "60秒かけて、最大HPぶんがじわじわ戻る。"},
+	"marrow_elixir": {"name": "髄蜜の霊薬", "kind": "consumable", "price": 500, "use": "elixir", "v": 1.0, "brewed": true,
+		"desc": "HPとMPが全快する。骨の髄の蜜と、名なしの実を五夜寝かせたもの。"},
+	"murky": {"name": "濁った薬", "kind": "material", "price": 2, "brewed": true,
+		"desc": "実験に失敗した、何の役にも立たない液体。"},
+	# --- 鍛冶の材料(炉火の槌で売る。data/smithing.json) ---
+	"tetsukai": {"name": "鉄塊", "kind": "material", "price": 60,
+		"desc": "鍛冶組が溶かして固めた、鍛冶の材料。鉄屑3つを鍛冶場で溶かしても作れる。"},
+	"sumi": {"name": "炭", "kind": "material", "price": 8,
+		"desc": "炉の燃料。焚き木より熱い。鍛冶場で1回に1つ使う。"},
+	"yumizai": {"name": "弓材", "kind": "material", "price": 40,
+		"desc": "乾かして削り出した、弓や盾の木地。壁の外の林から運ばれてくる。"},
 	# --- 武器 ---
 	"dagger": {"name": "短剣", "kind": "weapon", "cat": "dagger", "power": 1.0, "price": 50, "desc": "軽い。盗賊と魔術師も使える。"},
 	"shortsword": {"name": "片手剣", "kind": "weapon", "cat": "sword", "power": 2.0, "price": 120, "desc": "扱いやすい剣。"},
@@ -70,11 +98,17 @@ const BASE_ITEMS := {
 }
 
 ## 全品。自生物、魔物の素材、遺品(ForageData、tools/make-items.py が作る)と、市場の食材(Cooking)を足してある。燐晶ではないので、税がかからない
-static var ITEMS: Dictionary = BASE_ITEMS.merged(ForageData.ITEMS).merged(Cooking.ingredient_items())
+static var ITEMS: Dictionary = _all_items()
+
+## 鍛冶で作れる品(素材からだけ作れる品)と、その良品・逸品も足す(Smithing)
+static func _all_items() -> Dictionary:
+	var all: Dictionary = BASE_ITEMS.merged(ForageData.ITEMS).merged(Cooking.ingredient_items()).merged(Smithing.gear_items())
+	return all.merged(Smithing.tier_items(all))
 
 const SHOPS := {
 	"smith": ["dagger", "shortsword", "longsword", "greatsword", "mace", "warhammer", "handaxe", "greataxe", "spear", "shortbow", "longbow",
-		"leather", "studded", "chain_shirt", "breastplate", "chain_mail", "plate", "buckler", "power_band", "swift_boots"],
+		"leather", "studded", "chain_shirt", "breastplate", "chain_mail", "plate", "buckler", "power_band", "swift_boots",
+		"tetsukai", "sumi", "yumizai"],
 	"general": ["potion", "hi_potion", "ether", "lamp_oil", "return_scroll", "robe", "quarterstaff", "vital_ring", "lamp_charm"],
 	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash"],
 	"market": ["haimugi", "suzumame", "chikabu", "makina", "hai_imo", "sunauo", "yagi_raku", "iwadori_tamago", "shirokona",
@@ -134,6 +168,8 @@ static func detail(id: String) -> String:
 		s += "\n料理の材料(持ち物の「料理」で使う)。"
 	if Cooking.is_fuel(id):
 		s += "\n野営の燃料になる(燃料1つで、火が1時間もつ)。"
+	if it.get("forged", false) or it.has("tier"):
+		s += "\n店には無い。自宅の鍛冶場で作る。"
 	if GUILD_ONLY.has(id):
 		s += "\n店では売れない。坑口館(冒険者ギルド)の遺品課が引き取り、謝礼を出す。"
 	match String(it["kind"]):
@@ -148,6 +184,10 @@ static func detail(id: String) -> String:
 				s += "   技の威力 +%.1f" % float(it["spell"])
 		"armor":
 			s += "\n種類: %s   防御 +%d" % [ARMOR_TYPE_JP[it["type"]], int(it["ac"])]
+			if it.get("light_mass", false):
+				s += "   軽い"
+			if it.get("rustproof", false):
+				s += "   錆びない"
 		"tome":
 			var names: Array = []
 			for c in it["classes"]:
