@@ -1495,16 +1495,19 @@ func jump_trap(t: Dictionary) -> void:
 	elif not TrapFx.PERIODIC.has(String(t.get("fx", ""))):
 		_trigger_trap(t, leader())      # 振り子や噴き口は、外せばそのまま刃や炎が来る
 
-## 落とし穴: 一行ごと下の階へ落ちる(どこかの部屋)。いちばん下の階では、浅い穴で済む
+## 落とし穴: 一行ごと下の階へ落ちる。階は同じ世界座標で重なっている(縦穴の中心が原点)ので、
+## 真下に近い床へ落ちる。真下が岩なら、いちばん近い床。いちばん下の階では、浅い穴で済む
 func _fall_down() -> void:
 	if phase != "dungeon" or current == null or arena != null:
 		return
 	if current.floor_no >= Balance.MAX_FLOOR:
 		log_msg("穴は浅かった。這い上がった。", Color(0.8, 0.8, 0.85))
 		return
+	var here := current.map.cell_of(leader().position) - current.map.shaft_center
 	log_msg("床が抜けた! 一行は下の階へ落ちた", Color("ff9a7a"))
 	enter_floor(current.floor_no + 1, "up")
-	var at := random_room_pos(current, -1)
+	var below := current.map.nearest_walkable(current.map.shaft_center + here)
+	var at := current.map.center_of(below) if below.x >= 0 else random_room_pos(current, -1)
 	if at.x < INF:
 		place_party(at)
 	for h in heroes:

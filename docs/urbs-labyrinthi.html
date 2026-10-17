@@ -126,13 +126,14 @@ tr.pick:hover td{background:color-mix(in srgb,var(--bronze) 12%,transparent)}
 <div class="wrap">
   <header class="top">
     <h1>Urbs Labyrinthi</h1><span class="gmtag">GM用</span>
-    <p>迷宮都市の地下を、種と夜から組み立てる。大部屋と階段は夜をまたいで残り、通路と小部屋と中身は夜ごとに入れ替わる。まだ見ていないところは霧の中。</p>
+    <p>迷宮都市の地下を、種と夜から組み立てる。中央の縦穴、階段の候補地、骨組みの道と大部屋は夜をまたいで残る。階段は候補地を子守唄の息継ぎの数だけ巡り、一画の通路と小部屋は静かな夜に4割、吐く夜に全部が組み替わる。中身は毎夜入れ替わる。まだ見ていないところは霧の中。</p>
   </header>
 
   <section class="ctl" aria-label="迷宮の設定">
     <div class="grp">
       <label>舞台 <select id="theme"></select></label>
       <label><span id="floorlab">層</span> <input id="floor" type="number" min="1" max="99" inputmode="numeric"></label>
+      <label id="sublabel">階 <input id="sub" type="number" min="1" max="9" inputmode="numeric" title="層の中の何階めか(第1〜2層は5階、第3〜6層は4階、第7層からは1階)"></label>
       <span class="night"><label for="night">第</label><button type="button" id="nprev" aria-label="前の夜">‹</button><input id="night" type="number" min="0" max="999" inputmode="numeric"><button type="button" id="nnext" aria-label="次の夜">›</button><span>夜</span></span>
       <span id="nightchips"></span>
     </div>
@@ -198,8 +199,9 @@ tr.pick:hover td{background:color-mix(in srgb,var(--bronze) 12%,transparent)}
 const Core = (() => {
 'use strict';
 
-const ROCK = 0, ROOM = 1, CORR = 2, DOOR = 3;
-const SCHEMA = 'urbs-labyrinthi/0.1';
+const ROCK = 0, ROOM = 1, CORR = 2, DOOR = 3, VOID = 4;   // VOID: 縦穴・竪坑の虚空。歩けないが、見通せる(JSON では 'O')
+const SCHEMA = 'urbs-labyrinthi/0.2';                      // 書き出す JSON の形の版。項目を足したり変えたりしたら上げる
+const GENERATOR = '2.0.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
 
 /* ---------- 乱数 ---------- */
 function xmur3(str) {
@@ -428,7 +430,7 @@ const SIZES = { S: [40, 28], M: [56, 38], L: [72, 50], XL: [96, 64], XXL: [128, 
 const FLOORS = { fuyou: [1, 2], sabi: [3, 4], kagami: [5, 6], hone: [7, 9], soko: [10, 99], generic: [1, 99] };
 for (const k in FLOORS) THEMES[k].floors = FLOORS[k];
 const themeForFloor = n => n <= 2 ? 'fuyou' : n <= 4 ? 'sabi' : n <= 6 ? 'kagami' : n <= 9 ? 'hone' : 'soko';
-const floorLabel = (theme, n) => theme.vergha ? `第${n}層` : `地下${n}階`;
+const floorLabel = (theme, n, sub, subs) => theme.vergha ? `第${n}層` + (subs > 1 ? ` ${(sub | 0) + 1}/${subs}階` : '') : `地下${n}階`;
 
 /* ---------- 魔物の候補 ---------- */
 function buildPool(mons, theme, level) {
@@ -529,32 +531,87 @@ function genTreasure(rng, theme, level, rich) {
   return { items, gp };
 }
 
+/* ---------- 迷宮全体のワイヤフレーム ---------- */
+/* 層ごとの階数・高さ・広さと、ゲームの1階に置く目安(tools/dungeon-model.mjs --json の値。docs/dungeon-model.md §7)。
+   density は、巣のある部屋の割合にかける係数(mon_floor に近づくように決める。tools/check-floors.mjs が確かめる)。
+   縦穴(20m四方 = 13マス)は地図の中央にあり、全階を同じ世界座標で貫く。階段の候補地7つと縦の構造も、全階で同じ座標(中心からの差)。 */
+const WIRE = {
+  shaft: { w: 13, h: 13 },
+  site_r: 26,                       // 候補地の、縦穴の中心からの距離(マス)。XL(96×64)にも収まる
+  block: 24,                        // 一画の大きさの上限(マス)。骨組みで囲まれた岩を、この升目でも区切る
+  p_quiet: .4,                      // 静かな夜に、一画が組み替わる確率(吐く夜は 1)
+  layers: [
+    { layer: 1, theme: 'fuyou', floors: 5, h_m: 5, size: 'XXXL', density: .6, mon_floor: 122, kg_floor: 26, bodies_floor: 20, drop_kg: .4 },
+    { layer: 2, theme: 'fuyou', floors: 5, h_m: 5, size: 'XXXL', density: .58, mon_floor: 122, kg_floor: 46, bodies_floor: 20, drop_kg: .4 },
+    { layer: 3, theme: 'sabi', floors: 4, h_m: 5.5, size: 'XXL', density: .8, mon_floor: 46, kg_floor: 80, bodies_floor: 1.6, drop_kg: .8 },
+    { layer: 4, theme: 'sabi', floors: 4, h_m: 5.5, size: 'XXL', density: .78, mon_floor: 46, kg_floor: 91, bodies_floor: 1.6, drop_kg: .8 },
+    { layer: 5, theme: 'kagami', floors: 4, h_m: 5.5, size: 'XXL', density: .55, mon_floor: 35, kg_floor: 129, bodies_floor: .4, drop_kg: 1.6 },
+    { layer: 6, theme: 'kagami', floors: 4, h_m: 5.5, size: 'XXL', density: .52, mon_floor: 35, kg_floor: 134, bodies_floor: .4, drop_kg: 1.6 },
+    { layer: 7, theme: 'hone', floors: 1, h_m: 15, size: 'XL', density: .4, mon_floor: 19, kg_floor: 241, bodies_floor: .1, drop_kg: 4.8 },
+    { layer: 8, theme: 'hone', floors: 1, h_m: 15, size: 'XL', density: .4, mon_floor: 19, kg_floor: 215, bodies_floor: .1, drop_kg: 4.8 },
+    { layer: 9, theme: 'hone', floors: 1, h_m: 15, size: 'XL', density: .3, mon_floor: 19, kg_floor: 201, bodies_floor: .1, drop_kg: 4.8 },
+    { layer: 10, theme: 'soko', floors: 1, h_m: 17, size: 'XL', density: .25, mon_floor: 13, kg_floor: 320, bodies_floor: 0, drop_kg: 16, lair: true },
+  ],
+  /* 層をまたぐ縦の構造。dx, dy は縦穴の中心からの差(マス)。竪坑(錆鉄の時代の)は第1〜6層を貫く。
+     途中の階では床の穴(2×2 の虚空)とそのまわりの小部屋、いちばん下の階では穴のない小部屋(溜まり場)になる。
+     候補地(半径26の七角形)と重ならない位置に置く */
+  verticals: [
+    { kind: 'pit_shaft', dx: 0, dy: 34, layers: [1, 6] },
+    { kind: 'pit_shaft', dx: 0, dy: -36, layers: [1, 6] },
+    { kind: 'pit_shaft', dx: 34, dy: 20, layers: [1, 6] },
+    { kind: 'pit_shaft', dx: -34, dy: 20, layers: [1, 6] },
+  ],
+};
+/* 階の通し番号 depth(1〜)→ { layer, sub, subs, size, ... }。WIRE.layers の階数を足し合わせる */
+const DEPTHS = []; for (const L of WIRE.layers) for (let sub = 0; sub < L.floors; sub++) DEPTHS.push(Object.assign({}, L, { sub, subs: L.floors, depth: DEPTHS.length + 1 }));
+{ let z = 0; for (const L of WIRE.layers) { L.top_m = z; z += L.floors * L.h_m; L.bottom_m = z; } }
+const depthOf = (layer, sub) => { const d = DEPTHS.find(d => d.layer === layer && d.sub === sub); return d ? d.depth : layer; };
+/* 骨組みの作り方(舞台ごと)。cave 洞窟(灯守の灯の道)、grid 格子の主坑道と採掘場、scatter 大部屋を散らしてつなぐ(従来に近い) */
+const SKELETON = { fuyou: 'cave', sabi: 'grid', kagami: 'scatter', hone: 'scatter', soko: 'scatter', generic: 'scatter' };
+
 /* ---------- 地図の生成 ---------- */
+/* 3段で作る(design/2026-10-17-generator-design.md):
+   WIRE(全階で同じ: 縦穴、候補地、縦の構造)
+   → 骨組み(基礎の種 rb。縦穴の縁の回廊、骨組みの道、大部屋。夜をまたいで変わらない)
+   → 一画(骨組みで囲まれた岩のかたまりを、24マスの升目でも区切ったもの。一画ごとの種 rd で、通路・小部屋・扉を作る。
+     吐く夜は全部、静かな夜は4割が組み替わる。組み替わらない一画は、前の夜と同じ)
+   → 中身(夜の種 rn。遭遇・罠・宝・地物。毎夜入れ替わる) */
 function generate(opts, mons) {
-  const o = Object.assign({ seed: 'vergha', theme: 'fuyou', night: 0, size: 'M', level: 1, party: 4, edition: '2014', exhale: null, ecology: false, density: 1 }, opts);
+  const o = Object.assign({ seed: 'vergha', theme: 'fuyou', night: 0, size: 'M', level: 1, party: 4, edition: '2014', exhale: null, ecology: false, density: 1, sub: 0, subs: 1, depth: null }, opts);
   const theme = THEMES[o.theme] || THEMES.generic;
   const [W, H] = SIZES[o.size] || SIZES.M;
   const level = Math.max(1, Math.min(20, o.level | 0)), party = Math.max(1, Math.min(8, o.party | 0));
-  const ni = nightInfo(o.night | 0);
+  const night = Math.max(0, o.night | 0), ni = nightInfo(night);
   const exhale = o.exhale == null ? (theme.vergha ? ni.exhale : false) : !!o.exhale;
-  /* 層。舞台の最初の層は、層を指定しなかったときと同じ地図になる */
+  /* 層。舞台の最初の層は、層を指定しなかったときと同じ地図になる。sub は層の中の階(0〜) */
   const floor = Math.max(theme.floors[0], Math.min(theme.floors[1], (o.floor | 0) || theme.floors[0]));
-  const fl = floor === theme.floors[0] ? '' : `|f${floor}`;
-  const rb = makeRng(`${o.seed}|${o.theme}|${o.size}|base${fl}`);
-  const rn = makeRng(`${o.seed}|${o.theme}|${o.size}|night|${o.night | 0}${fl}`);
-  const tiles = new Uint8Array(W * H), roomAt = new Int16Array(W * H).fill(-1);
+  const sub = Math.max(0, o.sub | 0), subs = Math.max(1, o.subs | 0);
+  const fl = floor === theme.floors[0] ? '' : `|f${floor}`, sb = sub ? `|s${sub}` : '';
+  const depth = o.depth != null ? o.depth | 0 : theme.vergha ? depthOf(floor, sub) : floor;
+  const key = `${o.seed}|${o.theme}|${o.size}${fl}${sb}`;
+  const rb = makeRng(`${key}|base`);                       // 骨組み。夜をまたいで変わらない
+  const rn = makeRng(`${key}|night|${night}`);             // 中身。毎夜
+  const tiles = new Uint8Array(W * H), roomAt = new Int16Array(W * H).fill(-1), ring = new Int16Array(W * H).fill(-1);
+  const noise = new Float32Array(W * H); for (let k = 0; k < W * H; k++) noise[k] = rb.f();
   const I = (x, y) => y * W + x, inb = (x, y) => x >= 1 && y >= 1 && x < W - 1 && y < H - 1;
   const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const rooms = [];
+  const open = k => tiles[k] !== ROCK && tiles[k] !== VOID;
+  const rooms = [], props = [], verticals = [], roads = [];
+  const CX = W >> 1, CY = H >> 1;                           // 縦穴の中心。全階で同じ世界座標
+  const kind = SKELETON[o.theme in THEMES ? o.theme : 'generic'];
+  const wiggle = kind === 'grid' ? 0 : theme.wiggle;
+  const bigMap = Math.min(W, H) >= 64;                       // XL 以上が迷宮の本来の広さ。小さい地図(卓用)は縦穴も候補地も縮める
+  const SW = bigMap ? WIRE.shaft.w : Math.max(3, Math.floor(Math.min(W, H) / 8) | 1), SH = bigMap ? WIRE.shaft.h : SW;
+  const siteR = Math.min(WIRE.site_r, Math.floor(Math.min(W, H) / 2) - 6);
 
-  /* 1. 部屋。大部屋は「基礎の種」、小部屋は「夜の種」から置く */
-  function shapeMask(rng, w, h, kind) {
+  /* ----- 部屋 ----- */
+  function shapeMask(rng, w, h, shape) {
     const m = new Uint8Array(w * h);
-    if (kind === 'round' && w >= 5 && h >= 5) {
+    if (shape === 'round' && w >= 5 && h >= 5) {
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const a = (i + .5 - w / 2) / (w / 2), b = (j + .5 - h / 2) / (h / 2); if (a * a + b * b <= 1.02) m[j * w + i] = 1; }
       return m;
     }
-    if (kind === 'cave' && w >= 5 && h >= 5) {
+    if (shape === 'cave' && w >= 5 && h >= 5) {
       let g = new Uint8Array(w * h);
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const edge = i === 0 || j === 0 || i === w - 1 || j === h - 1; g[j * w + i] = rng.chance(edge ? .42 : .74) ? 1 : 0; }
       for (let it = 0; it < 3; it++) {
@@ -573,86 +630,102 @@ function generate(opts, mons) {
     }
     return m.fill(1);
   }
-  function tryRoom(rng, w, h, big) {
-    const x = rng.int(2, W - w - 2), y = rng.int(2, H - h - 2);
-    for (const r of rooms) if (x - 2 < r.x + r.w + 1 && x + w + 2 > r.x - 1 && y - 2 < r.y + r.h + 1 && y + h + 2 > r.y - 1) return false;
-    const kind = rng.weighted(Object.keys(theme.shapes), k => theme.shapes[k]);
-    const mask = shapeMask(rng, w, h, kind);
+  /* 矩形 x,y,w,h とそのまわり margin マスが、岩か(where を渡すと、その岩が使ってよいものかも見る) */
+  function fits(x, y, w, h, margin, where) {
+    if (x < 1 || y < 1 || x + w > W - 1 || y + h > H - 1) return false;
+    for (let j = y - margin; j < y + h + margin; j++) for (let i = x - margin; i < x + w + margin; i++) {
+      if (i < 0 || j < 0 || i >= W || j >= H) continue;
+      const k = I(i, j);
+      if (tiles[k] !== ROCK) return false;
+      if (where && !where(k)) return false;
+    }
+    return true;
+  }
+  function addRoom(x, y, w, h, shape, mask, extra) {
     const cells = []; let sx = 0, sy = 0;
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (mask[j * w + i]) { cells.push(I(x + i, y + j)); sx += x + i; sy += y + j; }
-    if (cells.length < 6) return false;
+    if (cells.length < 6) return null;
     const mx = sx / cells.length, my = sy / cells.length;
     let c = cells[0], bd = 1e9;
     for (const q of cells) { const d = (q % W - mx) ** 2 + (((q / W) | 0) - my) ** 2; if (d < bd) { bd = d; c = q; } }
     const id = rooms.length;
-    rooms.push({ id, x, y, w, h, cells, cx: c % W, cy: (c / W) | 0, shape: kind, big, area: cells.length });
+    const r = Object.assign({ id, x, y, w, h, cells, cx: c % W, cy: (c / W) | 0, shape, big: false, area: cells.length }, extra || {});
+    rooms.push(r);
     for (const q of cells) { tiles[q] = ROOM; roomAt[q] = id; }
-    return true;
+    for (const q of cells) { const cx = q % W, cy = (q / W) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x2 = cx + dx, y2 = cy + dy; if (x2 >= 0 && y2 >= 0 && x2 < W && y2 < H) { const k = I(x2, y2); if (roomAt[k] < 0) ring[k] = ring[k] === -1 || ring[k] === id ? id : -2; } } }
+    return r;
   }
-  const nBig = Math.max(4, Math.round(W * H / 215)), nSmall = Math.max(2, Math.round(W * H / 420));
-  for (let t = 0, n = 0; t < 600 && n < nBig; t++) if (tryRoom(rb, rb.int(6, 11), rb.int(5, 9), true)) n++;
-  for (let t = 0, n = 0; t < 400 && n < nSmall; t++) if (tryRoom(rn, rn.int(3, 5), rn.int(3, 5), false)) n++;
-  const NR = rooms.length;
-
-  /* 部屋のまわり1マス（リング）。通路は他の部屋のリングを通れない */
-  const ring = new Int16Array(W * H).fill(-1);
-  for (const r of rooms) for (const q of r.cells) { const cx = q % W, cy = (q / W) | 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cx + dx, y = cy + dy; if (x >= 0 && y >= 0 && x < W && y < H) { const k = I(x, y); if (roomAt[k] < 0) ring[k] = ring[k] === -1 || ring[k] === r.id ? r.id : -2; } } }
-
-  /* 2. つなぎ方。最小全域木 + 環になる枝を少し */
-  const dist2 = (a, b) => (a.cx - b.cx) ** 2 + (a.cy - b.cy) ** 2;
-  const inTree = new Uint8Array(NR); inTree[0] = 1; const edges = [];
-  for (let k = 1; k < NR; k++) {
-    let best = null;
-    for (let a = 0; a < NR; a++) if (inTree[a]) for (let b = 0; b < NR; b++) if (!inTree[b]) { const d = dist2(rooms[a], rooms[b]); if (!best || d < best.d) best = { a, b, d }; }
-    inTree[best.b] = 1; edges.push({ a: best.a, b: best.b, loop: false });
-  }
-  const has = (a, b) => edges.some(e => (e.a === a && e.b === b) || (e.a === b && e.b === a));
-  for (let a = 0; a < NR; a++) {
-    const near = rooms.filter(r => r.id !== a).sort((p, q) => dist2(rooms[a], p) - dist2(rooms[a], q)).slice(0, 3);
-    for (const r of near) if (!has(a, r.id) && rn.chance(.22)) edges.push({ a, b: r.id, loop: true });
+  /* 置けるところを探して置く。where(k) は、部屋とそのまわりが使ってよい岩か(一画の中だけ、など) */
+  function tryRoom(rng, w, h, extra, where, tries) {
+    for (let t = 0; t < (tries || 40); t++) {
+      const x = rng.int(2, W - w - 2), y = rng.int(2, H - h - 2);
+      if (!fits(x, y, w, h, 2, where)) continue;
+      const shape = extra && extra.shape ? extra.shape : rng.weighted(Object.keys(theme.shapes), k => theme.shapes[k]);
+      const r = addRoom(x, y, w, h, shape, shapeMask(rng, w, h, shape), extra);
+      if (r) return r;
+    }
+    return null;
   }
 
-  /* 3. 通路。向きを状態に含めたA*で、曲がりと壁沿いに罰をつけて掘る */
-  const noise = new Float32Array(W * H); for (let k = 0; k < W * H; k++) noise[k] = rn.f();
+  /* ----- 通路。向きを状態に含めた A* で、曲がりと壁沿いに罰をつけて掘る -----
+     starts: 出発のマス(複数可)。goal(k): 着いたら終わり。allow(k): 通ってよい(掘ってよい)マス。
+     target: [x, y, ゆるみ] 目標のあたり。無ければ、幅優先で goal のいちばん近いマスを探して目標にする。
+     目標への見積もりは岩を掘る費用(1マス 3)で重みづけしてあるので、最短ではなく、目標へまっすぐ向かう道になる。 */
   const doorCand = new Map();
-  function carve(e) {
-    const A = rooms[e.a], B = rooms[e.b];
-    const start = I(A.cx, A.cy), SZ = W * H * 5;
-    const g = new Float32Array(SZ).fill(Infinity), prev = new Int32Array(SZ).fill(-1);
-    const heap = []; /* 二分ヒープ [f, state] */
-    const push = (f, s) => { heap.push([f, s]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
-    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { let l = 2 * i + 1, r = l + 1, m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
-    const hf = k => Math.abs(k % W - B.cx) + Math.abs(((k / W) | 0) - B.cy);
-    const s0 = start * 5 + 4; g[s0] = 0; push(hf(start), s0);
-    let goal = -1;
-    while (heap.length) {
-      const [, s] = pop(); const k = (s / 5) | 0, dir = s % 5;
-      if (roomAt[k] === B.id) { goal = s; break; }
+  const SZ = W * H * 5, g = new Float32Array(SZ).fill(Infinity), prev = new Int32Array(SZ).fill(-1);   // 使い回す(触ったところだけ戻す)
+  const hpF = new Float64Array(SZ), hpS = new Int32Array(SZ);                                           // 二分ヒープ
+  const bfsSeen = new Int32Array(W * H).fill(-1); let bfsGen = 0;
+  function nearest(starts, goal, allow, startRoom) {
+    const gen = ++bfsGen, q = []; let head = 0;
+    for (const s of starts) { bfsSeen[s] = gen; q.push(s); }
+    while (head < q.length) {
+      const k = q[head++];
+      if (goal(k)) return k;
+      const x = k % W, y = (k / W) | 0;
+      for (const [dx, dy] of N4) {
+        const x2 = x + dx, y2 = y + dy; if (!inb(x2, y2)) continue;
+        const k2 = I(x2, y2); if (bfsSeen[k2] === gen || tiles[k2] === VOID || !allow(k2)) continue;
+        const rid = roomAt[k2]; if (rid >= 0 && rid !== startRoom && !goal(k2)) continue;
+        bfsSeen[k2] = gen; q.push(k2);
+      }
+    }
+    return -1;
+  }
+  function carve(starts, goal, allow, startRoom, loop, rng, target) {
+    if (!target) { const t = nearest(starts, goal, allow, startRoom); if (t < 0) return null; target = [t % W, (t / W) | 0, 0]; }
+    const tx = target[0], ty = target[1], slack = target[2] || 0;
+    const hf = k => 3 * Math.max(0, Math.abs(k % W - tx) + Math.abs(((k / W) | 0) - ty) - slack);
+    let hn = 0; const touched = [];
+    const push = (f, s) => { let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (hpF[p] <= f) break; hpF[i] = hpF[p]; hpS[i] = hpS[p]; i = p; } hpF[i] = f; hpS[i] = s; };
+    const pop = () => { const top = hpS[0]; hn--; if (hn > 0) { const f = hpF[hn], s = hpS[hn]; let i = 0; for (;;) { let l = 2 * i + 1, r = l + 1, m = -1; if (l < hn && hpF[l] < f) m = l; if (r < hn && hpF[r] < (m < 0 ? f : hpF[l])) m = r; if (m < 0) break; hpF[i] = hpF[m]; hpS[i] = hpS[m]; i = m; } hpF[i] = f; hpS[i] = s; } return top; };
+    for (const s of starts) { const s0 = s * 5 + 4; g[s0] = 0; touched.push(s0); push(hf(s), s0); }
+    let found = -1;
+    while (hn > 0) {
+      const s = pop(); const k = (s / 5) | 0, dir = s % 5;
+      if (goal(k)) { found = s; break; }
       const cx = k % W, cy = (k / W) | 0;
       for (let d = 0; d < 4; d++) {
         const x = cx + N4[d][0], y = cy + N4[d][1];
         if (!inb(x, y)) continue;
-        const q = I(x, y), rid = roomAt[q];
-        if (rid >= 0 && rid !== A.id && rid !== B.id) continue;
+        const q = I(x, y), t = tiles[q], rid = roomAt[q];
+        if (t === VOID || !allow(q)) continue;
         let c;
-        if (rid >= 0) c = 1;
+        if (rid >= 0) { if (rid !== startRoom && !goal(q)) continue; c = 1; }
+        else if (t !== ROCK) c = 1;
         else {
           const rg = ring[q];
-          if (rg === -2 || (rg >= 0 && rg !== A.id && rg !== B.id)) continue;
-          if (tiles[q] === CORR) c = 1;
-          else {
-            c = 3 + noise[q] * theme.wiggle * 4;
-            if (rg >= 0) c += 9;
-            for (const [dx, dy] of N4) { const k2 = I(x + dx, y + dy); if (k2 !== k && tiles[k2] === CORR) c += 1.5; }
-          }
+          c = 3 + noise[q] * wiggle * 4;
+          if (rg === -2 || (rg >= 0 && rg !== startRoom)) c += 9;        // ほかの部屋のまわりは、なるべく通らない
+          for (const [dx, dy] of N4) { const k2 = I(x + dx, y + dy); if (k2 !== k && tiles[k2] === CORR && allow(k2)) c += 1.5; }
         }
-        if (dir !== 4 && dir !== d) c += 1.2;
+        if (dir !== 4 && dir !== d) c += kind === 'grid' ? 3 : 1.2;
         const s2 = q * 5 + d, ng = g[s] + c;
-        if (ng < g[s2]) { g[s2] = ng; prev[s2] = s; push(ng + hf(q), s2); }
+        if (ng < g[s2]) { if (g[s2] === Infinity) touched.push(s2); g[s2] = ng; prev[s2] = s; push(ng + hf(q), s2); }
       }
     }
-    if (goal < 0) return false;
-    const path = []; for (let s = goal; s >= 0; s = prev[s]) path.push((s / 5) | 0);
+    const path = []; if (found >= 0) for (let s = found; s >= 0; s = prev[s]) path.push((s / 5) | 0);
+    for (const s of touched) { g[s] = Infinity; prev[s] = -1; }
+    if (found < 0) return null;
     path.reverse();
     for (let i = 0; i < path.length; i++) {
       const k = path[i];
@@ -661,31 +734,175 @@ function generate(opts, mons) {
       const fromRoom = pr >= 0 && roomAt[pr] >= 0 && roomAt[k] < 0, toRoom = nx >= 0 && roomAt[nx] >= 0 && roomAt[k] < 0;
       if (fromRoom || toRoom) {
         const other = fromRoom ? pr : nx, horiz = Math.abs(other - k) === 1;
-        const rid = roomAt[other], ex = doorCand.get(k);
-        if (!ex) doorCand.set(k, { k, horiz, rid, loop: e.loop }); else if (!e.loop) ex.loop = false;
+        const ex = doorCand.get(k);
+        if (!ex) doorCand.set(k, { k, horiz, other, loop: !!loop, r: rng.f() }); else if (!loop) ex.loop = false;
       }
     }
-    return true;
+    grow(path);
+    return path;
   }
-  for (const e of edges.filter(e => !e.loop)) carve(e);
-  for (const e of edges.filter(e => e.loop)) carve(e);
+  /* 骨組み(縦穴の縁の回廊)につながっているマス。通路を掘るときの行き先は、必ずここにする(島ができないように) */
+  const conn = new Uint8Array(W * H);
+  function grow(cells) {
+    const st = []; for (const k of cells) if (open(k) && !conn[k]) { conn[k] = 1; st.push(k); }
+    while (st.length) { const k = st.pop(), x = k % W, y = (k / W) | 0; for (const [dx, dy] of N4) { const x2 = x + dx, y2 = y + dy; if (x2 < 0 || y2 < 0 || x2 >= W || y2 >= H) continue; const q = I(x2, y2); if (open(q) && !conn[q]) { conn[q] = 1; st.push(q); } } }
+  }
+  const linked = exceptRoom => k => open(k) && conn[k] === 1 && roomAt[k] !== exceptRoom;
+  const allowAll = () => true;
 
-  /* 行き止まりの枝道 */
-  const corrCells = () => { const a = []; for (let k = 0; k < W * H; k++) if (tiles[k] === CORR) a.push(k); return a; };
+  /* ===== 1. 骨組み(基礎の種) ===== */
+  /* 縦穴と、縁の回廊 */
+  const shaft = { x: CX - (SW >> 1), y: CY - (SH >> 1), w: SW, h: SH };
+  for (let y = shaft.y - 1; y <= shaft.y + shaft.h; y++) for (let x = shaft.x - 1; x <= shaft.x + shaft.w; x++) {
+    const edge = x < shaft.x || y < shaft.y || x >= shaft.x + shaft.w || y >= shaft.y + shaft.h;
+    tiles[I(x, y)] = edge ? CORR : VOID;
+  }
+  const isRing = k => { const x = k % W, y = (k / W) | 0; return tiles[k] === CORR && x >= shaft.x - 1 && x <= shaft.x + shaft.w && y >= shaft.y - 1 && y <= shaft.y + shaft.h; };
+  grow([I(shaft.x - 1, shaft.y - 1)]);
+  for (const [dx, dy] of [[-1, -1], [shaft.w, shaft.h]]) props.push({ kind: 'rope', x: shaft.x + dx, y: shaft.y + dy });   // 縁の縄梯子(昔の採掘者の)
+  /* 階段の候補地7つ。縦穴を囲む七角形。0番が北。位置は全階で同じ(中心からの差) */
+  const sites = [];
+  for (let k = 0; k < 7; k++) {
+    const a = -Math.PI / 2 + k * 2 * Math.PI / 7;
+    const sx = CX + Math.round(siteR * Math.cos(a)), sy = CY + Math.round(siteR * Math.sin(a));
+    const [w, h] = bigMap ? (kind === 'grid' ? [11, 7] : [9, 9]) : [5, 5];
+    const shape = kind === 'cave' ? 'cave' : kind === 'grid' ? 'rect' : 'round';
+    const x = sx - (w >> 1), y = sy - (h >> 1);
+    const mask = shapeMask(rb, w, h, shape);
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) mask[((h >> 1) + dy) * w + (w >> 1) + dx] = 1;   // 階段のマスとまわりは床
+    let r = fits(x, y, w, h, 2) ? addRoom(x, y, w, h, shape, mask, { big: true, site: k }) : null;
+    if (!r) { const fx = Math.max(1, Math.min(W - 6, sx - 2)), fy = Math.max(1, Math.min(H - 6, sy - 2)); r = addRoom(fx, fy, 5, 5, 'rect', new Uint8Array(25).fill(1), { big: true, site: k }); }
+    if (tiles[I(sx, sy)] === ROOM && roomAt[I(sx, sy)] === r.id) { r.cx = sx; r.cy = sy; }   // 階段は候補地の座標そのもの(部屋の形によらず、全階で同じ)
+    sites.push(r);
+  }
+  /* 縦の構造。この階を通るものだけ */
+  const layerNo = theme.vergha ? floor : 0;
+  for (const v of WIRE.verticals) {
+    if (!theme.vergha || layerNo < v.layers[0] || layerNo > v.layers[1]) continue;
+    const x = CX + v.dx, y = CY + v.dy;
+    if (x < 5 || y < 5 || x > W - 6 || y > H - 6) continue;
+    const hole = !(layerNo === v.layers[1] && sub === subs - 1);   // いちばん下の階は穴がない(溜まり場)
+    const room = fits(x - 3, y - 3, 6, 6, 1) ? addRoom(x - 3, y - 3, 6, 6, 'rect', new Uint8Array(36).fill(1), { big: false, kind: hole ? 'pit' : 'sump' }) : null;
+    if (!room) continue;
+    if (hole) {
+      for (let j = -1; j <= 0; j++) for (let i = -1; i <= 0; i++) { const k = I(x + i, y + j); tiles[k] = VOID; roomAt[k] = -1; }
+      room.cells = room.cells.filter(k => tiles[k] === ROOM); room.area = room.cells.length; room.cx = x - 2; room.cy = y - 2;
+    }
+    verticals.push({ kind: v.kind, x: x - 1, y: y - 1, w: 2, h: 2, hole, roomRef: room, layers: v.layers });
+  }
+  /* 骨組みの道。部屋は縦穴に近いものから順につなぐ */
+  const byCenter = rs => rs.slice().sort((a, b) => ((a.cx - CX) ** 2 + (a.cy - CY) ** 2) - ((b.cx - CX) ** 2 + (b.cy - CY) ** 2));
+  function road(starts, goal, startRoom, loop, target) { const p = carve(starts, goal, allowAll, startRoom, loop, rb, target); if (p) roads.push(p); return p; }
+  const inShaftRect = (x, y) => x >= shaft.x - 1 && x <= shaft.x + shaft.w && y >= shaft.y - 1 && y <= shaft.y + shaft.h;
+  if (kind === 'grid') {
+    /* 主坑道の格子。16マスおき。縦穴は避け、部屋は突き抜ける(部屋に接する坑道のマスは扉の候補) */
+    const STEP = 16, lineCells = [];
+    const dig = (x, y) => { if (inShaftRect(x, y)) return; const k = I(x, y); if (tiles[k] === ROCK && roomAt[k] < 0) { tiles[k] = CORR; lineCells.push(k); } };
+    for (let x = CX % STEP; x < W - 1; x += STEP) if (x >= 2) for (let y = 2; y < H - 2; y++) dig(x, y);
+    for (let y = CY % STEP; y < H - 1; y += STEP) if (y >= 2) for (let x = 2; x < W - 2; x++) dig(x, y);
+    roads.push(lineCells); grow(lineCells);
+    for (const k of lineCells) { const x = k % W, y = (k / W) | 0; for (const [dx, dy] of N4) { const q = I(x + dx, y + dy); if (roomAt[q] >= 0 && !doorCand.has(k)) doorCand.set(k, { k, horiz: dx !== 0, other: q, loop: false, r: rb.f() }); } }
+    /* 採掘場(大部屋)。格子の目の中に矩形。主坑道へまっすぐつなぐ */
+    const nBig = Math.round(W * H / 700);
+    for (let t = 0, n = 0; t < nBig * 12 && n < nBig; t++) if (tryRoom(rb, rb.int(8, 14), rb.int(5, 9), { big: true, shape: 'rect' }, null, 1)) n++;
+    for (const r of byCenter(rooms.filter(r => r.site == null))) road([I(r.cx, r.cy)], linked(r.id), r.id, false);
+    for (const r of sites) road([I(r.cx, r.cy)], linked(r.id), r.id, false);
+  } else {
+    /* 候補地から縁の回廊へ(放射)、候補地どうしを環に、候補地から地図の端へ(外の道)。洞窟では、これが灯守の灯の道 */
+    for (const r of sites) road([I(r.cx, r.cy)], isRing, r.id, false, [CX, CY, (SW >> 1) + 2]);
+    for (let k = 0; k < 7; k++) { const a = sites[k], b = sites[(k + 1) % 7]; road([I(a.cx, a.cy)], q => roomAt[q] === b.id, a.id, false, [b.cx, b.cy, 4]); }
+    for (const r of sites) {
+      const vx = r.cx - CX, vy = r.cy - CY, len = Math.hypot(vx, vy) || 1, ux = vx / len, uy = vy / len;
+      const t = Math.min((W / 2 - 4) / Math.max(1e-9, Math.abs(ux)), (H / 2 - 4) / Math.max(1e-9, Math.abs(uy)));
+      const ex = Math.max(2, Math.min(W - 3, Math.round(CX + ux * t))), ey = Math.max(2, Math.min(H - 3, Math.round(CY + uy * t)));
+      if (Math.hypot(ex - r.cx, ey - r.cy) > 6) road([I(r.cx, r.cy)], q => Math.abs(q % W - ex) + Math.abs(((q / W) | 0) - ey) <= 1, r.id, false, [ex, ey, 1]);
+    }
+    /* 大部屋(洞窟の膨らみ、広間)。いちばん近い道か部屋へつなぐ */
+    const nBig = Math.round(W * H / 600);
+    for (let t = 0, n = 0; t < nBig * 12 && n < nBig; t++) if (tryRoom(rb, rb.int(7, 12), rb.int(6, 10), { big: true }, null, 1)) n++;
+    for (const r of byCenter(rooms.filter(r => r.site == null))) road([I(r.cx, r.cy)], linked(r.id), r.id, false);
+    if (kind === 'scatter') {   // 環になる枝を少し(従来)
+      const bigs = rooms.filter(r => r.big);
+      for (const a of bigs) { const near = bigs.filter(r => r !== a).sort((p, q) => ((p.cx - a.cx) ** 2 + (p.cy - a.cy) ** 2) - ((q.cx - a.cx) ** 2 + (q.cy - a.cy) ** 2)).slice(0, 3); for (const b of near) if (rb.chance(.15)) road([I(a.cx, a.cy)], q => roomAt[q] === b.id, a.id, true, [b.cx, b.cy, 4]); }
+    }
+  }
+  /* どの升目(一画の上限の大きさ)にも、骨組みの道が通るようにする。道のない升目は、真ん中から近い道へ掘る */
+  const BLOCK = WIRE.block, nbx = Math.ceil(W / BLOCK), nby = Math.ceil(H / BLOCK);
+  for (let by = 0; by < nby; by++) for (let bx = 0; bx < nbx; bx++) {
+    let any = false;
+    for (let y = by * BLOCK; y < Math.min(H, (by + 1) * BLOCK) && !any; y++) for (let x = bx * BLOCK; x < Math.min(W, (bx + 1) * BLOCK); x++) if (open(I(x, y))) { any = true; break; }
+    if (any) continue;
+    const x = Math.max(1, Math.min(W - 2, bx * BLOCK + (BLOCK >> 1))), y = Math.max(1, Math.min(H - 2, by * BLOCK + (BLOCK >> 1)));
+    road([I(x, y)], linked(-1), -1, false);
+  }
+  /* 灯守の灯(洞窟)。道に沿って8マスおき */
+  if (kind === 'cave') for (const p of roads) for (let i = 4; i < p.length; i += 8) props.push({ kind: 'lamp', x: p[i] % W, y: (p[i] / W) | 0 });
+  const fixed = new Uint8Array(W * H); for (let k = 0; k < W * H; k++) fixed[k] = open(k) ? 1 : 0;
+  const nSkeletonRooms = rooms.length;
+
+  /* ===== 2. 一画(骨組みで囲まれた岩のかたまり。24マスの升目でも区切る) ===== */
+  const districtOf = new Int16Array(W * H).fill(-1), districts = [];
+  { const comp = new Int16Array(W * H).fill(-1); let nc = 0;
+    for (let s = 0; s < W * H; s++) if (tiles[s] === ROCK && comp[s] < 0) {
+      const st = [s]; comp[s] = nc;
+      while (st.length) { const k = st.pop(), x = k % W, y = (k / W) | 0; for (const [dx, dy] of N4) { const x2 = x + dx, y2 = y + dy; if (x2 < 0 || y2 < 0 || x2 >= W || y2 >= H) continue; const q = I(x2, y2); if (tiles[q] === ROCK && comp[q] < 0) { comp[q] = nc; st.push(q); } } }
+      nc++;
+    }
+    const ids = new Map();
+    for (let k = 0; k < W * H; k++) if (comp[k] >= 0) {
+      const b = comp[k] * nbx * nby + Math.floor((k % W) / BLOCK) + Math.floor(((k / W) | 0) / BLOCK) * nbx;
+      let d = ids.get(b); if (!d) { d = { id: districts.length, cells: [], area: 0 }; ids.set(b, d); districts.push(d); }
+      d.cells.push(k); d.area++; districtOf[k] = d.id;
+    } }
+  /* 一画 d が最後に組み替わった夜。吐く夜は必ず、静かな夜は p_quiet で替わる。夜0が元 */
+  const lastChange = d => { for (let m = night; m > 0; m--) { const p = nightInfo(m).exhale ? 1 : WIRE.p_quiet; if (p >= 1 || makeRng(`${key}|d${d}|chg${m}`).chance(p)) return m; } return 0; };
   const deadEnds = [];
-  { const cc = corrCells();
-    for (let t = 0, made = 0; t < 40 && made < ({ S: 1, M: 2, L: 3, XL: 5, XXL: 7, XXXL: 10 }[o.size] || 2) && cc.length; t++) {
-      const k = rn.pick(cc), [dx, dy] = rn.pick(N4), len = rn.int(3, 6); let ok = true; const cells = [];
+  for (const d of districts) {
+    d.changed = lastChange(d.id);
+    if (d.area < 24) continue;
+    const rd = makeRng(`${key}|d${d.id}|n${d.changed}`);
+    for (const k of d.cells) noise[k] = rd.f();
+    const mine = k => districtOf[k] === d.id;
+    const allow = k => districtOf[k] === d.id || fixed[k] === 1;    // 自分の一画と、骨組みだけを通る。隣の一画が替わっても、ここは変わらない
+    const goalOf = r => k => open(k) && conn[k] === 1 && roomAt[k] !== r.id && (fixed[k] === 1 || districtOf[k] === d.id);
+    const minX = Math.min(...d.cells.map(k => k % W)), maxX = Math.max(...d.cells.map(k => k % W)), minY = Math.min(...d.cells.map(k => (k / W) | 0)), maxY = Math.max(...d.cells.map(k => (k / W) | 0));
+    const n = Math.round(d.area / 230 + rd.f() * .9);
+    const made = [];
+    for (let t = 0, c = 0; t < n * 12 && c < n; t++) {
+      const w = rd.int(3, 7), h = rd.int(3, 6);
+      const x = rd.int(minX, Math.max(minX, maxX - w)), y = rd.int(minY, Math.max(minY, maxY - h));
+      if (!fits(x, y, w, h, 2, mine)) continue;
+      const shape = rd.weighted(Object.keys(theme.shapes), s => theme.shapes[s]);
+      const r = addRoom(x, y, w, h, shape, shapeMask(rd, w, h, shape), { big: false, district: d.id });
+      if (r) { made.push(r); c++; }
+    }
+    /* それぞれの部屋を、いちばん近い道か部屋へ。ときどき二本目(環) */
+    for (const r of made) {
+      const p = carve([I(r.cx, r.cy)], goalOf(r), allow, r.id, false, rd);
+      if (!p) { for (const q of r.cells) { tiles[q] = ROCK; roomAt[q] = -1; } r.cells = []; r.area = 0; r.dead = true; continue; }
+      const g1 = goalOf(r);
+      if (rd.chance(.25)) carve([I(r.cx, r.cy)], k => g1(k) && Math.abs(k % W - r.cx) + Math.abs(((k / W) | 0) - r.cy) > 6, allow, r.id, true, rd);
+    }
+    /* 行き止まりの枝道 */
+    const cc = d.cells.filter(k => tiles[k] === CORR);
+    for (let t = 0, m = 0; t < 12 && m < Math.round(d.area / 900) && cc.length; t++) {
+      const k = rd.pick(cc), [dx, dy] = rd.pick(N4), len = rd.int(3, 6); let ok = true; const cells = [];
       for (let s = 1; s <= len + 1 && ok; s++) {
         const x = k % W + dx * s, y = ((k / W) | 0) + dy * s;
-        if (!inb(x, y) || tiles[I(x, y)] !== ROCK || ring[I(x, y)] !== -1) { ok = false; break; }
-        for (const [ax, ay] of [[dy, dx], [-dy, -dx]]) if (tiles[I(x + ax, y + ay)] !== ROCK) ok = false;
+        if (!inb(x, y) || !mine(I(x, y)) || tiles[I(x, y)] !== ROCK || ring[I(x, y)] !== -1) { ok = false; break; }
+        for (const [ax, ay] of [[dy, dx], [-dy, -dx]]) { const q = I(x + ax, y + ay); if (!mine(q) || tiles[q] !== ROCK) ok = false; }
         if (s <= len) cells.push(I(x, y));
       }
-      if (ok && cells.length === len) { for (const q of cells) tiles[q] = CORR; deadEnds.push(cells[cells.length - 1]); made++; }
-    } }
+      if (ok && cells.length === len) { for (const q of cells) tiles[q] = CORR; deadEnds.push(cells[cells.length - 1]); m++; }
+    }
+  }
+  if (rooms.some(r => r.dead)) {
+    for (let i = rooms.length - 1; i >= 0; i--) if (rooms[i].dead) rooms.splice(i, 1);
+    rooms.forEach((r, i) => { r.id = i; for (const q of r.cells) roomAt[q] = i; });
+  }
+  for (const v of verticals) { v.room = v.roomRef.id; delete v.roomRef; }
 
-  /* 4. 扉 */
+  /* ===== 3. 扉。候補は通路が部屋に入るマス。種類は、その通路を掘った種(骨組みか一画)で決まっている ===== */
   const doors = [], doorAt = new Map();
   const pass = k => tiles[k] !== ROCK;
   for (const c of doorCand.values()) {
@@ -693,27 +910,34 @@ function generate(opts, mons) {
     const side = c.horiz ? [I(x, y - 1), I(x, y + 1)] : [I(x - 1, y), I(x + 1, y)];
     const along = c.horiz ? [I(x - 1, y), I(x + 1, y)] : [I(x, y - 1), I(x, y + 1)];
     if (tiles[c.k] !== CORR || pass(side[0]) || pass(side[1]) || !pass(along[0]) || !pass(along[1])) continue;
-    const r = rn.f();
+    const r = c.r;
     let type = null;
     if (c.loop) type = r < .2 ? null : r < .6 ? 'door' : r < .82 ? 'locked' : 'secret';
     else type = r < .38 ? null : 'door';
     if (!type) continue;
-    const d = { id: doors.length, x, y, horiz: c.horiz, type, state: 'closed', found: type !== 'secret', roomId: c.rid };
-    if (type === 'locked') d.lockDC = rn.pick([10, 12, 15, 15, 18]);
-    if (type === 'secret') d.findDC = rn.pick([12, 13, 15, 15, 17]);
+    const rid = roomAt[c.other] >= 0 ? roomAt[c.other] : (roomAt[along[0]] >= 0 ? roomAt[along[0]] : roomAt[along[1]]);
+    const d = { id: doors.length, x, y, horiz: c.horiz, type, state: 'closed', found: type !== 'secret', roomId: rid };
+    if (type === 'locked') d.lockDC = [10, 12, 15, 15, 18][Math.floor(r * 5)];
+    if (type === 'secret') d.findDC = [12, 13, 15, 15, 17][Math.floor(r * 5)];
     tiles[c.k] = DOOR; doors.push(d); doorAt.set(c.k, d);
   }
 
-  /* 5. 階段。位置は基礎の種で決まり、夜が変わっても動かない */
-  const bigs = rooms.filter(r => r.big);
-  const upRoom = bigs.slice().sort((a, b) => (a.cx + a.cy * 1.3) - (b.cx + b.cy * 1.3))[rb.int(0, Math.min(2, bigs.length - 1))];
-  const downRoom = bigs.filter(r => r !== upRoom).sort((a, b) => dist2(b, upRoom) - dist2(a, upRoom))[0] || upRoom;
+  /* ===== 4. 階段。候補地を、夜ごとに子守唄の息継ぎの数だけ進む(都市 GM 資料 §12.4)。
+     階 d の上りは候補地 mirror(夜 + d − 1)、下りは mirror(夜 + d)。だから下の階の上りは、この階の下りの真下にあり、
+     夜が明けると、今夜の下りが明日の上りになる。息継ぎ7(第七節)の夜は、同じ部屋に上りと下りがある(49夜で一巡) ===== */
+  const step = Math.max(0, depth - 1);
+  const upRoom = sites[mirrorRoom((night + step) % 49)], downRoom = sites[mirrorRoom((night + step + 1) % 49)];
   const stairs = { up: { x: upRoom.cx, y: upRoom.cy, room: upRoom.id }, down: { x: downRoom.cx, y: downRoom.cy, room: downRoom.id } };
+  if (downRoom === upRoom) {   // 乱数は使わない(基礎の種の消費が夜で変わると、大部屋の名前が変わってしまう)
+    const dist = q => Math.abs(q % W - upRoom.cx) + Math.abs(((q / W) | 0) - upRoom.cy);
+    const alt = upRoom.cells.filter(q => dist(q) >= 3 && dist(q) <= 4), q = alt.length ? alt[(night + depth) % alt.length] : upRoom.cells[upRoom.cells.length - 1];
+    stairs.down = { x: q % W, y: (q / W) | 0, room: upRoom.id };
+  }
 
   /* 施錠・隠し扉を通らずに全部屋へ行けることを保証する */
   function reach(blockSpecial) {
     const seen = new Uint8Array(W * H), st = [I(stairs.up.x, stairs.up.y)]; seen[st[0]] = 1;
-    while (st.length) { const k = st.pop(), cx = k % W, cy = (k / W) | 0; for (const [dx, dy] of N4) { const q = I(cx + dx, cy + dy); if (seen[q] || tiles[q] === ROCK) continue; if (blockSpecial && tiles[q] === DOOR) { const d = doorAt.get(q); if (d.type !== 'door') { seen[q] = 2; continue; } } seen[q] = 1; st.push(q); } }
+    while (st.length) { const k = st.pop(), cx = k % W, cy = (k / W) | 0; for (const [dx, dy] of N4) { const q = I(cx + dx, cy + dy); if (seen[q] || !open(q)) continue; if (blockSpecial && tiles[q] === DOOR) { const d = doorAt.get(q); if (d.type !== 'door') { seen[q] = 2; continue; } } seen[q] = 1; st.push(q); } }
     return seen;
   }
   for (let guard = 0; guard < doors.length + 2; guard++) {
@@ -725,15 +949,19 @@ function generate(opts, mons) {
   }
   const connected = (() => { const s = reach(false); return rooms.every(r => s[I(r.cx, r.cy)] === 1); })();
 
-  /* 6. 部屋の番号と名前。大部屋の名前は基礎の種で決まり、夜をまたいで残る */
+  /* ===== 5. 部屋の番号と名前。候補地は決まった名前(舞台の部屋の名前の先頭7つ)。大部屋の名前は基礎の種で決まり、夜をまたいで残る ===== */
   const order = rooms.slice().sort((a, b) => (a.big === b.big ? 0 : a.big ? -1 : 1) || (Math.round(a.cy / 8) - Math.round(b.cy / 8)) || (a.cx - b.cx));
   order.forEach((r, i) => { r.no = i + 1; });
-  { const nb = rb.shuffle(theme.rooms), used = new Map(); let ib = 0;
-    const nBigRooms = order.filter(r => r.big).length;
-    const ns = rn.shuffle(theme.rooms.filter(n => nb.indexOf(n) >= nBigRooms)); let is = 0;
+  { const siteNames = theme.rooms.slice(0, 7), rest = theme.rooms.length >= 10 ? theme.rooms.slice(7) : theme.rooms;
+    const nb = rb.shuffle(rest), used = new Map(); let ib = 0;
+    const ns = rn.shuffle(rest); let is = 0;
     const SUF = ['', '・その二', '・その三', '・その四'];
     for (const r of order) {
-      const base = r.big ? nb[ib++ % nb.length] : (ns.length ? ns[is++ % ns.length] : rn.pick(theme.rooms));
+      let base;
+      if (r.site != null) base = siteNames[r.site % siteNames.length];
+      else if (r.kind === 'pit') base = '竪坑の脇';
+      else if (r.kind === 'sump') base = '竪坑の底の溜まり';
+      else base = r.big ? nb[ib++ % nb.length] : ns[is++ % ns.length];
       const c = used.get(base) || 0; used.set(base, c + 1);
       r.name = base + (c < SUF.length ? SUF[c] : '・その' + (c + 1));
     } }
@@ -741,11 +969,11 @@ function generate(opts, mons) {
   const dirOf = (dx, dy) => DIRS[((Math.round(Math.atan2(dx, -dy) / (Math.PI / 4)) % 8) + 8) % 8];
   for (const r of rooms) {
     const ex = new Map();
-    for (const q of r.cells) { const cx = q % W, cy = (q / W) | 0; for (const [dx, dy] of N4) { const k = I(cx + dx, cy + dy); if (roomAt[k] < 0 && tiles[k] !== ROCK && !ex.has(k)) { const d = doorAt.get(k); ex.set(k, { x: k % W, y: (k / W) | 0, dir: dirOf(k % W - (r.x + r.w / 2 - .5), ((k / W) | 0) - (r.y + r.h / 2 - .5)), type: d ? d.type : 'open', doorId: d ? d.id : null }); } } }
+    for (const q of r.cells) { const cx = q % W, cy = (q / W) | 0; for (const [dx, dy] of N4) { const k = I(cx + dx, cy + dy); if (roomAt[k] < 0 && open(k) && !ex.has(k)) { const d = doorAt.get(k); ex.set(k, { x: k % W, y: (k / W) | 0, dir: dirOf(k % W - (r.x + r.w / 2 - .5), ((k / W) | 0) - (r.y + r.h / 2 - .5)), type: d ? d.type : 'open', doorId: d ? d.id : null }); } } }
     r.exits = [...ex.values()];
   }
 
-  /* 7. 中身。夜の種から決めるので、夜が変わると入れ替わる */
+  /* ===== 6. 中身。夜の種から決めるので、夜が変わると入れ替わる ===== */
   const pool = buildPool(mons || [], theme, level);
   const ctx = { pool, level, party };
   const monSz = new Map((mons || []).map(m => [m.i, m.z]));
@@ -756,28 +984,32 @@ function generate(opts, mons) {
   const traps = [], trapAt = new Map(), encs = [], feats = [];
   const free = r => r.cells.filter(q => !(q === I(stairs.up.x, stairs.up.y) || q === I(stairs.down.x, stairs.down.y)) && !trapAt.has(q));
   function addTrap(k, where, roomId) {
-    if (trapAt.has(k)) return null;
+    if (k == null || trapAt.has(k)) return null;
     const t = genTrap(rn, theme, level, where);
     t.id = traps.length; t.x = k % W; t.y = (k / W) | 0; t.roomId = roomId;
     traps.push(t); trapAt.set(k, t); return t;
   }
   function addEnc(e, cells, roomId, boss) {
-    if (!e) return null;
+    if (!e || !cells.length) return null;
     e.id = encs.length; e.roomId = roomId; e.state = 'unseen'; e.boss = !!boss; e.tokens = [];
     const cs = rn.shuffle(cells); let ci = 0;
     e.groups.forEach((g, gi) => { for (let n = 0; n < g.n; n++) { const k = cs[ci++ % cs.length]; e.tokens.push({ x: k % W, y: (k / W) | 0, g: gi }); } });
     encs.push(e); return e;
   }
   for (const r of order) {
-    r.lit = r.big && rn.chance(theme.lamps);
+    r.lit = r.big && ((kind === 'cave' && r.site != null) || rn.chance(theme.lamps));   // 洞窟の候補地は、灯守の灯がある
     r.encId = null; r.trapIds = []; r.treasure = null; r.feat = null; r.hook = null;
     const flavor = [rn.pick(theme.see), rn.chance(.5) ? rn.pick(theme.hear) : rn.pick(theme.smell)];
     if (r.lit) flavor.push(theme.vergha ? '灯守の灯が一つ、青い光を落としている。' : '壁の松明に火が残っている。');
+    if (r.kind === 'pit') flavor.push('床の真ん中に、四角い穴が黒く口を開けている。下の階へ続いているらしい。');
+    if (r.kind === 'sump') flavor.push('天井に四角い穴が開き、上の階から落ちてきた物が、床に積もっている。');
     r.flavor = flavor.join('');
     if (r.id === upRoom.id) { r.role = 'entrance'; continue; }
     const boss = r.id === downRoom.id;
     r.role = boss ? 'exit' : 'room';
-    const p = rn.f(), pe0 = exhale ? .58 : .4, pe = pe0 * density;
+    if (r.kind === 'pit') { if (rn.chance(.3)) r.treasure = genTreasure(rn, theme, level, false); continue; }   // 穴の脇。巣はない
+    if (r.kind === 'sump') { r.treasure = genTreasure(rn, theme, level, true); continue; }                     // 溜まり場。上から落ちてきた物
+    const p = rn.f(), pe0 = exhale ? .58 : .4, pe = pe0 * density * (r.site != null ? .3 : 1);   // 候補地は人が通るので、巣になりにくい
     let what = boss ? (rn.chance(.7) ? 'enc' : 'feat') : p < pe ? 'enc' : p < pe0 ? 'empty' : p < pe0 + .1 ? 'trap' : p < pe0 + .18 ? 'loot' : p < pe0 + .38 ? 'feat' : 'empty';
     if (what === 'enc') {
       const diff = boss ? 2 : rn.weighted([0, 1, 2], i => (exhale ? [35, 40, 25] : [50, 36, 14])[i]);
@@ -788,14 +1020,15 @@ function generate(opts, mons) {
       }
       const e = addEnc(ge, free(r), r.id, boss);
       if (e) { dens.push({ x: r.cx, y: r.cy, sep: denSep(e) }); r.encId = e.id; if (rn.chance(boss ? .9 : .5)) r.treasure = genTreasure(rn, theme, level, boss); }
-    } else if (what === 'trap') { const t = addTrap(rn.pick(free(r)), 'room', r.id); if (t) r.trapIds.push(t.id); if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
+    } else if (what === 'trap') { const fr = free(r); const t = fr.length ? addTrap(rn.pick(fr), 'room', r.id) : null; if (t) r.trapIds.push(t.id); if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
     else if (what === 'loot') r.treasure = genTreasure(rn, theme, level, false);
-    else if (what === 'feat') { const f = rn.pick(theme.feats); const k = rn.pick(free(r)); r.feat = { name: f[0], desc: f[1], x: k % W, y: (k / W) | 0 }; feats.push(r.feat); }
-    if (what !== 'trap' && rn.chance(.12)) { const t = addTrap(rn.pick(free(r)), 'room', r.id); if (t) r.trapIds.push(t.id); }
+    else if (what === 'feat') { const f = rn.pick(theme.feats); const fr = free(r); if (fr.length) { const k = rn.pick(fr); r.feat = { name: f[0], desc: f[1], x: k % W, y: (k / W) | 0 }; feats.push(r.feat); } }
+    if (what !== 'trap' && rn.chance(.12)) { const fr = free(r); const t = fr.length ? addTrap(rn.pick(fr), 'room', r.id) : null; if (t) r.trapIds.push(t.id); }
     if (rn.chance(.34)) r.hook = rn.pick(theme.hooks);
   }
   /* 通路の罠と、通路をうろつく魔物 */
-  { const cc = corrCells().filter(k => { for (const [dx, dy] of N4) if (tiles[I(k % W + dx, ((k / W) | 0) + dy)] === DOOR) return false; return true; });
+  const corrCells = () => { const a = []; for (let k = 0; k < W * H; k++) if (tiles[k] === CORR) a.push(k); return a; };
+  { const cc = corrCells().filter(k => { for (const [dx, dy] of N4) { const q = I(k % W + dx, ((k / W) | 0) + dy); if (tiles[q] === DOOR || tiles[q] === VOID) return false; } return true; });
     const nT = Math.round(cc.length / 70 + rn.f());
     for (let i = 0; i < nT && cc.length; i++) addTrap(rn.pick(cc), 'corridor', -1);
     for (const k of deadEnds) if (rn.chance(.5)) addTrap(k, 'corridor', -1);
@@ -807,8 +1040,15 @@ function generate(opts, mons) {
       if (e) { e.activity = '通路をうろついている'; addEnc(e, near.length ? near : [k], -1, false); }
     } }
 
+  /* 骨組みと一画の指紋。tools/check-floors.mjs が、夜をまたいで変わらないことを確かめる(扉の種類は数えない) */
+  const fnv = (h, v) => Math.imul(h ^ v, 16777619) >>> 0;
+  let skelHash = 2166136261; for (let k = 0; k < W * H; k++) if (fixed[k]) skelHash = fnv(skelHash, k);
+  for (const d of districts) { let h = 2166136261; for (const k of d.cells) h = fnv(h, k * 8 + Math.min(tiles[k], 4)); d.hash = h.toString(16); }
+  const lamps = props.filter(p => p.kind !== 'lamp' || tiles[I(p.x, p.y)] === CORR);
   const mi = new Map((mons || []).map(m => [m.i, m]));
-  return { schema: SCHEMA, floor, opts: Object.assign({}, o, { level, party, floor }), themeId: o.theme in THEMES ? o.theme : 'generic', theme, W, H, tiles, roomAt, rooms, order, doors, doorAt, traps, trapAt, encs, feats, stairs, deadEnds, exhale, night: ni, connected, monIndex: mi, I };
+  const wireLayer = theme.vergha ? WIRE.layers.find(L => L.layer === floor) || null : null;
+  return { schema: SCHEMA, floor, depth, opts: Object.assign({}, o, { level, party, floor, sub, subs, depth }), themeId: o.theme in THEMES ? o.theme : 'generic', theme, W, H, tiles, roomAt, rooms, order, doors, doorAt, traps, trapAt, encs, feats, stairs, deadEnds, exhale, night: ni, connected, monIndex: mi, I,
+    shaft: Object.assign({ center: [CX, CY] }, shaft), sites: sites.map(r => ({ k: r.site, x: r.cx, y: r.cy, room: r.id })), verticals, districts: districts.map(d => ({ id: d.id, area: d.area, changed: d.changed, hash: d.hash })), districtOf, fixed, skeletonHash: skelHash.toString(16), props: lamps, skeleton: kind, wire: wireLayer, nSkeletonRooms };
 }
 
 /* ---------- 視界（再帰シャドウキャスティング） ---------- */
@@ -871,16 +1111,23 @@ function monLine(D, g) {
 }
 function trapOut(t) { return { id: t.id, x: t.x, y: t.y, roomId: t.roomId, name: t.name, severity: t.sevKey, trigger: t.trig, kind: t.kind, save: t.ab ? { ability: t.ab, dc: t.dc } : undefined, attack_bonus: t.atk, damage: t.dmg, damage_type: t.dtype, half_on_success: t.half || undefined, effect: t.effect, fx: t.fx, detect_dc: t.detectDC, disarm_dc: t.disarmDC, state: t.state }; }
 function exportJSON(D) {
-  const rows = []; const ch = ['#', '.', ',', '+'];
+  const rows = []; const ch = ['#', '.', ',', '+', 'O'];
   for (let y = 0; y < D.H; y++) { let s = ''; for (let x = 0; x < D.W; x++) s += ch[D.tiles[y * D.W + x]]; rows.push(s); }
   return {
     schema: SCHEMA,
-    meta: { seed: D.opts.seed, theme: D.themeId, theme_name: D.theme.name, floor: D.floor, night: D.opts.night, setsu: D.night.setsu, exhale: D.exhale, size: D.opts.size, grid: { width: D.W, height: D.H, feet_per_cell: 5, image_px_per_cell: 50 }, party: { size: D.opts.party, level: D.opts.level }, rules: D.opts.edition === '2024' ? 'SRD 5.2.1' : 'SRD 5.1' },
-    legend: { '#': 'rock', '.': 'room', ',': 'corridor', '+': 'door' },
+    meta: { seed: D.opts.seed, theme: D.themeId, theme_name: D.theme.name, floor: D.floor, depth: D.depth, layer: D.theme.vergha ? D.floor : undefined, sub: D.opts.sub, subs: D.opts.subs, night: D.opts.night, setsu: D.night.setsu, exhale: D.exhale, size: D.opts.size, grid: { width: D.W, height: D.H, feet_per_cell: 5, image_px_per_cell: 50 }, party: { size: D.opts.party, level: D.opts.level }, rules: D.opts.edition === '2024' ? 'SRD 5.2.1' : 'SRD 5.1',
+      generator: GENERATOR, skeleton: D.skeleton, skeleton_hash: D.skeletonHash,
+      height_m: D.wire ? D.wire.h_m : undefined, depth_m: D.wire ? D.wire.top_m + D.wire.h_m * (D.opts.sub + 1) : undefined },
+    legend: { '#': 'rock', '.': 'room', ',': 'corridor', '+': 'door', 'O': 'void' },   // 予約: '~' 深い水、'=' 浅い水、'I' 柱(水鏡・骨の骨組みで使う)
     grid: rows,
-    rooms: D.order.map(r => ({ id: r.id, no: r.no, name: r.name, role: r.role, big: r.big, shape: r.shape, x: r.x, y: r.y, w: r.w, h: r.h, center: [r.cx, r.cy], area_cells: r.area, lit: r.lit, exits: r.exits, flavor: r.flavor, feature: r.feat || undefined, hook: r.hook || undefined, treasure: r.treasure || undefined, encounter: r.encId, traps: r.trapIds })),
+    rooms: D.order.map(r => ({ id: r.id, no: r.no, name: r.name, role: r.role, big: r.big, kind: r.kind, site: r.site, district: r.district, shape: r.shape, x: r.x, y: r.y, w: r.w, h: r.h, center: [r.cx, r.cy], area_cells: r.area, lit: r.lit, exits: r.exits, flavor: r.flavor, feature: r.feat || undefined, hook: r.hook || undefined, treasure: r.treasure || undefined, encounter: r.encId, traps: r.trapIds })),
     doors: D.doors.map(d => ({ id: d.id, x: d.x, y: d.y, axis: d.horiz ? 'ew' : 'ns', type: d.type, lock_dc: d.lockDC, find_dc: d.findDC, roomId: d.roomId })),
     stairs: D.stairs,
+    shaft: D.shaft,                 // 縦穴(虚空)。center は全階で同じ世界座標の原点
+    stair_sites: D.sites,           // 階段の候補地7つ(k は候補地の番号。全階で同じ位置)
+    verticals: D.verticals,         // 層をまたぐ縦の構造(竪坑の穴 hole、いちばん下は溜まり場)
+    districts: D.districts,         // 一画: changed は最後に組み替わった夜、hash は通路と部屋の指紋
+    props: D.props,                 // 置き物(灯守の灯 lamp、縁の縄梯子 rope)。ゲームの見た目の手がかり
     traps: D.traps.map(trapOut),
     encounters: D.encs.map(e => ({ id: e.id, roomId: e.roomId, boss: e.boss, xp: e.xp, difficulty: e.diff, activity: e.activity, attitude: e.attitude, kind: e.kind, monsters: e.groups.map(g => monLine(D, g)), tokens: e.tokens })),
     walls: walls(D),
@@ -965,7 +1212,7 @@ function buildPrompt(id, D, sel, x) {
   return head.concat(body, rule).join('\n');
 }
 
-return { ROCK, ROOM, CORR, DOOR, SCHEMA, THEMES, SIZES, DEN_SEP, FLOORS, themeForFloor, floorLabel, XP_BUDGET, TYPE_JP, SIZE_JP, DMG_JP, PROMPTS, BREATH, makeRng, nightInfo, mirrorRoom, generate, computeVisible, fov, walls, exportJSON, buildPrompt, placeData, dungeonData, worldText, buildPool, famOf, tierOf };
+return { ROCK, ROOM, CORR, DOOR, VOID, SCHEMA, GENERATOR, WIRE, DEPTHS, SKELETON, depthOf, THEMES, SIZES, DEN_SEP, FLOORS, themeForFloor, floorLabel, XP_BUDGET, TYPE_JP, SIZE_JP, DMG_JP, PROMPTS, BREATH, makeRng, nightInfo, mirrorRoom, generate, computeVisible, fov, walls, exportJSON, buildPrompt, placeData, dungeonData, worldText, buildPool, famOf, tierOf };
 })();
 
 
@@ -981,7 +1228,7 @@ const store = {
   load() { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { return {}; } },
   save(v) { try { localStorage.setItem(LS, JSON.stringify(v)); } catch (e) { /* 保存できなくても動く */ } }
 };
-const S = Object.assign({ theme: 'fuyou', night: 0, seed: 'vergha', size: 'M', party: 4, level: 1, pp: 12, light: 6, edition: '2014', mode: 'play', zoom: null, style: '簡潔' }, store.load());
+const S = Object.assign({ theme: 'fuyou', night: 0, seed: 'vergha', sub: 1, size: 'M', party: 4, level: 1, pp: 12, light: 6, edition: '2014', mode: 'play', zoom: null, style: '簡潔' }, store.load());
 if (!Core.THEMES[S.theme]) S.theme = 'fuyou';
 if (!Core.SIZES[S.size]) S.size = 'M';
 if (S.edition !== '2024') S.edition = '2014';
@@ -1020,8 +1267,11 @@ function speak(text) {
 const K = (x, y) => y * D.W + x;
 
 /* ---------- 生成と探索の状態 ---------- */
+const subsOf = floor => { const L = Core.WIRE.layers.find(L => L.layer === floor); return L ? L.floors : 1; };
 function build() {
-  D = Core.generate({ seed: S.seed, theme: S.theme, floor: S.floor, night: S.night, size: S.size, level: S.level, party: S.party, edition: S.edition }, mons(S.edition));
+  const vg = Core.THEMES[S.theme].vergha, subs = vg ? subsOf(S.floor) : 1;
+  S.sub = Math.max(1, Math.min(subs, S.sub | 0 || 1));
+  D = Core.generate({ seed: S.seed, theme: S.theme, floor: S.floor, sub: S.sub - 1, subs, night: S.night, size: S.size, level: S.level, party: S.party, edition: S.edition }, mons(S.edition));
   E = { px: D.stairs.up.x, py: D.stairs.up.y, explored: new Uint8Array(D.W * D.H), visible: new Uint8Array(D.W * D.H), visited: new Set([D.stairs.up.room]) };
 }
 function refresh() {
@@ -1036,30 +1286,30 @@ function regen() {
   build();
   sel = { kind: 'room', id: D.stairs.up.room, x: E.px, y: E.py };
   const r = D.rooms[D.stairs.up.room];
-  log(`${Core.floorLabel(D.theme, D.floor)}、${D.theme.short}に降りた。部屋${r.no}「${r.name}」から始める。`);
+  log(`${Core.floorLabel(D.theme, D.floor, D.opts.sub, D.opts.subs)}、${D.theme.short}に降りた。部屋${r.no}「${r.name}」から始める。`);
   refresh();
 }
-/* 階段で層を移る。通った層は控えてあり、戻ると探索の跡が残っている */
+/* 階段で階を移る。ヴェルガでは層の中の階(sub)を進み、層の端で次の層へ。通った階は控えてあり、戻ると探索の跡が残っている */
 function goFloor(dir) {
   stopMove();
-  const th = D.theme, nf = D.floor + (dir === 'down' ? 1 : -1);
-  if (nf < 1) { log('地上へ戻った。' + (th.vergha ? '口番所で帰還を届け、査定所へ向かう。' : ''), 'ok'); select({ kind: 'surface' }); return; }
-  if (nf > th.floors[1] && !th.vergha) return;
-  if (nf > 99) return;
-  floors.set(D.floor, { D, E });
-  S.floor = nf; if (th.vergha) S.theme = Core.themeForFloor(nf);
+  const th = D.theme, vg = th.vergha, cur = vg ? D.depth : D.floor, nf = cur + (dir === 'down' ? 1 : -1);
+  if (nf < 1) { log('地上へ戻った。' + (vg ? '口番所で帰還を届け、査定所へ向かう。' : ''), 'ok'); select({ kind: 'surface' }); return; }
+  if (vg ? nf > Core.DEPTHS.length : nf > th.floors[1]) return;
+  floors.set(cur, { D, E });
+  if (vg) { const D0 = Core.DEPTHS[nf - 1]; S.floor = D0.layer; S.sub = D0.sub + 1; S.theme = Core.themeForFloor(S.floor); } else S.floor = nf;
   const c = floors.get(nf);
   if (c) { D = c.D; E = c.E; } else build();
   const s = dir === 'down' ? D.stairs.up : D.stairs.down, r = D.rooms[s.room];
   E.px = s.x; E.py = s.y; E.visited.add(s.room);
   sel = { kind: 'room', id: s.room, x: s.x, y: s.y };
-  log(`${Core.floorLabel(D.theme, nf)}${D.theme.vergha ? '、' + D.theme.short : ''}へ${dir === 'down' ? '降りた' : '上がった'}。部屋${r.no}「${r.name}」に着いた。`, 'ok');
+  log(`${Core.floorLabel(D.theme, D.floor, D.opts.sub, D.opts.subs)}${vg ? '、' + D.theme.short : ''}へ${dir === 'down' ? '降りた' : '上がった'}。部屋${r.no}「${r.name}」に着いた。`, 'ok');
   refresh();
 }
 function syncControls() {
   $('#theme').value = S.theme; $('#floor').value = S.floor;
-  const f = D.theme.floors; $('#floor').min = D.theme.vergha ? 1 : f[0]; $('#floor').max = D.theme.vergha ? 99 : f[1];
-  $('#floorlab').textContent = D.theme.vergha ? '層' : '階';
+  const f = D.theme.floors, vg = D.theme.vergha; $('#floor').min = vg ? 1 : f[0]; $('#floor').max = vg ? Core.WIRE.layers.length : f[1];
+  $('#floorlab').textContent = vg ? '層' : '階';
+  const subs = vg ? subsOf(D.floor) : 1; $('#sublabel').style.display = subs > 1 ? '' : 'none'; $('#sub').max = subs; $('#sub').value = S.sub;
 }
 function log(t, c) { trip.log.push({ t, c: c || '' }); if (trip.log.length > 80) trip.log.shift(); renderLog(); }
 function renderLog() {
@@ -1089,7 +1339,7 @@ function see() {
 }
 function enterable(k) {
   const t = D.tiles[k];
-  if (t === Core.ROCK) return false;
+  if (t === Core.ROCK || t === Core.VOID) return false;
   if (t === Core.DOOR) { const d = D.doorAt.get(k); if (d.type === 'secret' && !d.found) return false; if (d.type === 'locked' && d.state !== 'open') return 'locked'; }
   return true;
 }
@@ -1217,6 +1467,12 @@ function paintBase(b, T, shown) {
       continue;
     }
     const t = D.tiles[k], h = hash(x, y);
+    if (t === Core.VOID) {   // 虚空。真っ黒で、縁だけ薄く描く
+      b.fillStyle = '#000'; b.fillRect(x * T, y * T, T, T);
+      b.strokeStyle = 'rgba(255,255,255,.12)'; b.lineWidth = 1;
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W && Y < H && D.tiles[K(X, Y)] !== Core.VOID) { b.beginPath(); b.moveTo(x * T + (dx > 0 ? T : 0) + .5, y * T + (dy > 0 ? T : 0) + .5); b.lineTo(x * T + (dx < 0 ? 0 : T) + .5, y * T + (dy < 0 ? 0 : T) + .5); b.stroke(); } }
+      continue;
+    }
     b.fillStyle = t === Core.ROOM ? (h > .5 ? c.floor : c.floor2) : c.corr;
     b.fillRect(x * T, y * T, T, T);
     if (D.theme.water && t === Core.ROOM && h > .72) { b.fillStyle = 'rgba(134,208,226,.13)'; b.fillRect(x * T, y * T, T, T); }
@@ -1449,7 +1705,8 @@ function panel() {
   let h = '';
   if (!sel) h = overviewHtml();
   else if (sel.kind === 'surface') {
-    const seen = [...new Set([...floors.keys(), D.floor])].sort((a, b) => a - b).map(n => Core.floorLabel(D.theme, n)).join('、');
+    const vg = D.theme.vergha, lab = n => { const D0 = vg ? Core.DEPTHS[n - 1] : null; return D0 ? Core.floorLabel(D.theme, D0.layer, D0.sub, D0.subs) : Core.floorLabel(D.theme, n); };
+    const seen = [...new Set([...floors.keys(), vg ? D.depth : D.floor])].sort((a, b) => a - b).map(lab).join('、');
     h = `<header class="block"><h2>地上</h2><p class="sub">${D.theme.vergha ? '大穴の縁まで戻った。口番所で帰還を届け、燐晶は査定所へ。3割は税になる。' : '迷宮の外へ出た。'}</p>
       <dl><dt>歩いた数</dt><dd>${trip.steps}歩</dd><dt>通った層</dt><dd>${seen}</dd></dl>
       <div class="row"><button type="button" class="main" data-act="redive">もう一度潜る</button></div></header>`;
@@ -1533,7 +1790,7 @@ function chips() {
 function status(msg) {
   const k = K(E.px, E.py), rid = D.roomAt[k];
   const where = rid >= 0 ? `部屋${D.rooms[rid].no}「${D.rooms[rid].name}」` : D.tiles[k] === Core.DOOR ? '扉口' : '通路';
-  $('#status').textContent = msg || `${Core.floorLabel(D.theme, D.floor)}・${trip.steps}歩（ゆっくり進んで約${Math.max(0, Math.round(trip.steps / 40))}分）・いま ${where}・踏査 ${E.visited.size}/${D.rooms.length}部屋`;
+  $('#status').textContent = msg || `${Core.floorLabel(D.theme, D.floor, D.opts.sub, D.opts.subs)}・${trip.steps}歩（ゆっくり進んで約${Math.max(0, Math.round(trip.steps / 40))}分）・いま ${where}・踏査 ${E.visited.size}/${D.rooms.length}部屋`;
 }
 function legend() {
   const c = D.theme.col;
@@ -1552,7 +1809,8 @@ function init() {
   ts.innerHTML = Object.entries(Core.THEMES).map(([k, t]) => `<option value="${k}">${esc(t.name)}</option>`).join('');
   ts.value = S.theme;
   ts.addEventListener('change', () => { S.theme = ts.value; S.floor = Core.THEMES[S.theme].floors[0]; S.level = Core.THEMES[S.theme].level; $('#level').value = S.level; regen(); });
-  bindNum('floor', 'floor', 1, 99, () => { if (Core.THEMES[S.theme].vergha) S.theme = Core.themeForFloor(S.floor); regen(); });
+  bindNum('floor', 'floor', 1, 99, () => { if (Core.THEMES[S.theme].vergha) { S.theme = Core.themeForFloor(S.floor); S.sub = 1; } regen(); });
+  bindNum('sub', 'sub', 1, 9, regen);
   bindNum('night', 'night', 0, 999, regen); bindNum('party', 'party', 1, 8, regen); bindNum('level', 'level', 1, 20, regen);
   bindNum('pp', 'pp', 5, 30, revis); bindNum('light', 'light', 2, 16, revis);
   $('#nprev').onclick = () => { S.night = Math.max(0, S.night - 1); $('#night').value = S.night; regen(); };

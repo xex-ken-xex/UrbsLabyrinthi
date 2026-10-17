@@ -269,6 +269,9 @@ func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
 			var t := m.tiles[i]
 			if t == FloorMap.ROCK:
 				continue
+			if t == FloorMap.VOID:
+				draw_rect(Rect2(ox + x * s, oy + y * s, s, s), Color.BLACK)   # 虚空(縦穴・竪坑の穴)
+				continue
 			var c := Color(0.5, 0.55, 0.5) if t == FloorMap.ROOM else Color(0.38, 0.42, 0.38)
 			if t == FloorMap.DOOR:
 				c = Color("a06a30")

@@ -24,8 +24,8 @@ function run(label, eco) {
     const theme = Core.themeForFloor(L.layer), th = Core.THEMES[theme];
     let acc = { cells: 0, open: 0, mon: 0, enc: 0, dens: 0, terr: 0, treasure: 0, n: 0, minGap: 1e9 };
     for (let sub = 0; sub < L.floors; sub++) for (let night = 0; night < 7; night++) {
-      const D = Core.generate({ seed: sub ? `vergha#${sub + 1}` : 'vergha', theme, floor: L.layer, night, size: L.size, level: th.level, party: 4, edition: '2014', ecology: eco, density: eco ? L.density : 1 }, mons);
-      const open = D.tiles.reduce((s, t) => s + (t !== 0 ? 1 : 0), 0);
+      const D = Core.generate({ seed: 'vergha', theme, floor: L.layer, sub, subs: L.floors, night, size: L.size, level: th.level, party: 4, edition: '2014', ecology: eco, density: eco ? L.density : 1 }, mons);
+      const open = D.tiles.reduce((s, t) => s + (t !== Core.ROCK && t !== Core.VOID ? 1 : 0), 0);
       acc.cells += D.W * D.H; acc.open += open; acc.n++;
       acc.enc += D.encs.length; acc.dens += D.encs.filter(e => e.roomId >= 0).length;
       for (const e of D.encs) { acc.mon += e.tokens.length; acc.terr += terrOf(e); }

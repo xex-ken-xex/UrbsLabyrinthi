@@ -14,7 +14,7 @@ var map: FloorMap
 var style: Dictionary
 var col := {}
 var floor_no := 1             # 階の通し番号(1〜Balance.MAX_FLOOR)。階段と HUD に使う
-var layer_no := 1             # 層(第N層)。層は、1〜3階のグループ。拾えるもの、舞台、魔物の強さは、層で決まる
+var layer_no := 1             # 層(第N層)。層は、1〜5階のグループ。拾えるもの、舞台、魔物の強さは、層で決まる
 var night_no := 0
 var heroes: Array = []        # Hero(パーティ全員。Main が持つ体への参照)
 var leader: Hero = null
@@ -349,6 +349,9 @@ func _draw() -> void:
 				f = 1.0 if lit else lerpf(1.0, 0.5, clampf((dd - 2.0) / R, 0.0, 1.0))
 			var t := map.tiles[i]
 			var rect := Rect2(x * C, y * C, C, C)
+			if t == FloorMap.VOID:
+				draw_rect(rect, Color.BLACK)      # 虚空(縦穴・竪坑の穴)。底は真っ黒で、何も見えない
+				continue
 			if t == FloorMap.ROCK:
 				if map.wall_adj[i] == 1 and tex["wall"] != null:
 					var face_side := tex["walltop"] == null or not _is_rock(x, y + 1)    # 南が床なら、壁の正面
