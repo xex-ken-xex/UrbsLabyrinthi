@@ -140,7 +140,13 @@ const TRAIT_JP := {"pack": "群れで囲む", "smell": "鼻が利く(壁越し�
 	"amphib": "水たまりに沈んで待つ", "climb": "天井から落ちてくる", "webwalk": "巣を張る", "websense": "巣の揺れで気づく",
 	"shape": "人や鼠に化ける", "magic_res": "魔法に強い", "amorph": "扉の下をくぐる", "gaze": "見つめると石になる(目をそらせ)",
 	"stench": "ひどい臭い", "glow": "体が光る", "absorb_lightning": "雷を吸う", "water_sus": "冷気に弱い",
-	"recall": "迷宮の道を覚えている", "siege": "扉を壊す"}
+	"recall": "迷宮の道を覚えている", "siege": "扉を壊す",
+	"caster": "呪文を唱える", "legend": "気絶や眠りを跳ね返す(3回)", "fey_anc": "眠らない", "immutable": "足止めが効かない",
+	"misty": "倒れると霧になって逃げる(一度)", "heated": "体が熱い(殴ると火傷する)", "devil_sight": "隠れていても見通す"}
+## 傷の種類の名前(冒険日記帳の、効きにくい・効かない・よく効く)
+const DTYPE_JP := {"fire": "火", "cold": "冷気", "lightning": "雷", "poison": "毒", "acid": "酸", "necrotic": "死霊",
+	"radiant": "光", "thunder": "雷鳴", "psychic": "精神", "force": "魔力", "slashing": "斬る", "piercing": "突く",
+	"bludgeoning": "叩く", "spell": "呪文"}
 
 ## 日記帳に載る魔物の名前(見かけていなければ ？？？)
 static func entry_name(gs: GameState, index: String) -> String:
@@ -187,7 +193,28 @@ static func entry_text(gs: GameState, index: String) -> String:
 			tr.append(TRAIT_JP[f])
 	if not tr.is_empty():
 		t += "\n[color=#5bc0de]覚え書き: %s[/color]\n" % "、".join(tr)
+	var res := resist_text(index)
+	if res != "" and killed(gs, index) > 0:
+		t += "[color=#5bc0de]%s[/color]\n" % res
 	return t
+
+## 効きにくい・効かない・よく効く傷の種類(倒したことがある魔物だけ。見ただけでは分からない)
+static func resist_text(index: String) -> String:
+	var mult: Dictionary = MonTraits.damage_mods({"index": index})["mult"]
+	var groups := {"効かない": [], "効きにくい": [], "よく効く": []}
+	for k in mult:
+		var key := String(k)
+		var nm := String(DTYPE_JP.get(key.trim_prefix("nm_"), key))
+		if key.begins_with("nm_"):
+			nm += "(魔力の無い武器)"
+		var v := float(mult[k])
+		var g := "効かない" if v <= 0.0 else ("効きにくい" if v < 1.0 else "よく効く")
+		(groups[g] as Array).append(nm)
+	var parts: Array = []
+	for g in ["よく効く", "効きにくい", "効かない"]:
+		if not (groups[g] as Array).is_empty():
+			parts.append("%s: %s" % [g, "・".join(groups[g])])
+	return "   ".join(parts)
 
 static func _cr_text(cr: float) -> String:
 	if cr > 0.0 and cr < 1.0:

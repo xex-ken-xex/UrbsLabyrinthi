@@ -492,8 +492,8 @@ static func hold(b: Body, why: String, secs: float) -> void:
 	elif b is Enemy:
 		if why == "net" and (b as Enemy).has_trait("webwalk"):
 			return        # 巣を歩く魔物は、網に絡まらない
-		(b as Enemy).apply_stun(secs * 0.8)
-		if why == "sleep":
+		(b as Enemy).apply_stun(secs * 0.8, {"sleep": "sleep", "prone": "prone", "net": "hold", "teeth": "hold", "glue": "hold", "web": "hold"}.get(why, "stun"))
+		if why == "sleep" and (b as Enemy).stun_t > 0.0:
 			b.game_floor.spawn_text(b.position + Vector2(0, -b.radius - 14), "z", Color(0.8, 0.85, 1.0))
 
 static func knock_down(b: Body, secs: float) -> void:

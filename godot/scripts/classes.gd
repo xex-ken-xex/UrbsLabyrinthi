@@ -112,7 +112,7 @@ const SKILLS := {
 	# 魔法屋で買える呪文書で覚える
 	"mana_shield": {"name": "魔法の盾", "mp": 4, "cd": 18.0, "kind": "buff_self", "dur": 8.0, "mult": {"guard": 0.5}, "spell": true,
 		"desc": "8秒間、受けるダメージが半分になる。"},
-	"sleep": {"name": "眠りの雲", "mp": 4, "cd": 10.0, "kind": "burst_ahead", "dmg": 0.0, "radius": 80.0, "ahead": 110.0, "slow": 3.0, "stun": 3.0, "spell": true,
+	"sleep": {"name": "眠りの雲", "mp": 4, "cd": 10.0, "kind": "burst_ahead", "dmg": 0.0, "radius": 80.0, "ahead": 110.0, "slow": 3.0, "stun": 3.0, "spell": true, "cond": "sleep",
 		"desc": "前方の敵を3秒間、眠らせて動けなくする。"},
 	"regen_light": {"name": "再生の光", "mp": 6, "cd": 20.0, "kind": "regen_party", "dur": 12.0, "amount": 1.0, "stat": 0.4, "spell": true,
 		"desc": "12秒間、仲間全員のHPがじわじわ回復する。"},
@@ -139,7 +139,7 @@ const SKILLS := {
 		"desc": "坑夫の大鶴嘴の技。前の床ごと叩き割り、まわりの敵の守りも割る。"},
 	"w_comet": {"name": "流星投げ", "mp": 4, "cd": 7.0, "kind": "projectile", "dmg": 12.0, "stat": 1.0, "lv": 1.4, "range": 360.0, "speed": 600.0, "pierce": true, "slow": 2.0, "weapon": true,
 		"desc": "流星の槍の技。光る穂先を投げ、一列を貫いて足を止める(槍は手元に戻る)。"},
-	"flash": {"name": "閃光", "mp": 4, "cd": 12.0, "kind": "burst_self", "dmg": 0.0, "radius": 100.0, "stun": 1.8, "spell": true,
+	"flash": {"name": "閃光", "mp": 4, "cd": 12.0, "kind": "burst_self", "dmg": 0.0, "radius": 100.0, "stun": 1.8, "spell": true, "cond": "blind",
 		"desc": "周囲の敵を1.8秒間、怯ませて止める。"},
 }
 
