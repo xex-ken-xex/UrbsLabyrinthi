@@ -44,6 +44,8 @@ var _crystal_cue_ms := -10000
 var scripted_input := false        # テスト用: true の間は、キー入力を読まない
 var _shake := 0.0                  # 画面の揺れ(爆発の罠など)
 var _blind_was := false
+var rope_menu: TrapMenu = null     # 縄梯子の前で、下りるか登るかを選んでいる
+var _menu_rope := Vector2i(-1, -1)
 
 func _ready() -> void:
 	Dice.rng.randomize()
@@ -509,7 +511,8 @@ func _make_floor(n: int) -> FloorInstance:
 	floors[n] = fl
 	return fl
 
-func enter_floor(n: int, arrive: String) -> void:
+## arrive: "up"(上り階段に着く)/ "down"(下り階段に着く)/ "rope"(縄梯子。at は縦穴の中心からの差)
+func enter_floor(n: int, arrive: String, at: Vector2i = Vector2i.ZERO) -> void:
 	var fl := _make_floor(n)
 	if fl == null:
 		return
@@ -521,14 +524,18 @@ func enter_floor(n: int, arrive: String) -> void:
 	fl.heroes = heroes
 	fl.leader = leader()
 	var cell := fl.up_cell if arrive == "up" else fl.down_cell
+	if arrive == "rope":
+		var rc := fl.map.nearest_walkable(fl.map.shaft_center + at)
+		cell = rc if rc.x >= 0 else fl.up_cell
 	for h in heroes:
 		h.game_floor = fl
 	place_party(fl.map.center_of(cell))
-	Sfx.cue(fl, leader().position, "stairs")
+	Sfx.cue(fl, leader().position, "rope" if arrive == "rope" else "stairs")
 	var meta: Dictionary = fl.map.data["meta"]
 	log_msg("%s「%s」" % [meta.get("floor_label", "第%d層" % n), fl.style.get("short", "")], Color("e8dcb0"))
 	if arena == null:
 		Journal.best(gs, "deepest", fl.layer_no)
+		Journal.best(gs, "deepest_floor", fl.floor_no)
 		_check_trophies()
 	var see: Array = fl.style.get("see", [])
 	if arrive == "up" and not see.is_empty() and not fl.visited_rooms.has("floor"):
@@ -825,6 +832,11 @@ func _enter_room(pc: Vector2i) -> void:
 	current.visited_rooms[rid] = true
 	var r: Dictionary = m.room_by_id[rid]
 	log_msg("「%s」" % r["name"], Color("d8e6ff"))
+	if String(r.get("kind", "")) == "lair":        # 大穴の底、竜の巣に着いた(到達が実績。竜は眠っている)
+		Journal.bump(gs, "lair")
+		_check_trophies()
+	elif String(r.get("kind", "")) == "sump":      # 竪坑の底。上の階から落ちてきた物が積もっている
+		log_msg("上の階から落ちてきた物が、底に積もっている。見上げると、竪坑の口が小さな四角に見える。", Color(0.78, 0.82, 0.86))
 	var feat: Variant = r.get("feature")
 	if typeof(feat) == TYPE_DICTIONARY:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))
@@ -1194,6 +1206,8 @@ func _update_hint() -> void:
 		h = "階段は吐息に塞がれている(夜明けまで)"
 	elif _near(current.down_cell, 1.4):
 		h = "E: 下へ降りる" if current.floor_no < Balance.MAX_FLOOR else "この先は未踏(まだ道がない)"
+	elif _near_rope().x >= 0:
+		h = "%s: 縄梯子(〈運動〉)" % Controls.hint("interact")
 	elif _near(current.up_cell, 1.4):
 		h = "E: 街へ戻る" if current.floor_no == 1 else "E: 上へ戻る"
 	hud.hint = h
@@ -1230,6 +1244,10 @@ func interact() -> void:
 			log_msg("この先は未踏。まだ道がない。", Color(0.7, 0.7, 0.8))
 		else:
 			enter_floor(current.floor_no + 1, "up")
+		return
+	var rope := _near_rope()
+	if rope.x >= 0 and not _near(current.up_cell, 1.4):
+		open_rope_menu(rope)
 		return
 	if _near(current.up_cell, 1.4):
 		if current.floor_no == 1:
@@ -1379,6 +1397,7 @@ func open_inventory() -> void:
 		hud.hint = ""
 		_freeze_world(true)
 	inventory = InventoryScreen.new()
+	inventory.here_floor = current.floor_no if current != null and dtime != null else 0
 	inventory.closed.connect(close_inventory)
 	ui_layer.add_child(inventory)
 	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
@@ -1497,16 +1516,103 @@ func jump_trap(t: Dictionary) -> void:
 	elif not TrapFx.PERIODIC.has(String(t.get("fx", ""))):
 		_trigger_trap(t, leader())      # 振り子や噴き口は、外せばそのまま刃や炎が来る
 
-## 落とし穴: 一行ごと下の階へ落ちる(どこかの部屋)。いちばん下の階では、浅い穴で済む
+## 縄梯子のそば(無ければ (-1, -1))。闘技場には無い
+func _near_rope() -> Vector2i:
+	if current == null or arena != null:
+		return Vector2i(-1, -1)
+	for c in current.ropes:
+		if _near(c, 1.3):
+			return c
+	return Vector2i(-1, -1)
+
+## 縄梯子の難しさ: 階の高さ(m)で決まる。5m で 10、15m で 14
+static func rope_dc(h_m: float) -> int:
+	return 8 + int(round(h_m / 2.5))
+
+func open_rope_menu(c: Vector2i) -> void:
+	if rope_menu != null or phase != "dungeon":
+		return
+	if dtime != null and dtime.stairs_sealed():
+		Sfx.cue(current, leader().position, "sealed")
+		log_msg("縦穴を吐息が吹き上げていて、縄梯子に取りつけない。夜明けを待つしかない。", Color("c9b6ff"))
+		return
+	var opts: Array = []
+	if current.floor_no < Balance.MAX_FLOOR:
+		var h_dn := float(Abyss.floor_info(current.floor_no).get("h_m", 5.0))
+		opts.append(["down", "下りる", "%s へ。%sm 下。一人ずつ〈運動〉 難易度 %d。外すと途中から落ちる。" % [String(Abyss.floor_info(current.floor_no + 1).get("label", "下の階")), _m(h_dn), rope_dc(h_dn)]])
+	if current.floor_no > 1:
+		var h_up := float(Abyss.floor_info(current.floor_no - 1).get("h_m", 5.0))
+		opts.append(["up", "登る", "%s へ。%sm 上。一人ずつ〈運動〉 難易度 %d。外すと滑って傷を負う(仲間が引き上げる)。" % [String(Abyss.floor_info(current.floor_no - 1).get("label", "上の階")), _m(h_up), rope_dc(h_up)]])
+	if opts.is_empty():
+		return
+	_menu_rope = c
+	phase = "menu"
+	hud.hint = ""
+	_freeze_world(true)
+	rope_menu = TrapMenu.new()
+	rope_menu.setup("縄梯子", "縦穴の縁の杭に、昔の採掘者の縄梯子が結ばれている。縄は闇の中へ垂れ、上と下の階の縁につながっている。", opts)
+	rope_menu.chosen.connect(_on_rope_choice)
+	ui_layer.add_child(rope_menu)
+
+static func _m(v: float) -> String:
+	return ("%.1f" % v).trim_suffix(".0")
+
+func _on_rope_choice(a: String) -> void:
+	if rope_menu != null:
+		rope_menu.queue_free()
+		rope_menu = null
+	phase = "dungeon"
+	_freeze_world(false)
+	_menu_cd = 0.3
+	var c := _menu_rope
+	_menu_rope = Vector2i(-1, -1)
+	if c.x < 0 or (a != "down" and a != "up"):
+		return
+	climb_rope(1 if a == "down" else -1, c)
+
+## 縄梯子で一階下りる(dir 1)か登る(dir -1)。一人ずつ〈運動〉を振り、外した者は途中から落ちる(高さに応じた傷)。
+## 一行は、行き先の階の同じ所(縦穴の中心からの差が同じ縁の角)に着く
+func climb_rope(dir: int, c: Vector2i) -> void:
+	var target := current.floor_no + dir
+	if target < 1 or target > Balance.MAX_FLOOR:
+		return
+	var h_m := float(Abyss.floor_info(current.floor_no if dir > 0 else target).get("h_m", 5.0))
+	var dc := rope_dc(h_m)
+	var off := c - current.map.shaft_center
+	var rolls: Array = []
+	for h in heroes:
+		if h.down:
+			continue
+		var roll: int = h.ch.roll_d20()
+		var b: int = h.ch.skill_bonus("athletics")
+		rolls.append([h, roll, b, roll == 20 or (roll != 1 and roll + b >= dc)])
+	log_msg("縄梯子を%s(〈運動〉 難易度 %d)" % ["下りる" if dir > 0 else "登る", dc], Color("e8dcb0"))
+	enter_floor(target, "rope", off)
+	Journal.bump(gs, "rope")
+	for r in rolls:
+		var h: Hero = r[0]
+		if bool(r[3]):
+			continue
+		# 外した: 途中から落ちる(出目1は上から下まで)。3m ごとに 1d6
+		var fall := h_m * (1.0 if int(r[1]) == 1 else Dice.rng.randf_range(0.3, 0.6))
+		var dice := maxi(1, int(round(fall / 3.0)))
+		Sfx.cue(current, h.position + Vector2(0, -10), "slip")
+		log_msg("%sは %d%+d で手を滑らせ、%sm 落ちた" % [h.ch.name, int(r[1]), int(r[2]), _m(snappedf(fall, 0.5))], Color("ff9a7a"))
+		h.damage(maxf(1.0, Dice.roll("%dd6" % dice) * Balance.TRAP_DMG_SCALE), h.position + Vector2(0, 1), true)
+
+## 落とし穴: 一行ごと下の階へ落ちる。階は同じ世界座標で重なっている(縦穴の中心が原点)ので、
+## 真下に近い床へ落ちる。真下が岩なら、いちばん近い床。いちばん下の階では、浅い穴で済む
 func _fall_down() -> void:
 	if phase != "dungeon" or current == null or arena != null:
 		return
 	if current.floor_no >= Balance.MAX_FLOOR:
 		log_msg("穴は浅かった。這い上がった。", Color(0.8, 0.8, 0.85))
 		return
+	var here := current.map.cell_of(leader().position) - current.map.shaft_center
 	log_msg("床が抜けた! 一行は下の階へ落ちた", Color("ff9a7a"))
 	enter_floor(current.floor_no + 1, "up")
-	var at := random_room_pos(current, -1)
+	var below := current.map.nearest_walkable(current.map.shaft_center + here)
+	var at := current.map.center_of(below) if below.x >= 0 else random_room_pos(current, -1)
 	if at.x < INF:
 		place_party(at)
 	for h in heroes:

@@ -67,9 +67,9 @@ static func corpse_look(mon_type: String, mon_index: String = "") -> String:
 	return "sit"
 
 ## 遺体を置く。cause は原因の魔物(書き出しの monsters[] の1行)と遭遇の種類 {mon, kind}。無ければ {}
-func add_corpse(pos: Vector2, cause: Dictionary = {}) -> void:
-	var look := "sit"
-	if not cause.is_empty():
+func add_corpse(pos: Vector2, cause: Dictionary = {}, look_as: String = "") -> void:
+	var look := "sit" if look_as == "" else look_as
+	if look_as == "" and not cause.is_empty():
 		look = corpse_look(String(cause["mon"].get("type", "")), String(cause["mon"].get("index", "")))
 	entries.append({"kind": "corpse", "id": "corpse_" + look, "look": look, "cause": cause, "searched": false,
 		"pos": pos, "vel": Vector2.ZERO, "t": 0.0, "ph": Dice.rng.randf()})
@@ -134,6 +134,23 @@ func spawn_all() -> void:
 	_spawn_outcrops(treasure_value)
 	_spawn_forage()
 	_spawn_corpses()
+	for r in fl.map.rooms:
+		if String(r.get("kind", "")) == "sump":
+			_spawn_sump(r)
+
+## 竪坑の底の溜まり場: 上の階から落ちてきた物が積もっている(遺体の骨、遺品、燐晶のかけら)
+func _spawn_sump(room: Dictionary) -> void:
+	var cell := fl.map.free_cell_in_room(room, [fl.up_cell, fl.down_cell])
+	if cell.x < 0:
+		return
+	var cen := fl.map.center_of(cell)
+	for i in Dice.rng.randi_range(1, 2):
+		add_corpse(_free_pos(cen, 30.0), {}, "bones")
+	for i in Dice.rng.randi_range(2, 4):
+		var id: String = ["relic_tag", "relic_coins", "relic_tools", "relic_gear", "potion", "lamp_oil"][Dice.rng.randi_range(0, 5)]
+		add_item(_free_pos(cen, 34.0), id)
+	for i in Dice.rng.randi_range(4, 8):
+		add_crystal(_free_pos(cen, 38.0), Crystal.roll(base, Dice.rng), Dice.rng.randf_range(0.05, 0.2) * Balance.CRYSTAL_SCALE)
 
 ## 宝のある部屋に、光る石の山を置く。持ち物(治療薬、灯具、遺品)も、そばに落ちている
 func _spawn_deposit(room: Dictionary, tr: Dictionary) -> int:

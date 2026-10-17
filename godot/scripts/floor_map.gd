@@ -1,12 +1,17 @@
 class_name FloorMap
 extends RefCounted
-## 1層ぶんの地図。Urbs Labyrinthi が書き出した JSON(urbs-labyrinthi/0.1)を読み、
+## 1階ぶんの地図。Urbs Labyrinthi が書き出した JSON(urbs-labyrinthi/0.3)を読み、
 ## 通れるか、見通せるか、どこから見えるかを答える。描画も敵も知らない。
 
 const ROCK := 0
 const ROOM := 1
 const CORR := 2
 const DOOR := 3
+const VOID := 4                        # 虚空(中央の縦穴と、竪坑の穴)。歩けないが、見通せる。JSON では 'O'
+const WATER := 5                       # 深い水(水鏡の環の水路)。歩けないが、見通せる。JSON では '~'
+const SHALLOW := 6                     # 浅瀬(渡し石)。歩けるが遅い。JSON では '='
+const PILLAR := 7                      # 柱(肋骨の柱、沈んだ列柱)。通れず、見通せない。JSON では 'I'
+const SHALLOW_SPEED := 0.5             # 浅瀬での歩く速さ(水に棲む魔物は遅くならない)
 const DIRS4 := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 const DIRS8 := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 	Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
@@ -24,6 +29,7 @@ var door_at := {}                      # マスの番号 → 扉
 var rooms: Array = []
 var room_by_id := {}
 var room_cells := {}                   # 部屋の id → マス番号の配列
+var shaft_center := Vector2i.ZERO      # 縦穴の中心。全階で同じ世界座標なので、階をまたぐ位置(真下)はここからの差で測る
 
 ## 層のファイルを読む。.json.gz(gzip。pck を小さくするため)でも、.json でも
 static func read_json(path: String) -> Variant:
@@ -61,7 +67,13 @@ func _init(d: Dictionary) -> void:
 				".": tiles[y * w + x] = ROOM
 				",": tiles[y * w + x] = CORR
 				"+": tiles[y * w + x] = DOOR
+				"O": tiles[y * w + x] = VOID
+				"~": tiles[y * w + x] = WATER
+				"=": tiles[y * w + x] = SHALLOW
+				"I": tiles[y * w + x] = PILLAR
 				_: tiles[y * w + x] = ROCK
+	var sc: Array = (d.get("shaft", {}) as Dictionary).get("center", [w / 2, h / 2])
+	shaft_center = Vector2i(int(sc[0]), int(sc[1]))
 	explored.resize(w * h)
 	visible.resize(w * h)
 	for dd in d["doors"]:
@@ -133,23 +145,39 @@ func _flood_room(start: Vector2i, id: int) -> void:
 
 # ---------- 通れるか、見通せるか ----------
 
-## 岩と、開いていない扉。移動も視線もこれでふさがる
+## 岩と柱と、開いていない扉。視線がふさがる(虚空と水は見通せる)
 func opaque(x: int, y: int) -> bool:
 	if not in_bounds(x, y):
 		return true
 	var t := tiles[idx(x, y)]
-	if t == ROCK:
+	if t == ROCK or t == PILLAR:
 		return true
 	if t == DOOR:
 		return not door_at[idx(x, y)]["open"]
 	return false
+
+## 体が入れないマス。岩と柱と閉じた扉に加えて、虚空(縦穴・竪坑の穴)と深い水
+func solid(x: int, y: int) -> bool:
+	if not in_bounds(x, y):
+		return true
+	var t := tiles[idx(x, y)]
+	if t == VOID or t == WATER:
+		return true
+	return opaque(x, y)
+
+## そのマスでの歩く速さの倍率(浅瀬は遅い)
+func speed_at(p: Vector2) -> float:
+	var c := cell_of(p)
+	if in_bounds(c.x, c.y) and tiles[idx(c.x, c.y)] == SHALLOW:
+		return SHALLOW_SPEED
+	return 1.0
 
 ## 魔物が経路に使えるマス。閉じた普通の扉は、近づけば自分で開ける
 func monster_passable(x: int, y: int) -> bool:
 	if not in_bounds(x, y):
 		return false
 	var t := tiles[idx(x, y)]
-	if t == ROCK:
+	if t == ROCK or t == VOID or t == WATER or t == PILLAR:
 		return false
 	if t == DOOR:
 		var d: Dictionary = door_at[idx(x, y)]
@@ -169,7 +197,7 @@ func circle_blocked(p: Vector2, r: float) -> bool:
 	var y1 := int(floor((p.y + r) / c))
 	for cy in range(y0, y1 + 1):
 		for cx in range(x0, x1 + 1):
-			if not opaque(cx, cy):
+			if not solid(cx, cy):
 				continue
 			var nx := clampf(p.x, cx * c, (cx + 1) * c)
 			var ny := clampf(p.y, cy * c, (cy + 1) * c)
@@ -214,6 +242,30 @@ func slide_circle(p: Vector2, delta: Vector2, r: float) -> Vector2:
 
 func cell_of(p: Vector2) -> Vector2i:
 	return Vector2i(int(floor(p.x / Balance.CELL)), int(floor(p.y / Balance.CELL)))
+
+## c に近い、床か通路のマス(半径 max_r まで、近い順)。なければ (-1,-1)。落とし穴で真下に落ちるときなどに使う
+func nearest_walkable(c: Vector2i, max_r: int = 16) -> Vector2i:
+	for r in range(0, max_r + 1):
+		var best := Vector2i(-1, -1)
+		var bd := 1 << 30
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var x := c.x + dx
+				var y := c.y + dy
+				if not in_bounds(x, y):
+					continue
+				var t := tiles[idx(x, y)]
+				if t != ROOM and t != CORR:
+					continue
+				var dd := dx * dx + dy * dy
+				if dd < bd:
+					bd = dd
+					best = Vector2i(x, y)
+		if best.x >= 0:
+			return best
+	return Vector2i(-1, -1)
 
 func center_of(c: Vector2i) -> Vector2:
 	return Vector2((c.x + 0.5) * Balance.CELL, (c.y + 0.5) * Balance.CELL)

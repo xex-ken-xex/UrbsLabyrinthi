@@ -979,7 +979,7 @@ func _test_floors() -> void:
 					d["unlocked"] = true
 					d["found"] = true
 				var flow := m.compute_flow(inst.up_cell.x, inst.up_cell.y, 2000)
-				if flow[m.idx(inst.down_cell.x, inst.down_cell.y)] < 0:
+				if inst.down_cell.x >= 0 and flow[m.idx(inst.down_cell.x, inst.down_cell.y)] < 0:   # 竜の巣の階(第30階)に下りは無い
 					unreachable += 1
 				for en in inst.enemies:
 					var c := m.cell_of(en.position)
@@ -1714,11 +1714,8 @@ func _test_game() -> void:
 	check(iv.member == 2 and order_ok and main.leader() == ctl and ctl.controlled, "迷宮で持ち物から隊列を入れ替えると、仲間の並びも替わり、操作中の仲間はそのまま")
 	iv._move_member(1)
 	main.close_inventory()
-	# AI の仲間が戦う
-	for e in fl.enemies.duplicate():
-		e.dead = true
-		e.queue_free()
-	fl.enemies.clear()
+	# AI の仲間が戦う(控えている層の遭遇も消す。近くに巣があると、戦いの最中に出てきて数が合わない)
+	_clear_enemies(fl)
 	var lead: Hero = main.leader()
 	var spot := _open_spot(fl)
 	for i in main.heroes.size():

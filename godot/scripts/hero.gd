@@ -12,6 +12,7 @@ var ch: Character
 var controlled := false
 var cmd := {"move": Vector2.ZERO, "attack": false, "dodge": false}   # attack: 攻撃を押している(操作中の一人だけ)
 var facing := Vector2.DOWN
+var wading := false           # 浅瀬の中にいる(入った瞬間に ジャブッ)
 var roll_t := 0.0
 var atk_cd := 0.0             # 通常攻撃の残りの待ち時間
 var atk_cd_max := 0.0
@@ -304,8 +305,12 @@ func _move(delta: float) -> void:
 	if mv.length() > 0.1:
 		intent = mv.normalized()
 		facing = intent
-		var sp := _speed_now() * (1.12 if ai_catchup and not controlled else 1.0)
+		var sp := _speed_now() * (1.12 if ai_catchup and not controlled else 1.0) * game_floor.map.speed_at(position)
 		walk(intent * sp * delta)
+	var wet := game_floor.map.speed_at(position) < 1.0
+	if wet and not wading:
+		Sfx.cue(game_floor, position + Vector2(0, 14), "wade")
+	wading = wet
 	if bool(cmd.get("dodge", false)) and roll_cd <= 0.0:
 		roll_dir = facing if mv.length() <= 0.1 else mv.normalized()
 		roll_t = Balance.ROLL_TIME

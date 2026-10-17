@@ -167,6 +167,10 @@ const CUES := {
 	"dice_1": ["コロコロ", Color(1.0, 0.72, 0.82)],
 	"dice_2": ["コロ", Color(0.68, 0.95, 0.8)],
 	"dice_3": ["コロコロコロ", Color(0.72, 0.85, 1.0)],
+	"wade": ["ジャブッ", Color(0.62, 0.86, 1.0)],
+	"abyss": ["ヒュウゥ…", Color(0.7, 0.78, 0.95)],
+	"rope": ["ギシ、ギシ…", Color(0.9, 0.78, 0.55)],
+	"slip": ["ズルッ", Color(1.0, 0.65, 0.5)],
 }
 ## 擬音ごとの動き方(無いものは pop)
 const STYLE := {
@@ -181,7 +185,8 @@ const STYLE := {
 	"net": "snap", "gas": "stretch", "swing": "snap", "jet": "pop", "pit": "slam", "warp": "soft", "warp_out": "soft",
 	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
 	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
-	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce",
+	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce", "wade": "bounce",
+	"abyss": "stretch", "rope": "bounce", "slip": "snap",
 	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",

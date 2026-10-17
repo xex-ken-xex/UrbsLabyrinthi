@@ -30,6 +30,8 @@ var msg: Label
 var pick_key := ""            # 選んでいる最中の、能力値上昇・特技・熟達(asi4 など)
 var half_mode := false        # 能力値 +1 を二つに分けている途中
 var half_abil := ""           # +1 の一つ目
+var here_floor := 0           # 迷宮の中なら、いまいる階(迷宮の断面に印をつける)。街では 0
+var section_view: SectionView
 
 func open(state: GameState, special: Callable = Callable(), rest: Callable = Callable(), reorder: Callable = Callable()) -> void:
 	gs = state
@@ -80,7 +82,7 @@ func _ready() -> void:
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(row)
 	var tabs := UIKit.vbox(6)
-	for t in [["item", "アイテム"], ["food", "料理"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"], ["journal", "冒険日記帳"], ["trophy", "実績"]]:
+	for t in [["item", "アイテム"], ["food", "料理"], ["equip", "装備"], ["skill", "スキル"], ["talent", "技能・特技"], ["status", "ステータス"], ["journal", "冒険日記帳"], ["trophy", "実績"], ["section", "迷宮の断面"]]:
 		var b := UIKit.button(t[1], _set_tab.bind(t[0]), 150)
 		tab_btns[t[0]] = b
 		tabs.add_child(b)
@@ -113,6 +115,9 @@ func _ready() -> void:
 	detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail.add_theme_font_size_override("normal_font_size", 15)
 	rv.add_child(detail)
+	section_view = SectionView.new()
+	section_view.visible = false
+	rv.add_child(section_view)
 	action_box = UIKit.hbox(8)
 	rv.add_child(action_box)
 	row.add_child(right)
@@ -200,6 +205,10 @@ func _refresh() -> void:
 		"status": _fill_status()
 		"journal": _fill_journal()
 		"trophy": _fill_trophies()
+		"section": _fill_section()
+	section_view.visible = tab == "section"
+	detail.size_flags_vertical = Control.SIZE_FILL if tab == "section" else Control.SIZE_EXPAND_FILL
+	detail.custom_minimum_size = Vector2(0, 92) if tab == "section" else Vector2.ZERO
 	_show_detail()
 
 func _fill_items() -> void:
@@ -382,6 +391,47 @@ func _trophy_detail() -> String:
 		t += "(倒した %d / %d種)" % [p.x, p.y]
 	return t
 
+## 迷宮の断面: 階の一覧(着いていない階は ？？？)。右に断面図
+func _fill_section() -> void:
+	var known := maxi(Journal.stat(gs, "deepest_floor"), here_floor)
+	slot_box.add_child(UIKit.label("着いた最も深い階: %s" % (String(Abyss.floor_info(known).get("label", "")) if known > 0 else "まだ迷宮に入っていない"), 15, UIKit.GOLD))
+	for f in Abyss.data().get("floors", []):
+		var depth := int(f["depth"])
+		ids.append("sec:%d" % depth)
+		var reached := depth <= known
+		var txt := "%s  %s  %d〜%dm" % [String(f["label"]), String(f["short"]) if reached else "？？？", int(round(float(f["top_m"]))), int(round(float(f["top_m"]) + float(f["h_m"])))]
+		if depth == here_floor:
+			txt += "   ← いま"
+		item_list.add_item(txt)
+		if depth == here_floor:
+			item_list.set_item_custom_fg_color(item_list.item_count - 1, UIKit.GOLD)
+		elif not reached:
+			item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.45, 0.47, 0.52))
+	section_view.here = here_floor
+	section_view.known = known
+	section_view.selected = int(sel_id.substr(4)) if sel_id.begins_with("sec:") else here_floor
+	section_view.queue_redraw()
+	if sel_id != "" and ids.has(sel_id):
+		item_list.select(ids.find(sel_id))
+	elif here_floor > 0:
+		item_list.select(here_floor - 1)
+		item_list.ensure_current_is_visible()
+
+func _section_detail() -> String:
+	var depth := int(sel_id.substr(4)) if sel_id.begins_with("sec:") else here_floor
+	var f := Abyss.floor_info(depth)
+	var known := maxi(Journal.stat(gs, "deepest_floor"), here_floor)
+	if f.is_empty():
+		return "[b][color=#e8dcb0]迷宮の断面[/color][/b]  縦穴の中心を通る東西の切り口。縦と横は同じ縮尺。黒い縦の帯が縦穴、茶の細い線が縁の縄梯子。"
+	if depth > known:
+		return "[b][color=#8a90a0]%s ？？？[/color][/b]
+まだ着いていない。深さ %sm〜。" % [String(f["label"]), _m(float(f["top_m"]))]
+	return "[b][color=#e8dcb0]%s %s[/color][/b]
+深さ %s〜%sm(階の高さ %sm)。横 %dマス(%dm)。%s" % [String(f["label"]), String(f["short"]), _m(float(f["top_m"])), _m(float(f["top_m"]) + float(f["h_m"])), _m(float(f["h_m"])), int(f["w"]), int(round(float(f["w"]) * 1.524)), "縦穴の底。竜の巣がある。" if bool(f.get("lair", false)) else "縦穴の縁に縄梯子がある。"]
+
+static func _m(v: float) -> String:
+	return ("%.1f" % v).trim_suffix(".0")
+
 func _fill_status() -> void:
 	item_list.add_item("(下の欄に表示)")
 	item_list.set_item_disabled(0, true)
@@ -426,6 +476,10 @@ func _show_detail() -> void:
 				t = "[b][color=#e8dcb0]冒険日記帳[/color][/b]\n\n見かけた魔物と倒した魔物を、層ごとに書き留めてある。見かけていない魔物は ？？？。\n層の魔物を全種類倒すと、実績「第N層 狩り尽くし」になる。\n\n見かけた %d種   倒した %d体" % [Journal.seen_species(gs), Journal.killed_total(gs)]
 		"trophy":
 			t = _trophy_detail()
+		"section":
+			t = _section_detail()
+			section_view.selected = int(sel_id.substr(4)) if sel_id.begins_with("sec:") else here_floor
+			section_view.queue_redraw()
 		"skill":
 			if sel_id == Character.WEAPON_SKILL and c.skill_def(sel_id).is_empty():
 				t = "[b][color=#e8dcb0]武器の技[/color][/b]\n\n武器を持っていない。装備している武器の種類で、技が決まる。"

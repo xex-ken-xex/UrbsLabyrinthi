@@ -11,7 +11,7 @@
 タイトル → **キャラ作成**(始めは二人。宿屋の酒場で最大4人まで増やせる) → **街**(店、神殿、宿) → 迷宮 → 燐晶を持って街へ → 次の夜、の繰り返し。
 
 - 街へ戻ると、持ち帰った燐晶の3割が税になり、残りが預け金(銀貨)になる。預け金で装備や薬、呪文書を買う。
-- 迷宮の通路は、毎夜組み替わる(大きな部屋と階段は同じ場所)。7夜で一巡する。
+- 迷宮の通路は、毎夜組み替わる(縦穴、階段の候補地、骨組みの道と大部屋は同じ場所。階段は候補地を夜ごとに巡り、一画の通路と小部屋は静かな夜に4割、吐く夜に全部が組み替わる)。7夜で一巡する。
 - 全滅すると、未査定の燐晶と、持ち物と装備(武器・防具も)を全部失う(預け金は残る)。個別に倒れた仲間は、神殿で蘇らせる。
 - 第三節と第五節の夜は「吐く夜」。その日の迷宮で日が落ちると、迷宮が魔物を大量に吐き出し(群れが5組、その後もワンダリングが4倍出やすく、上限10組)、夜明けまで階段が塞がる。ほかの夜と違い、吐息に呑まれて放り出されはしない。
 - 宿屋でセーブできる。街へ着くたびに自動でもセーブされる。
@@ -333,7 +333,9 @@ Windows では、ゲームが前面にある間だけ、固定キーのショー
 ## データの作り直し
 
 ```sh
-node tools/export-floors.mjs            # godot/data/ に 10層 × 7夜 × 人数1〜4 を書き出す(種 vergha)
+node tools/export-floors.mjs            # godot/data/ に 30階(10層) × 7夜 × 人数1〜4 を書き出す(種 vergha)
+node tools/check-floors.mjs             # 書き出した階が、縦穴・候補地・階段・一画の決まりと、数理モデルの目安を守っているか
+python3 tools/export-bestiary.py        # 冒険日記帳の魔物の一覧を作り直す
 ```
 
 ## ビルド(Deploy/ へ)
@@ -353,8 +355,10 @@ godot --headless --path godot -s res://tests/home_test.gd                  # 自
 godot --headless --path godot -s res://tests/bot_test.gd -- 6 4 0          # 自動プレイで難しさを見る(日数、層、開始日)
 godot --headless --path godot -s res://tests/spawner_test.gd               # 魔物の出し方(近づいたら出す、遠くは眠らせる、歩き回る)
 godot --headless --path godot -s res://tests/perf_probe.gd                 # 重さの比べ(ワンダリングを30組まで出す)
+godot --headless --path godot -s res://tests/abyss_test.gd                 # 縦穴を覗く、縄梯子、溜まり場、迷宮の断面
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- /tmp   # 各画面を撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- /tmp  # 擬音の動き方を並べて撮る
+xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/abyss_shot.gd -- /tmp # 縦穴を覗く・縄梯子・迷宮の断面を撮る
 ```
 
 `smoke_test.gd` が見るもの(闘技場: 遭遇の生成、ポップ、レベル変更、係数の即時反映、波の記録、連戦、全滅、本編への非影響): ダイス式、6クラス×4種族、装備の制限、売買とセーブ、全280層の連結、
@@ -378,7 +382,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_sho
 | `scripts/home.gd` / `scripts/home_panel.gd` / `data/alchemy.json` | 自宅(部屋、食料庫、物置)と魔法実験(調合、釜の熟成)。街の「我が家」の画面 |
 | `scripts/smithing.gd` / `data/smithing.json` | 鍛冶(レシピ、良品・逸品、素材からだけ作れる武具、金床) |
 | `scripts/cooking.gd` / `data/cooking.json` | 料理(レシピ、市場の食材、効き目、満腹)。料理と食材の絵は `tools/make-items.py` が json の icon から描く |
-| `data/floors/` | 書き出した層(`fNN_nMM_pK.json` = 第NN層、第MM夜、K人) |
+| `data/floors/` | 書き出した階(`fNN_nMM_pK.json.gz` = 通し番号NNの階、第MM夜、K人。`manifest.json` に層と階の対応) |
 
 ## 分かっている限界
 
@@ -407,7 +411,8 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_sho
 
 ## 広い迷宮、光る燐晶、税のかからない自生物
 
-- 層(第N層)は、1〜3階のグループ(全18階)。1階の広さは、第1〜2層が 192×128、第3〜6層が 128×86、第7層以降が 96×64。魔物は、巣の間隔(縄張り)を取って置く。理由と数字は `docs/dungeon-scale.md`、`docs/dungeon-ecology.md`。
+- 層(第N層)は、1〜5階のグループ(第1〜2層は5階、第3〜6層は4階、第7層からは1階。全30階、深さ約200m)。1階の広さは、第1〜2層が 192×128、第3〜6層が 128×86、第7層以降が 96×64。全階の中央を 20m四方の縦穴(虚空。歩けないが見通せる)が貫き、第10層(第30階)の底は竜の巣(縦穴の内側が部屋。赤竜が眠っていて、着くと実績。下り階段は無い)。第5〜6層(水鏡)には水路 `~`(歩けないが見通せる)と浅瀬 `=`(歩けるが速さ半分。水に棲む魔物は平気)と橋、第7層以降の骨と水鏡には柱 `I`(通れず見通せない)。階段は縦穴を囲む7つの候補地を夜ごとに巡る(下の階の上り階段は、この階の下り階段の真下)。第1〜6層には昔の竪坑の穴が4つあり、落とし穴は真下の階へ落ちる。魔物は、巣の間隔(縄張り)を取って置く。理由と数字は `docs/dungeon-scale.md`、`docs/dungeon-ecology.md`、`docs/dungeon-model.md`。
+- 縦穴の縁に立つと、縦穴の中に下の階の骨組みが4階ぶん、遠いほど小さく暗く重なって見える(深淵を覗く。`abyss.gd`)。その下と竜の巣は真っ黒。縁の角の杭から縄梯子が垂れていて、E で一階下りる・登る(一人ずつ〈運動〉、難易度は階の高さで 5m 10 〜 17m 15。外すと途中から落ちて 3m ごとに 1d6)。持ち物の画面の「迷宮の断面」は、縦穴の中心を通る切り口を地上から竜の巣まで描く(縦横同じ縮尺。まだ着いていない階は影だけ。`section_view.gd`)。どちらも `data/section.json`(7夜で変わらない骨組み。`tools/export-floors.mjs` が書き出す)を読む。第6層のいちばん下の階には竪坑の底の溜まり場があり、上の階から落ちてきた骨と遺品と燐晶が積もっている。
 - 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
 - 拾うと、その物の絵が拾った仲間の頭の上へ跳ね上がり、右の地図の下に絵つきで知らせが出る(続けて同じ物を拾うと、数や重さをまとめる。`pickup_pop.gd`、`hud.gd`)。
 - 施錠された扉の解錠は、成功すると錠前の弓が外れて金の光が散り、失敗すると錠前が揺れて赤く光る(`unlock_fx.gd`)。
