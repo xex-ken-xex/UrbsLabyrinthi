@@ -53,7 +53,7 @@ func add_item(pos: Vector2, id: String, qty: int = 1, vel: Vector2 = Vector2.ZER
 		return
 	entries.append({"kind": "item", "id": id, "qty": qty, "pos": pos, "vel": vel, "t": 0.0, "ph": Dice.rng.randf()})
 
-## 遺体の見た目。食い荒らす魔物の近くは骨、人型と悪魔の近くは吊るされた体、それ以外は座って息絶えた体
+## 遺体の見た目。食い荒らす魔物の近くは骨、人型と悪魔の近くは吊るされた体(横から見た絵)、それ以外は座って息絶えた体
 const CORPSE_BONES_TYPES := ["beast", "monstrosity", "dragon", "swarm", "ooze"]
 const CORPSE_HANG_TYPES := ["humanoid", "fiend", "giant"]
 const CORPSE_NEAR := 16.0      # この距離(マス)の中の遭遇を、遺体の原因とみなす(無ければ層でいちばん近い遭遇)
