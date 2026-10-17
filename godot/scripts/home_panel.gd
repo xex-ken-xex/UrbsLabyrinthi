@@ -74,6 +74,10 @@ func _set_room(id: String) -> void:
 
 ## 操作のあと: 上の欄(預け金、HP)と、この欄を作り直す
 func _after(line: String, col: Color = UIKit.GOOD) -> void:
+	var won := Trophies.line(Trophies.evaluate(gs))
+	if won != "":
+		gs.save()
+		line = (line + "  " + won).strip_edges()
 	town._say(line, col)
 	town.refresh_top()
 	_build()

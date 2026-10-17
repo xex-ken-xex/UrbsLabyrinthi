@@ -203,6 +203,10 @@ static func cook(gs: GameState, rid: String, d20: int = 0) -> Dictionary:
 	elif total >= dc + 5 or roll == 20:
 		q = Q_GREAT
 	var n := int(r["n"])
+	if q == Q_GREAT:
+		Journal.bump(gs, "cook_great")
+	elif q == Q_BURNT:
+		Journal.bump(gs, "cook_burnt")
 	gs.add_food(rid, q, gs.clock + float(r["life"]) * 60.0, n)
 	var s := {"id": rid, "q": q, "until": gs.clock + float(r["life"]) * 60.0}
 	var nm := stack_name(s, gs.clock)
@@ -228,6 +232,7 @@ static func eat(gs: GameState, i: int, ch: Character) -> Dictionary:
 	var q := int(s.get("q", Q_NORMAL))
 	gs.take_food(i)
 	if bad:
+		Journal.bump(gs, "rotten_eaten")
 		ch.belly = minf(BELLY_MAX, ch.belly + 5.0)
 		return {"ok": true, "rotten": true, "q": q, "msg": "%sは%sを食べた。腹の具合が悪い…" % [ch.name, nm]}
 	var belly := float(r.get("belly", 20.0)) * (0.6 if q == Q_BURNT else 1.0)

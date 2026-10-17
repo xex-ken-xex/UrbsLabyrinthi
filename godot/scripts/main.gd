@@ -26,6 +26,7 @@ var light_t := 0.0                 # 燐晶の灯油の残り秒
 var pending_return := false
 var fire_until := -1.0            # 野営の火が消える時刻(迷宮の時刻、分)。燃料1つで1時間
 var _kill_cue_ms := -1000            # 魔物が倒れた擬音を、最後に出した時刻(間引く)
+var _jot_cue_ms := 0               # 冒険日記帳に書き足す擬音(サラサラ)を、続けて出さない
 var _menu_fx: Array = []           # 持ち物の画面で起きた手ごたえ(料理、食べる)。閉じたら出す [擬音, Hero]
 var pending_rest := false         # 持ち物の「休む」を押した(閉じたら休み始める)
 var dtime: DungeonTime = null      # 迷宮の中の時間(闘技場では使わない)
@@ -340,6 +341,9 @@ func go_town(report: Array) -> void:
 		for c in gs.party:
 			c.hp = 1.0
 		report.append("全員が倒れていたため、灯手隊が担ぎ出してくれた。")
+	var won := Trophies.line(Trophies.evaluate(gs))
+	if won != "":
+		report.append(won)
 	gs.save()
 	var t := TownScreen.new()
 	t.setup(gs)
@@ -497,6 +501,8 @@ func _make_floor(n: int) -> FloorInstance:
 	fl.message.connect(_on_floor_message)
 	fl.shake.connect(func(v: float): _shake = maxf(_shake, v))
 	fl.enemy_killed.connect(_on_enemy_killed)
+	fl.enemy_seen.connect(_on_enemy_seen)
+	fl.stat.connect(_on_floor_stat)
 	fl.ground_picked.connect(_on_ground_picked)
 	floors[n] = fl
 	return fl
@@ -519,6 +525,9 @@ func enter_floor(n: int, arrive: String) -> void:
 	Sfx.cue(fl, leader().position, "stairs")
 	var meta: Dictionary = fl.map.data["meta"]
 	log_msg("%s「%s」" % [meta.get("floor_label", "第%d層" % n), fl.style.get("short", "")], Color("e8dcb0"))
+	if arena == null:
+		Journal.best(gs, "deepest", fl.layer_no)
+		_check_trophies()
 	var see: Array = fl.style.get("see", [])
 	if arrive == "up" and not see.is_empty() and not fl.visited_rooms.has("floor"):
 		fl.visited_rooms["floor"] = true
@@ -770,6 +779,7 @@ func _check_wipe() -> void:
 	var lost := bag_value()
 	_clear_bag()
 	DiveSave.clear()      # 全滅を、迷宮の記録で取り消せないように
+	Journal.bump(gs, "wipes")
 	# 持ち物も装備も、全部失う(ken 10/16)。帰還積立に入っていれば、装備は戻り、持ち物は半分
 	var lost_items := gs.lose_half() if dive_insured else gs.lose_everything()
 	var lost_line := "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items
@@ -1574,6 +1584,10 @@ func close_inventory() -> void:
 	_menu_fx.clear()
 	if phase == "town" and screen is TownScreen:
 		(screen as TownScreen).refresh_top()
+		var won := Trophies.line(Trophies.evaluate(gs))      # 街で持ち物を開いている間に取った実績(くさったものを食べた、など)
+		if won != "":
+			gs.save()
+			(screen as TownScreen)._say(won, UIKit.GOLD)
 		screen.call_deferred("focus_default")   # 持ち物を閉じたら、コントローラーの焦点を街へ戻す
 	if _prev_phase == "dungeon":
 		phase = "dungeon"
@@ -1636,6 +1650,7 @@ func cook_dish(rid: String) -> Dictionary:
 		Cooking.Q_BURNT: _menu_fx.append(["burnt", lead])
 	log_msg(lit + String(res["msg"]), Color("ffe08a") if int(res["q"]) == Cooking.Q_GREAT else Color("e8dcb0"))
 	res["msg"] = lit + String(res["msg"])
+	_check_trophies()
 	return res
 
 ## 料理を食べる(街でも迷宮でも)。i は gs.food の番号
@@ -1655,6 +1670,7 @@ func eat_dish(i: int, ch: Character) -> Dictionary:
 		log_msg(String(res["msg"]), Color("e8dcb0"))
 	elif bool(res.get("rotten", false)) or bool(res.get("poison", false)):
 		ch.hp = maxf(1.0, ch.hp - ch.max_hp() * 0.1)     # 街では、寝込んで少し弱る
+	_check_trophies()
 	return res
 
 ## 迷宮の中でだけ効く道具
@@ -1713,6 +1729,7 @@ func use_special(id: String, _c: Character) -> bool:
 func _on_enemy_killed(en: Enemy) -> void:
 	if arena != null:
 		return          # 闘技場では、経験点も落とし物もない
+	Journal.kill(gs, String(en.mon.get("index", "")))
 	en.game_floor.ground.drop_from_enemy(en)
 	# 倒れる音。まとめて倒したときは重ねない(0.25秒に一つ)
 	var now := Time.get_ticks_msec()
@@ -1734,11 +1751,51 @@ func _on_enemy_killed(en: Enemy) -> void:
 				log_msg("%sは、能力値上昇か特技を選べる(%s →「技能・特技」)" % [h.ch.name, Controls.hint("inventory")], Color("ffe9a8"))
 			h.game_floor.spawn_text(h.position + Vector2(0, -28), "LEVEL UP", Color("9ad8ff"))
 			Sfx.cue(h.game_floor, h.position + Vector2(0, 16), "levelup")
+	_check_trophies()
+
+## 魔物が初めて見えた(冒険日記帳)。初めて見た種類なら、日記帳に書き足す
+func _on_enemy_seen(en: Enemy) -> void:
+	if arena != null or current == null:
+		return
+	if Journal.see(gs, String(en.mon.get("index", "")), current.layer_no):
+		log_msg("冒険日記帳に、%sを書き足した" % en.display_name, Color(0.8, 0.85, 0.9))
+		var now := Time.get_ticks_msec()
+		if now - _jot_cue_ms > 1500 and leader() != null:
+			_jot_cue_ms = now
+			Sfx.cue(current, leader().position + Vector2(0, -10), "jot")
+		_check_trophies()
+
+func _on_floor_stat(key: String) -> void:
+	if arena != null:
+		return
+	Journal.bump(gs, key)
+	_check_trophies()
+
+## 実績を調べ、新しく取ったものを知らせる(迷宮では擬音と頭上の文字とログ。持ち物の画面の中なら閉じたら出す)
+func _check_trophies() -> void:
+	if arena != null or phase == "town":
+		return     # 街では、持ち物を閉じたときや報告でまとめて知らせる
+	var won := Trophies.evaluate(gs)
+	if won.is_empty():
+		return
+	for id in won:
+		log_msg("パンパカパーン! 実績「%s」を取った(%s)" % [Trophies.name_of(String(id)), Trophies.desc_of(String(id))], Color("ffe08a"))
+	var lead := leader()
+	if lead == null or current == null:
+		return
+	var label := "実績「%s」" % Trophies.name_of(String(won[0]))
+	if phase == "menu":
+		_menu_fx.append(["trophy", lead, Vector2(0, -12)])
+		_menu_fx.append(["@" + label, lead, Vector2(0, -22)])
+	else:
+		Sfx.cue(current, lead.position + Vector2(0, -12), "trophy")
+		current.spawn_text(lead.position + Vector2(0, -58), label, Color("ffe08a"))
 
 func return_to_surface() -> void:
 	_trace("return_to_surface 第%d層から" % (current.floor_no if current != null else 0))
 	var gross := bag_value()
 	var tax := int(round(gross * Balance.TAX_RATE))
+	Journal.best(gs, "best_return", gross)
 	var net := gross - tax
 	gs.bank_silver += net
 	var detail: Array = []

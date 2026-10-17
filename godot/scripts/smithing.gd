@@ -171,6 +171,8 @@ static func forge(gs: GameState, id: String, d20: int = 0) -> Dictionary:
 	var out := id if tier == 0 else "%s+%d" % [id, tier]
 	var q: int = [Q_NORMAL, Q_GOOD, Q_FINE][tier]
 	var grade: String = ["", "良品だ。", "逸品だ!"][tier]
+	if tier == 2:
+		Journal.bump(gs, "forge_great")
 	if int(r["nights"]) > 0:
 		gs.home["anvil"] = {"id": out, "ready": gs.day + int(r["nights"])}
 		gs.save()

@@ -90,6 +90,9 @@ const CUES := {
 	"burst": ["パンッ!", Color(1.0, 0.7, 0.45), 1.2],
 	"emerge": ["スゥ…", Color(0.75, 0.75, 1.0)],
 	"sniff": ["クンクン", Color(0.9, 0.85, 0.7)],
+	# 冒険日記帳と実績
+	"jot": ["サラサラ", Color(0.85, 0.85, 0.75), 0.85],
+	"trophy": ["パンパカパーン!", Color(1.0, 0.85, 0.35), 1.3],
 	# 迷宮で使う道具
 	"glass": ["パリン", Color(0.85, 0.95, 1.0)],
 	"ignite": ["ボッ", Color(1.0, 0.8, 0.4)],
@@ -154,7 +157,7 @@ const STYLE := {
 	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",
-	"emerge": "soft", "sniff": "bounce",
+	"emerge": "soft", "sniff": "bounce", "jot": "stretch", "trophy": "bounce",
 	"sk_rush": "snap", "sk_power": "slam", "sk_wall": "slam", "sk_sweep": "snap", "sk_rage": "shake", "sk_charge": "shake",
 	"sk_roar": "slam", "sk_quake": "slam", "sk_throw": "snap", "sk_haste": "snap", "sk_smoke": "soft", "sk_stab": "pop",
 	"sk_bolt": "snap", "sk_fire": "slam", "sk_frost": "shake", "sk_thunder": "shake", "sk_heal": "soft", "sk_holy": "slam",

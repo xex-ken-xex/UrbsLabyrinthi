@@ -177,6 +177,8 @@ static func brew(gs: GameState, rid: String, d20: int = 0) -> Dictionary:
 		gs.save()
 		return {"ok": true, "q": q, "kind": "set", "msg": "%sが%sを釜に仕込んだ。%d夜寝かせる。" % [al.name, out_name, nights]}
 	var got := _yield(gs, r, q)
+	if q == Cooking.Q_GREAT:
+		Journal.bump(gs, "brew_great")
 	gs.save()
 	if q == Cooking.Q_BURNT:
 		return {"ok": true, "q": q, "kind": "fail", "msg": "%sの手もとで、液が濁った。濁った薬ができた。" % al.name}
