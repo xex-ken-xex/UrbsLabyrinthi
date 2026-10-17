@@ -17,6 +17,16 @@ extends RefCounted
 ##   shadow 闇にまぎれる(近づかないと見えにくい)
 ##   flyby 当てて離れる
 ##   frenzy 血に狂う(傷ついた相手に強い) / reckless 捨て身(与えるのも受けるのも増える)
+## 第二弾(ken 10/17「全部順番に」):
+##   sun 光に弱い(灯りのある部屋と、燐晶の灯油の灯りの中で弱る) / sun_weak さらに、受ける傷も増える
+##   aquatic 水に棲む(水たまりに沈んで待ち、陸では鈍い) / amphib 水陸両生(水たまりに沈んで待つ)
+##   climb 天井を這う(天井から垂れて待ち、落ちてくる) / webwalk 巣を張る(まわりに蜘蛛の巣) / websense 巣の揺れで気づく
+##   shape 化ける(迷い込んだ冒険者や鼠のふり)
+##   magic_res 魔法への抵抗(呪文の傷が半分、呪文の眠りや足止めを半分は弾く)
+##   amorph 不定形(閉じた扉、鍵の掛かった扉の下をくぐる)
+##   gaze 石化の視線(見つめ合うと、体が石になる) / stench 悪臭(そばにいると気分が悪くなる)
+##   glow 光る体(灯りの外でも見える) / absorb_lightning 雷を吸う / water_sus 冷気に弱い
+##   recall 迷宮を覚えている(壁越しにも、遠くから迫る) / siege 扉を壊す
 
 const FLAGS := {
 	"Pack Tactics": "pack", "Martial Advantage": "pack",
@@ -37,6 +47,18 @@ const FLAGS := {
 	"Shadow Stealth": "shadow",
 	"Flyby": "flyby",
 	"Blood Frenzy": "frenzy", "Reckless": "reckless",
+	# 第二弾
+	"Sunlight Sensitivity": "sun", "Light Sensitivity": "sun", "Sunlight Weakness": "sun_weak",
+	"Water Breathing": "aquatic", "Water Form": "aquatic",
+	"Amphibious": "amphib", "Limited Amphibiousness": "amphib", "Hold Breath": "amphib",
+	"Spider Climb": "climb", "Web Walker": "webwalk", "Web Sense": "websense",
+	"Shapechanger": "shape",
+	"Magic Resistance": "magic_res",
+	"Amorphous": "amorph",
+	"Petrifying Gaze": "gaze", "Stench": "stench",
+	"Illumination": "glow", "Ignited Illumination": "glow", "Variable Illumination": "glow",
+	"Lightning Absorption": "absorb_lightning", "Water Susceptibility": "water_sus",
+	"Labyrinthine Recall": "recall", "Siege Monster": "siege",
 }
 ## 再生を止める、仲間の攻撃の種類(スキルの elem)
 const REGEN_STOP := ["fire", "acid", "radiant"]

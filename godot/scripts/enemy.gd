@@ -85,6 +85,22 @@ var _pack_on := false
 var _in_wall := false
 var _emerge_cd := 0.0
 var seen_noted := false       # 冒険日記帳に「見かけた」と知らせたか
+# 第二弾の特徴
+var lurk := ""                # 潜んで待つ形(擬態 disguised とは別): water 水たまりに沈む / ceiling 天井から垂れる / shape 化ける
+var shape_look := {}          # 化けた姿の絵 {tex, sheet}
+var shape_name := ""
+var web_attack := false       # 糸を吐く(SRD の Web)
+var web_cd := 0.0
+var in_light := false         # 灯りの中(光に弱い魔物)
+var lit_cd := 0.0
+var stench_cd := 0.0
+var gaze_cd := 0.0
+var last_spell := false       # いま受けている攻撃が呪文か(魔法への抵抗)
+var squeeze_to := Vector2.ZERO
+var squeeze_t := 0.0          # 扉の下をくぐっている
+var _trait2_t := 0.0
+var _note_cd := 0.0
+var _glow_vis := false
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
@@ -118,6 +134,30 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	con = MonTraits.con_mod(m)
 	disguised = has_trait("mimic") and state == "idle"
 	charge_cd = randf_range(0.5, 2.0)
+	web_attack = (m.get("attacks", []) as Array).any(func(a): return String(a.get("n", "")) == "Web")
+	web_cd = randf_range(1.0, 3.0)
+	if state == "idle" and not disguised:
+		if has_trait("shape"):
+			_set_shape()
+		elif has_trait("climb"):
+			lurk = "ceiling"
+		elif has_trait("aquatic") or has_trait("amphib"):
+			lurk = "water"
+
+## 化ける: 小さな魔物は鼠に、ほかは迷い込んだ冒険者に化けて待つ
+func _set_shape() -> void:
+	lurk = "shape"
+	if size_key in ["T", "S"]:
+		shape_look = Assets.enemy_visual("giant-rat", "beast")
+		shape_name = "大鼠"
+	else:
+		var cls: String = ["fighter", "rogue", "cleric", "wizard"][randi() % 4]
+		shape_look = Assets.hero_visual("", cls, "human", "M" if randf() < 0.5 else "F")
+		shape_name = "迷い込んだ冒険者"
+
+## 物のふりや、潜んで待っているか(名前もHPも出さず、触れても殴らない)
+func hidden_form() -> bool:
+	return disguised or lurk != ""
 
 func has_trait(f: String) -> bool:
 	return traits.has(f)
@@ -162,7 +202,12 @@ func body_mass() -> float:
 
 ## 歩く速さ(Balance.ENEMY_SPEED_SCALE と、設定の「魔物の速さ」をかけたもの)
 func move_speed() -> float:
-	return speed * Balance.ENEMY_SPEED_SCALE * GameSettings.enemy_speed()
+	var k := 1.0
+	if in_light:
+		k *= 0.85        # 光に弱い: 灯りの中では鈍る
+	if traits.has("aquatic") and not traits.has("amphib"):
+		k *= 0.6         # 水に棲む魔物は、陸では鈍い
+	return speed * Balance.ENEMY_SPEED_SCALE * GameSettings.enemy_speed() * k
 
 func body_speed() -> float:
 	if stun_t > 0.0:
@@ -170,7 +215,7 @@ func body_speed() -> float:
 	return move_speed() * (slow_v if slow_t > 0.0 else 1.0)
 
 func contact_dps() -> float:
-	if stun_t > 0.0 or state == "neutral" or disguised or windup_t > 0.0 or charge_t > 0.0:
+	if stun_t > 0.0 or state == "neutral" or hidden_form() or windup_t > 0.0 or charge_t > 0.0:
 		return 0.0
 	var dps := dmg / Balance.ENEMY_ATTACK_INTERVAL * (1.5 if hits > 1 else 1.0) * trait_dmg_mult()
 	return dps * (0.5 if ranged else 1.0)
@@ -188,6 +233,8 @@ func trait_dmg_mult() -> float:
 		k *= 1.3
 	if traits.has("reckless"):
 		k *= 1.25
+	if in_light:
+		k *= 0.7
 	return k
 
 func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
@@ -199,9 +246,26 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	if dead:
 		return
 	var elem := last_elem
+	var spell := last_spell
 	last_elem = ""
-	if disguised:
+	last_spell = false
+	if hidden_form():
 		_reveal()
+	if elem == "lightning" and traits.has("absorb_lightning"):
+		# 雷を吸う: 傷つかず、癒える
+		var n := amount * 0.5
+		hp = minf(float(max_hp), hp + n)
+		_note("雷を吸った", Color("9ad8ff"))
+		game_floor.spawn_text(position + Vector2(0, -radius - 4), "+%d" % maxi(1, int(n)), Color("7be08a"))
+		return
+	if spell and traits.has("magic_res"):
+		amount *= 0.5
+		_note("魔法に抵抗した", Color("c8b0ff"))
+	if elem == "cold" and traits.has("water_sus"):
+		amount *= 2.0
+		_note("冷気に弱い", Color("9ad8ff"))
+	if traits.has("sun_weak") and in_light:
+		amount *= 1.3
 	if traits.has("reckless"):
 		amount *= 1.15
 	var red := clampf((ac - 10) * 0.03, 0.0, 0.45)
@@ -275,7 +339,7 @@ func _check_flee(by: Hero = null) -> void:
 		game_floor.spawn_text(position + Vector2(0, -radius - 16), "逃げる", Color("d0d0d0"))
 
 func wake() -> void:
-	if disguised:
+	if hidden_form():
 		_reveal()
 		return
 	if state == "idle" or state == "neutral":
@@ -321,6 +385,10 @@ func _can_sense(h: Hero) -> bool:
 		cells *= 1.5
 	if traits.has("ghost"):
 		through = cells
+	if traits.has("recall"):
+		# 迷宮を覚えている: 遠くから、壁越しにも迫る
+		cells *= 1.5
+		through = cells
 	cells *= 1.0 - h.ch.skill_fx("stealth")    # 〈隠密〉
 	var d := position.distance_to(h.position)
 	if d > cells * Balance.CELL:
@@ -361,7 +429,9 @@ func _physics_process(delta: float) -> void:
 	apply_knock(delta)
 	var c := game_floor.map.cell_of(position)
 	visible = game_floor.map.in_bounds(c.x, c.y) and game_floor.map.visible[game_floor.map.idx(c.x, c.y)] == 1
-	if visible and not seen_noted and not disguised and not game_floor.arena:
+	if not visible and traits.has("glow"):
+		visible = _glow_vis          # 光る体: 灯りの外でも、見通せれば見える(_tick_traits2 で調べる)
+	if visible and not seen_noted and not hidden_form() and not game_floor.arena:
 		seen_noted = true
 		game_floor.enemy_seen.emit(self)
 	_trait_look(c)
@@ -373,10 +443,10 @@ func _physics_process(delta: float) -> void:
 			sense_t -= delta
 			if sense_t <= 0.0:
 				sense_t = 0.2
-				if disguised:
-					# 擬態: 物のふりをして待ち、すぐそばまで来たら飛びかかる
+				if hidden_form():
+					# 擬態・潜んで待つ: すぐそばまで来たら飛びかかる
 					for h in game_floor.heroes:
-						if not h.down and position.distance_to(h.position) <= radius + h.radius + 18.0:
+						if not h.down and position.distance_to(h.position) <= radius + h.radius + _lurk_reach():
 							_reveal()
 							break
 				else:
@@ -420,7 +490,13 @@ func _open_doors() -> void:
 		if d["type"] == "secret" and not d["found"]:
 			continue
 		if d["type"] == "locked" and not d["unlocked"]:
-			continue
+			if not traits.has("siege") or state != "chase":
+				continue
+			# 扉を壊す(攻城の怪物)
+			d["unlocked"] = true
+			var dp: Vector2 = game_floor.map.center_of(Vector2i(int(d["x"]), int(d["y"])))
+			Sfx.cue(game_floor, dp, "ram")
+			game_floor.spawn_text(dp + Vector2(0, -18), "扉を壊した", Color("ffb070"))
 		d["open"] = true
 		game_floor.map_changed()
 
@@ -438,6 +514,11 @@ func _chase(delta: float) -> void:
 	if windup_t > 0.0 or charge_t > 0.0:
 		_charge_step(delta)
 		return
+	if squeeze_t > 0.0:
+		_squeeze_step(delta)
+		return
+	if web_attack and web_cd <= 0.0 and seen and dist > 60.0 and dist < 200.0 and target.stuck_t <= 0.0:
+		_shoot_web(target)
 	if flyby_t > 0.0:
 		_steer(delta, position - to_t, move_speed())     # 当てて離れる
 		return
@@ -464,6 +545,8 @@ func _chase(delta: float) -> void:
 func _approach(delta: float, seen: bool, mc: Vector2i) -> void:
 	if seen and position.distance_to(target.position) < 220.0:
 		_steer(delta, _flank_goal() if traits.has("pack") else target.position, move_speed())
+		return
+	if traits.has("amorph") and _try_squeeze(mc):
 		return
 	var nxt := game_floor.map.flow_step(game_floor.flow, mc, true)
 	if nxt.x >= 0:
@@ -493,12 +576,36 @@ func _sprite() -> Texture2D:
 	return _tex
 
 func _draw() -> void:
-	draw_set_transform(lunge)
+	if lurk == "water":
+		_draw_puddle()
+		return
+	var off := lunge
+	var sc := 1.0
+	var base_tint := Color.WHITE
+	if lurk == "ceiling":
+		# 天井から垂れて待つ: 床に影、上に糸、体は暗く小さく
+		draw_set_transform(Vector2.ZERO)
+		draw_circle(Vector2(0, radius * 0.3), radius * 0.8, Color(0, 0, 0, 0.3))
+		draw_line(Vector2(0, -radius - 90.0), Vector2(0, -radius - 30.0), Color(0.85, 0.85, 0.8, 0.5), 1.0)
+		off += Vector2(0, -radius - 18.0)
+		sc = 0.7
+		base_tint = Color(0.5, 0.5, 0.56)
+	if traits.has("glow") and not hidden_form():
+		var tm := Time.get_ticks_msec() / 1000.0
+		draw_set_transform(Vector2.ZERO)
+		draw_circle(Vector2.ZERO, radius * 2.4 + sin(tm * 3.0) * 2.0, Color(1.0, 0.75, 0.35, 0.13))
+		draw_circle(Vector2.ZERO, radius * 1.5, Color(1.0, 0.85, 0.5, 0.12))
+	draw_set_transform(off, 0.0, Vector2(sc, sc))
 	var tex := _sprite()
-	if tex != null and _is_sheet:
-		var tint0 := Color(1, 0.6, 0.6) if flash > 0.0 else (Color(0.6, 0.6, 0.7) if stun_t > 0.0 else (DISGUISE_TINT if disguised else Color.WHITE))
+	var sheet := _is_sheet
+	if lurk == "shape" and shape_look.get("tex") != null:
+		tex = shape_look["tex"]
+		sheet = bool(shape_look["sheet"])
+	var tint0 := Color(1, 0.6, 0.6) if flash > 0.0 else (Color(0.6, 0.6, 0.7) if stun_t > 0.0 else (DISGUISE_TINT if disguised else base_tint))
+	if tex != null and sheet:
 		var size_px := maxf(radius * 3.6, 26.0)
 		Assets.draw_sheet_frame(self, tex, Assets.sheet_frame(Assets.sheet_dir(face), walk_t, moving), size_px, radius + 5.0, tint0)
+		draw_set_transform(Vector2.ZERO)
 		_draw_overlays(-(size_px - radius - 5.0) + radius + 5.0 - 10.0)
 		return
 	if tex != null:
@@ -506,27 +613,46 @@ func _draw() -> void:
 		if target != null and is_instance_valid(target):
 			fx = -1.0 if target.position.x < position.x else 1.0
 		var sz := maxf(radius * 2.8, 20.0)
-		var tint := Color(1, 0.6, 0.6) if flash > 0.0 else (Color(0.6, 0.6, 0.7) if stun_t > 0.0 else (DISGUISE_TINT if disguised else Color.WHITE))
-		draw_set_transform(lunge, 0.0, Vector2(fx, 1.0))
-		draw_texture_rect(tex, Rect2(-sz / 2.0, -sz / 2.0 - radius * 0.2, sz, sz), false, tint)
-		draw_set_transform(lunge)
+		draw_set_transform(off, 0.0, Vector2(fx * sc, sc))
+		draw_texture_rect(tex, Rect2(-sz / 2.0, -sz / 2.0 - radius * 0.2, sz, sz), false, tint0)
+		draw_set_transform(Vector2.ZERO)
 		_draw_overlays()
 		return
-	var c := Color.WHITE if flash > 0.0 else color
+	var c := Color.WHITE if flash > 0.0 else color * base_tint
 	if stun_t > 0.0:
 		c = c.darkened(0.4)
 	draw_circle(Vector2.ZERO, radius, c)
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0, 0, 0, 0.7), 2.0)
-	var face := Vector2.RIGHT
+	var fv := Vector2.RIGHT
 	if target != null and is_instance_valid(target):
-		face = (target.position - position).normalized()
-	draw_circle(face * radius * 0.45 + face.orthogonal() * 3.0, 1.8, Color.BLACK)
-	draw_circle(face * radius * 0.45 - face.orthogonal() * 3.0, 1.8, Color.BLACK)
+		fv = (target.position - position).normalized()
+	draw_circle(fv * radius * 0.45 + fv.orthogonal() * 3.0, 1.8, Color.BLACK)
+	draw_circle(fv * radius * 0.45 - fv.orthogonal() * 3.0, 1.8, Color.BLACK)
+	draw_set_transform(Vector2.ZERO)
 	_draw_overlays()
 
+## 水たまりに沈んで待つ: 暗い水面と、ときどき立つ波紋と泡
+func _draw_puddle() -> void:
+	draw_set_transform(Vector2.ZERO)
+	var tm := Time.get_ticks_msec() / 1000.0 + float(get_instance_id() % 97) * 0.13
+	var r := radius * 1.7 + 6.0
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.62))
+	draw_circle(Vector2.ZERO, r, Color(0.08, 0.16, 0.24, 0.85))
+	draw_circle(Vector2.ZERO, r * 0.82, Color(0.12, 0.24, 0.34, 0.85))
+	for k in 2:
+		var f := fmod(tm * 0.45 + k * 0.5, 1.0)
+		draw_arc(Vector2.ZERO, r * (0.25 + 0.7 * f), 0.0, TAU, 24, Color(0.6, 0.8, 0.95, 0.45 * (1.0 - f)), 1.0)
+	draw_set_transform(Vector2.ZERO)
+	var bf := fmod(tm * 0.7, 1.0)
+	if bf < 0.3:
+		draw_circle(Vector2(r * 0.3, -2.0 - bf * 8.0), 1.5, Color(0.75, 0.9, 1.0, 0.8 * (1.0 - bf / 0.3)))
+
 func _draw_overlays(dy: float = 0.0) -> void:
-	if disguised:
-		return     # 物のふり: 名前もHPも出さない
+	if disguised or lurk == "water" or lurk == "ceiling":
+		return     # 物のふり・潜んで待つ: 名前もHPも出さない
+	if lurk == "shape":
+		UI.text_center(self, 0.0, radius + 14.0, shape_name, 11, Color(1, 1, 1, 0.8))      # 化けた姿の名前だけ
+		return
 	if slow_t > 0.0:
 		draw_arc(Vector2.ZERO, radius + 3.0, 0.0, TAU, 20, Color(0.5, 0.8, 1.0, 0.8), 2.0)
 	if poison_t > 0.0:
@@ -554,6 +680,15 @@ func _tick_traits(delta: float) -> void:
 	grab_cd = maxf(0.0, grab_cd - delta)
 	rust_cd = maxf(0.0, rust_cd - delta)
 	_emerge_cd = maxf(0.0, _emerge_cd - delta)
+	web_cd = maxf(0.0, web_cd - delta)
+	lit_cd = maxf(0.0, lit_cd - delta)
+	stench_cd = maxf(0.0, stench_cd - delta)
+	gaze_cd = maxf(0.0, gaze_cd - delta)
+	_note_cd = maxf(0.0, _note_cd - delta)
+	_trait2_t -= delta
+	if _trait2_t <= 0.0:
+		_trait2_t = 0.25
+		_tick_traits2(0.25)
 	if traits.has("regen") and hp < max_hp and regen_stop_t <= 0.0:
 		# 再生: SRD の毎ラウンド10点を、毎秒に直す
 		var n := 10.0 / 6.0 * Balance.ENEMY_HP_SCALE * delta
@@ -617,16 +752,32 @@ func _flank_goal() -> Vector2:
 	var base := (position - tp).normalized()
 	return tp + base.rotated(slot * 0.8) * (radius + target.radius + 4.0)
 
-## 擬態をやめて、飛びかかる
+## 擬態・潜んで待つのをやめて、飛びかかる
 func _reveal() -> void:
-	if not disguised:
+	if not hidden_form():
 		return
+	var how := "ambush"
+	match lurk:
+		"water": how = "splash"
+		"ceiling": how = "drop"
+		"shape": how = "shape"
+	if lurk == "water":
+		game_floor.add_child(Spark.make(position, radius * 2.2, Color(0.6, 0.85, 1.0), 0.3, true))
 	disguised = false
+	lurk = ""
 	state = "chase"
 	shown_alert = 0.7
 	surprise_t = 1.0
-	_cue_seen("ambush")
+	_cue_seen(how)
 	game_floor.alert_encounter(enc_id)
+
+## 飛びかかる距離(体の縁から)。水たまりと天井は少し遠くから、化けた者はすぐそばまで待つ
+func _lurk_reach() -> float:
+	match lurk:
+		"water": return 56.0
+		"ceiling": return 40.0
+		"shape": return 12.0
+	return 18.0
 
 ## 倒れても起き上がる(ゾンビのしぶとさ、猪の踏みとどまり)。光と、大きすぎる一撃には耐えられない
 func _hold_on(final: float, elem: String) -> bool:
@@ -643,8 +794,9 @@ func _hold_on(final: float, elem: String) -> bool:
 	return false
 
 ## 仲間の攻撃の種類(火・光など)。再生を止め、しぶとさを破る。take_damage の直前に呼ぶ
-func elem_hit(e: String) -> void:
+func elem_hit(e: String, spell: bool = false) -> void:
 	last_elem = e
+	last_spell = spell
 	if traits.has("regen") and e in MonTraits.REGEN_STOP:
 		if regen_stop_t <= 0.0 and visible:
 			game_floor.spawn_text(position + Vector2(0, -radius - 16), "再生が止まった", Color("ffb070"))
@@ -725,3 +877,128 @@ func _end_charge() -> void:
 	windup_t = 0.0
 	charge_t = 0.0
 	charge_cd = randf_range(4.0, 6.0)
+
+# ---------- SRD の特徴 第二弾 ----------
+
+## 頭上に一言(同じ魔物では1.5秒に一度)
+func _note(t: String, c: Color) -> void:
+	if _note_cd > 0.0 or not visible:
+		return
+	_note_cd = 1.5
+	game_floor.spawn_text(position + Vector2(0, -radius - 18), t, c)
+
+## 呪文の眠りや足止めを弾くか(魔法への抵抗。半分は弾く)
+func spell_resisted() -> bool:
+	if not traits.has("magic_res") or randf() >= 0.5:
+		return false
+	_note("魔法に抵抗した", Color("c8b0ff"))
+	return true
+
+## 0.25秒ごと: 灯り、悪臭、石化の視線、光る体
+func _tick_traits2(dt: float) -> void:
+	if traits.has("sun") or traits.has("sun_weak"):
+		var was := in_light
+		in_light = _is_lit()
+		if in_light and not was and lit_cd <= 0.0 and state == "chase" and visible:
+			lit_cd = 6.0
+			Sfx.cue(game_floor, position + Vector2(0, 16), "glare")
+			game_floor.spawn_text(position + Vector2(0, -radius - 18), "眩しがる", Color("fff0a0"))
+	if hidden_form() or state == "neutral" or game_floor.heroes.is_empty():
+		return
+	if traits.has("stench"):
+		# 悪臭: そばにいる仲間は気分が悪くなる(弱い毒)
+		var hit := false
+		for h in game_floor.heroes:
+			if not h.down and h.position.distance_to(position) <= radius + h.radius + 40.0:
+				h.poison(1.2, maxf(0.4, dmg * 0.05))
+				hit = true
+		if hit and stench_cd <= 0.0 and visible:
+			stench_cd = 8.0
+			Sfx.cue(game_floor, position, "stench")
+	if traits.has("gaze") and state == "chase":
+		_gaze(dt)
+	if traits.has("glow"):
+		_glow_vis = false
+		var mc := game_floor.map.cell_of(position)
+		for h in game_floor.heroes:
+			if h.down or h.position.distance_to(position) > 14.0 * Balance.CELL:
+				continue
+			var hc := game_floor.map.cell_of(h.position)
+			if game_floor.map.los(hc.x, hc.y, mc.x, mc.y):
+				_glow_vis = true
+				break
+
+## 灯りの中か: 灯りのある部屋か、燐晶の灯油を灯した仲間のそば
+func _is_lit() -> bool:
+	var map := game_floor.map
+	var c := map.cell_of(position)
+	if not map.in_bounds(c.x, c.y):
+		return false
+	var rid: int = map.room_at[map.idx(c.x, c.y)]
+	if rid >= 0 and bool(map.room_by_id[rid].get("lit", false)):
+		return true
+	if game_floor.lamp_on:
+		for h in game_floor.heroes:
+			if not h.down and h.position.distance_to(position) <= 4.0 * Balance.CELL:
+				return true
+	return false
+
+## 石化の視線: こちらを向いている仲間は、だんだん石になる。目をそらす(背を向ける)と防げる
+func _gaze(dt: float) -> void:
+	var mc := game_floor.map.cell_of(position)
+	for h in game_floor.heroes:
+		if h.down or (h.stuck_t > 0.0 and h.stuck_kind == "stone"):
+			continue
+		var to: Vector2 = position - h.position
+		if to.length() > 6.0 * Balance.CELL or h.facing.dot(to.normalized()) < 0.4:
+			continue
+		var hc := game_floor.map.cell_of(h.position)
+		if not game_floor.map.los(hc.x, hc.y, mc.x, mc.y):
+			continue
+		if h.stone_m <= 0.0 and gaze_cd <= 0.0:
+			gaze_cd = 5.0
+			_cue_seen("gaze")
+		h.gaze_by(dt * (1.0 if h.controlled else 0.5), display_name)
+
+## 糸を吐く: 当たった仲間は、しばらく動けない
+func _shoot_web(h: Hero) -> void:
+	web_cd = randf_range(7.0, 10.0)
+	var p := Projectile.new()
+	p.setup_enemy(game_floor, position, (h.position - position).normalized(), 0.0, Color(0.92, 0.92, 0.88), mon_type())
+	p.web = true
+	game_floor.add_child(p)
+	_cue_seen("web_shot")
+
+## 不定形: 行く手の閉じた扉(鍵が掛かっていても)の下を、くぐり抜ける
+func _try_squeeze(mc: Vector2i) -> bool:
+	var map := game_floor.map
+	var fl: PackedInt32Array = game_floor.flow
+	if fl.size() != map.w * map.h:
+		return false
+	var cur := fl[map.idx(mc.x, mc.y)]
+	for dv in FloorMap.DIRS4:
+		var dc: Vector2i = mc + dv
+		if not map.in_bounds(dc.x, dc.y) or map.tiles[map.idx(dc.x, dc.y)] != FloorMap.DOOR or map.monster_passable(dc.x, dc.y):
+			continue
+		var bc: Vector2i = dc + dv
+		if not map.in_bounds(bc.x, bc.y) or map.opaque(bc.x, bc.y):
+			continue
+		var bd := fl[map.idx(bc.x, bc.y)]
+		if bd >= 0 and (cur < 0 or bd < cur):
+			squeeze_to = map.center_of(bc)
+			squeeze_t = position.distance_to(squeeze_to) / maxf(10.0, move_speed() * 0.8) + 0.5
+			if visible or map.visible[map.idx(dc.x, dc.y)] == 1:
+				Sfx.cue(game_floor, map.center_of(dc), "squeeze")
+			return true
+	return false
+
+func _squeeze_step(delta: float) -> void:
+	squeeze_t -= delta
+	var to := squeeze_to - position
+	if to.length() < 3.0 or squeeze_t <= 0.0:
+		squeeze_t = 0.0
+		return
+	var step := to.normalized() * minf(to.length(), move_speed() * 0.8 * delta)
+	intent = to.normalized()
+	self_move += step
+	position += step

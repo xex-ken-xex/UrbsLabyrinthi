@@ -33,6 +33,8 @@ var light_pos := Vector2.ZERO
 var exhale := false
 var arena := false            # 闘技場(階段は上りだけ。魔物は後から出す)
 var enc_serial := 5000
+var lamp_on := false           # 燐晶の灯油を灯している(光に弱い魔物が弱る)
+var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
 var _tex_ver := -1
@@ -51,6 +53,8 @@ func _physics_process(delta: float) -> void:
 			bodies.append(e)
 	Contact.step(delta, bodies)
 	ground.update(delta)
+	if not webs.is_empty():
+		_check_webs()
 
 static func create_from_dict(d: Dictionary) -> FloorInstance:
 	var fi := FloorInstance.new()
@@ -86,6 +90,7 @@ func spawn_encounter(monsters: Array, kind: String, center: Vector2, activity: S
 			en.setup(self, m, {"id": eid, "kind": kind, "attitude": "敵対", "activity": activity}, pos)
 			en.state = "chase"
 			en.disguised = false
+			en.lurk = ""
 			en.died.connect(_on_enemy_died)
 			add_child(en)
 			enemies.append(en)
@@ -126,6 +131,7 @@ func setup(m: FloorMap) -> void:
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
+	_spawn_webs()
 
 func _spawn_enemies() -> void:
 	for e in map.data["encounters"]:
@@ -141,6 +147,56 @@ func _spawn_enemies() -> void:
 			add_child(en)
 			enemies.append(en)
 			enc_total[eid] += 1
+
+## 巣を張る魔物(大蜘蛛など)の遭遇のまわりに、蜘蛛の巣を張る
+func _spawn_webs() -> void:
+	if arena:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(String(map.data["meta"].get("seed", "")) + str(floor_no) + str(night_no))
+	for e in map.data["encounters"]:
+		var spin := false
+		for m in e["monsters"]:
+			if MonTraits.flags_for(m).has("webwalk"):
+				spin = true
+				break
+		if not spin or (e["tokens"] as Array).is_empty():
+			continue
+		var c0 := Vector2i(int(e["tokens"][0]["x"]), int(e["tokens"][0]["y"]))
+		var placed := 0
+		for tries in 40:
+			if placed >= 7:
+				break
+			var c := c0 + Vector2i(rng.randi_range(-3, 3), rng.randi_range(-3, 3))
+			if not map.in_bounds(c.x, c.y) or map.tiles[map.idx(c.x, c.y)] != FloorMap.ROOM or c == up_cell or c == down_cell or trap_at.has(c):
+				continue
+			if webs.has(map.idx(c.x, c.y)):
+				continue
+			webs[map.idx(c.x, c.y)] = true
+			placed += 1
+
+## 仲間が蜘蛛の巣を踏んだ: 絡まって動けない。巣は破れる。巣の揺れで、巣の主が気づく(Web Sense)
+func _check_webs() -> void:
+	for h in heroes:
+		if not h.is_alive() or h.is_rolling() or h.stuck_t > 0.0:
+			continue
+		var c := map.cell_of(h.position)
+		var i := map.idx(c.x, c.y)
+		if not webs.has(i):
+			continue
+		webs.erase(i)
+		h.hold("web", 1.4)
+		Sfx.cue(self, h.position, "web")
+		queue_redraw()
+		var woke := false
+		for en in enemies:
+			if not en.dead and en.has_trait("websense") and en.position.distance_to(h.position) <= 30.0 * Balance.CELL:
+				if en.state == "idle" or en.hidden_form():
+					woke = true
+				en.wake()
+				en.target = h
+		if woke:
+			message.emit("巣の糸が震えた。巣の主が気づいたようだ", "danger")
 
 func _on_enemy_died(en: Enemy) -> void:
 	enc_dead[en.enc_id] = int(enc_dead.get(en.enc_id, 0)) + 1
@@ -341,6 +397,12 @@ func _draw() -> void:
 	_draw_stairs(up_cell, true, glow)
 	if not arena:
 		_draw_stairs(down_cell, false, glow)
+	# 蜘蛛の巣
+	for i in webs:
+		var wc := Vector2i(int(i) % map.w, int(i) / map.w)
+		if map.explored[int(i)] == 0 or not vr.has_point(map.center_of(wc)):
+			continue
+		_draw_web(map.center_of(wc), 1.0 if map.visible[int(i)] == 1 else 0.45)
 	# 落ちているもの(光る燐晶、自生物、遺体)
 	ground.draw(self, vr)
 	# 罠
@@ -365,6 +427,21 @@ func _draw() -> void:
 		var cc2 := Color(0.9, 0.25, 0.2, a)
 		draw_line(cen + Vector2(-8, -8), cen + Vector2(8, 8), cc2, 2.5)
 		draw_line(cen + Vector2(-8, 8), cen + Vector2(8, -8), cc2, 2.5)
+
+func _draw_web(c: Vector2, k: float) -> void:
+	var col := Color(0.92, 0.92, 0.88, 0.55 * k)
+	var r := Balance.CELL * 0.62
+	var pts: Array = []
+	for n in 7:
+		var a := TAU * n / 7.0 + float(int(c.x * 7.0 + c.y) % 10) * 0.1
+		var p := c + Vector2.from_angle(a) * r * (0.85 + 0.15 * float(n % 2))
+		pts.append(p)
+		draw_line(c, p, col, 1.0)
+	for ring in [0.35, 0.65, 0.95]:
+		for n in 7:
+			var a2: Vector2 = c.lerp(pts[n], ring)
+			var b2: Vector2 = c.lerp(pts[(n + 1) % 7], ring)
+			draw_line(a2, b2, col, 1.0)
 
 func _shade(c: Color, f: float) -> Color:
 	var k := f * 1.3

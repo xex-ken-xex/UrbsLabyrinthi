@@ -49,7 +49,8 @@ static func floor_snap(fl: FloorInstance) -> Dictionary:
 				"state": e.state, "asleep": e.asleep, "fled": e.fled})
 	return {"explored": fl.map.explored, "doors": doors, "traps": traps, "ground": fl.ground.entries.duplicate(true),
 		"enemies": ens, "enc_total": fl.enc_total.duplicate(), "enc_dead": fl.enc_dead.duplicate(),
-		"visited": fl.visited_rooms.duplicate(), "serial": fl.enc_serial, "wanderers": fl.wanderers.duplicate()}
+		"visited": fl.visited_rooms.duplicate(), "serial": fl.enc_serial, "wanderers": fl.wanderers.duplicate(),
+		"webs": fl.webs.keys()}
 
 ## 作り直したばかりの層に、記録した様子を戻す
 static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
@@ -81,6 +82,9 @@ static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
 		en.state = String(r["state"])
 		en.asleep = bool(r["asleep"])
 		en.fled = bool(r["fled"])
+		if en.state != "idle":
+			en.disguised = false
+			en.lurk = ""
 		en.died.connect(fl._on_enemy_died)
 		fl.add_child(en)
 		fl.enemies.append(en)
@@ -89,5 +93,9 @@ static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
 	fl.visited_rooms = s.get("visited", {}).duplicate()
 	fl.enc_serial = int(s.get("serial", fl.enc_serial))
 	fl.wanderers = s.get("wanderers", []).duplicate()
+	if s.has("webs"):
+		fl.webs.clear()
+		for i in s["webs"]:
+			fl.webs[int(i)] = true
 	fl.map_changed()
 	fl.queue_redraw()
