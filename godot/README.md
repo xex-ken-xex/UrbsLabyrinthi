@@ -358,6 +358,7 @@ godot --headless --path godot -s res://tests/perf_probe.gd                 # 重
 godot --headless --path godot -s res://tests/abyss_test.gd                 # 縦穴を覗く、縄梯子、溜まり場、迷宮の断面
 godot --headless --path godot -s res://tests/flow_test.gd                  # 燐の流れ(燐晶の量、下の層の魔物、骨亡者、溜まり場、竜の気配)
 godot --headless --path godot -s res://tests/content_test.gd               # 迷宮の中身(部屋の描写、遺体の理由と等級、水ぎわの自生物)
+godot --headless --path godot -s res://tests/nest_test.gd                  # 迷宮の中身 その2(見張り、主の間、罠の場所の理由)
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- /tmp   # 各画面を撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- /tmp  # 擬音の動き方を並べて撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/abyss_shot.gd -- /tmp # 縦穴を覗く・縄梯子・迷宮の断面を撮る
@@ -425,6 +426,8 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/flow_sh
 - 階に置く燐晶(宝の山と露頭)の量は、数理モデルの層ごとの目安 `kg_floor`(`data/manifest.json`)× `Balance.CRYSTAL_SCALE` に合わせる(`GroundItems.kg_factor`)。
 
 迷宮の中身(設計 §11)。部屋に初めて入ると、名前に続けて描写(見える物と、音かにおい。部屋と夜で決まる)をログに出す。遺体には死んだ理由がある: 罠のそば、巣の部屋を出てすぐ、縦穴の縁(骨。上の階から落ちた)、通路の行き止まり、竪坑の底。調べると等級(第1〜2層 灰、第3〜4層 青銅、第5〜6層 銀、第7層から 黒鉄)と理由がログに出る。骨の層の遺体の3割は120年前の遠征隊で、装備を落としやすい。水ぎわの自生物(水鏡草など)は水路と浅瀬のそばに生える。
+
+迷宮の中身 その2(設計 §11.1、§11.4。生成器 2.2.0)。巣は一画の奥(骨組みから遠い部屋)ほど多く、候補地の大部屋には少ない。巣の群れの1〜2体は、部屋を出た先の通路に見張りとして立つ。見張りは眠らず、仲間に気づく(または殴られる)と群れを起こさずに巣へ走り、着くと **ピィーッ!** で群れを起こす(画面の外ならログに「甲高い笛のような声」)。走っている間に倒せば、巣は起きない。各階に一つ「主の間」(一画の奥の大部屋)があり、その層の看板の魔物が守る(入ると「この一画の主の間らしい」)。主を倒すと、主の間から36マス以内のまだ出ていない巣はみな散り、遠くの巣も 25% 散る(ログ。冒険日記帳に数える)。罠の場所には理由がある: 落とし穴は縦穴・竪坑のそば、崩れや転がる岩は古い坑道、霧と冷気は水のそば、矢と棘は扉のそば。階段と縄梯子の2マス以内に罠は無い。
 - 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
 - 拾うと、その物の絵が拾った仲間の頭の上へ跳ね上がり、右の地図の下に絵つきで知らせが出る(続けて同じ物を拾うと、数や重さをまとめる。`pickup_pop.gd`、`hud.gd`)。
 - 施錠された扉の解錠は、成功すると錠前の弓が外れて金の光が散り、失敗すると錠前が揺れて赤く光る(`unlock_fx.gd`)。

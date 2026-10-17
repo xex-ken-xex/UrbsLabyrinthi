@@ -38,6 +38,9 @@ var enc_serial := 5000
 var lamp_on := false           # 燐晶の灯油を灯している(光に弱い魔物が弱る)
 var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
+var master_enc := -1           # 主の間の主(遭遇の id)。倒すと、まわりの控えの巣が散る
+const MASTER_REACH := 36.0         # 主の間からこのマス数までの巣は、みな散る
+const MASTER_SCATTER_ELSE := 0.25  # それより遠い巣が散る割合
 var spawner := Spawner.new(self)   # 魔物を近づいたときに出し、遠くでは眠らせる
 var ropes: Array = []         # 縦穴の縁の縄梯子(Vector2i。縁の角のマス)。下の階の同じ所へ下りられる
 var abyss: Abyss = null       # 縦穴を覗いたときの、下の階の重なり
@@ -155,6 +158,8 @@ func _spawn_enemies() -> void:
 		enc_total[eid] = (e["tokens"] as Array).size()
 		enc_dead[eid] = 0
 		spawner.pending[eid] = e
+		if e.get("master", false):
+			master_enc = eid
 
 ## 控えていた遭遇の魔物を、書き出しの位置に出す
 func spawn_tokens(e: Dictionary) -> void:
@@ -163,6 +168,9 @@ func spawn_tokens(e: Dictionary) -> void:
 		var m: Dictionary = mons[int(t["g"])]
 		var en := Enemy.new()
 		en.setup(self, m, e, map.center_of(Vector2i(int(t["x"]), int(t["y"]))))
+		if t.get("sentry", false) and map.room_by_id.has(int(e.get("roomId", -1))):
+			var c: Array = map.room_by_id[int(e["roomId"])]["center"]
+			en.make_sentry(Vector2i(int(c[0]), int(c[1])))
 		en.died.connect(_on_enemy_died)
 		add_child(en)
 		enemies.append(en)
@@ -221,6 +229,35 @@ func _on_enemy_died(en: Enemy) -> void:
 	enc_dead[en.enc_id] = int(enc_dead.get(en.enc_id, 0)) + 1
 	enemies.erase(en)
 	enemy_killed.emit(en)
+	if en.enc_id == master_enc and group_dead_fraction(master_enc) >= 1.0:
+		_master_fallen()
+
+func room_center(rid: int) -> Vector2i:
+	var c: Array = map.room_by_id[rid]["center"]
+	return Vector2i(int(c[0]), int(c[1]))
+
+## 主の間の主が倒れた: まわりの、まだ出ていない巣は逃げ散る(遠くの巣も少し)。画面の外の出来事なのでログで知らせる
+func _master_fallen() -> void:
+	var mc := Vector2i(-9999, -9999)
+	for e in map.data["encounters"]:
+		if int(e["id"]) == master_enc and map.room_by_id.has(int(e["roomId"])):
+			mc = room_center(int(e["roomId"]))
+	master_enc = -1
+	var n := 0
+	for eid in spawner.pending.keys():
+		var e: Dictionary = spawner.pending[eid]
+		var rid := int(e.get("roomId", -1))
+		if rid < 0 or e.get("lair", false) or not map.room_by_id.has(rid):
+			continue
+		if Vector2(room_center(rid) - mc).length() <= MASTER_REACH or randf() < MASTER_SCATTER_ELSE:
+			spawner.pending.erase(eid)
+			enc_dead[eid] = int(enc_total.get(eid, 0))
+			n += 1
+	if n > 0:
+		message.emit("主が倒れた。このあたりの巣の魔物が、気配を消して散っていく(%d組)。" % n, "info")
+	else:
+		message.emit("主が倒れた。", "info")
+	stat.emit("master")
 
 ## 倒されずに、層からいなくなった(落とし穴)
 func enemy_gone(en: Enemy) -> void:

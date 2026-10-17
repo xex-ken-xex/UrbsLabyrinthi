@@ -234,7 +234,7 @@ func _test_hot() -> void:
 			scorched += 1
 		if String(e["id"]) == "iou_hana":
 			sulfur += 1
-	check(scorched >= 1, "焦げた遺体がある (%d)" % scorched)
+	check(scorched >= 1, "焦げた遺体がある (%d / 遺体 %d)" % [scorched, fl.ground.entries.filter(func(e): return String(e["kind"]) == "corpse").size()])
 	check(sulfur >= int(PhosFlow.SULFUR_N[0]), "縦穴の縁に硫黄の華 (%d)" % sulfur)
 	check(ItemDB.item_name("iou_hana") == "硫黄の華" and ItemIcons.texture("iou_hana") != null, "硫黄の華は品物で、絵がある")
 	var dt: DungeonTime = main.dtime

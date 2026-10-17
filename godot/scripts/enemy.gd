@@ -41,7 +41,11 @@ var xp := 0
 var size_key := "M"
 var color := Color.WHITE
 var asleep := false
-var state := "idle"            # idle / neutral / chase / flee / wander(ワンダリング・モンスターが歩き回る)
+var state := "idle"            # idle / neutral / chase / flee / wander(ワンダリング・モンスターが歩き回る) / warn(見張りが巣へ知らせに走る)
+var sentry := false            # 巣の手前の通路に立つ見張り。気づくと、群れを起こさずに巣へ走って知らせる
+var nest_cell := Vector2i(-1, -1)
+var _warn_flow := PackedInt32Array()
+const WARN_MAX := 8.0          # 見張りが巣へ走る長さの上限(着かなくても、これで知らせる)
 var timer := 0.0
 var atk_cd := 0.0
 var sense_t := 0.0
@@ -321,7 +325,9 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 		Sfx.cue(game_floor, src.position, "burn")
 	if amount <= 0.0:
 		flash = 0.06
-		if state == "idle" or state == "neutral" or state == "wander":
+		if sentry and state == "idle":
+			_start_warn()
+		elif state == "idle" or state == "neutral" or state == "wander":
 			game_floor.alert_encounter(enc_id)
 		return
 	if traits.has("reckless"):
@@ -345,7 +351,9 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	if hp <= 0.0:
 		_die()
 		return
-	if state == "idle" or state == "neutral" or state == "wander":
+	if sentry and state == "idle":
+		_start_warn()       # 殴られた見張りも、まず巣へ走る(倒しきれば、巣は起きない)
+	elif state == "idle" or state == "neutral" or state == "wander":
 		game_floor.alert_encounter(enc_id)
 	if src is Hero:
 		target = src
@@ -446,11 +454,49 @@ func _check_flee(by: Hero = null) -> void:
 		fled = true
 		game_floor.spawn_text(position + Vector2(0, -radius - 16), "逃げる", Color("d0d0d0"))
 
+## 見張りにする: 巣の部屋(の中心)を覚える。見張りは眠らずに立っている
+func make_sentry(nest: Vector2i) -> void:
+	sentry = true
+	nest_cell = nest
+	asleep = false
+
+## 見張りが気づいた: 群れを起こさずに、巣へ走る
+func _start_warn() -> void:
+	if nest_cell.x < 0:
+		game_floor.alert_encounter(enc_id)
+		return
+	state = "warn"
+	timer = WARN_MAX
+	shown_alert = 0.7
+	_warn_flow = game_floor.map.compute_flow(nest_cell.x, nest_cell.y, 32)
+
+## 巣へ走る。巣の部屋に入るか、巣の中心の近くまで来たら、笛を吹いて群れを起こす
+func _warn(delta: float) -> void:
+	timer -= delta
+	var m := game_floor.map
+	var c := m.cell_of(position)
+	var nxt := m.flow_step(_warn_flow, c, true)
+	var home := m.in_bounds(c.x, c.y) and m.room_at[m.idx(c.x, c.y)] >= 0 and m.room_at[m.idx(c.x, c.y)] == m.room_at[m.idx(nest_cell.x, nest_cell.y)]
+	if home or nxt.x < 0 or timer <= 0.0 or maxi(absi(c.x - nest_cell.x), absi(c.y - nest_cell.y)) <= 2:
+		_raise_alarm()
+		return
+	_steer(delta, m.center_of(nxt), move_speed() * 1.15)
+
+## 見張りの知らせ: ピィーッ! で巣の群れが起きる
+func _raise_alarm() -> void:
+	state = "idle"
+	Sfx.cue(game_floor, position, "sentry")
+	game_floor.alert_encounter(enc_id)
+	if visible:
+		game_floor.message.emit("見張りの%sが、巣の群れを起こした。" % display_name, "danger")
+	else:
+		game_floor.message.emit("どこかで、甲高い笛のような声がした。", "danger")     # 画面の外: 擬音は見えないので、ログで知らせる
+
 func wake() -> void:
 	if hidden_form():
 		_reveal()
 		return
-	if state == "idle" or state == "neutral" or state == "wander":
+	if state == "idle" or state == "neutral" or state == "wander" or state == "warn":
 		state = "chase"
 		shown_alert = 0.7
 		if traits.has("ambush"):
@@ -563,7 +609,10 @@ func _physics_process(delta: float) -> void:
 						if not h.down and _can_sense(h):
 							if traits.has("smell"):
 								_cue_seen("sniff")
-							game_floor.alert_encounter(enc_id)
+							if sentry:
+								_start_warn()
+							else:
+								game_floor.alert_encounter(enc_id)
 							break
 		"wander":
 			sense_t -= delta
@@ -579,6 +628,8 @@ func _physics_process(delta: float) -> void:
 					_steer(delta, to, move_speed() * Spawner.WANDER_SPEED)
 		"chase":
 			_chase(delta)
+		"warn":
+			_warn(delta)
 		"flee":
 			timer -= delta
 			_flee(delta)
