@@ -50,7 +50,7 @@ static func floor_snap(fl: FloorInstance) -> Dictionary:
 	return {"explored": fl.map.explored, "doors": doors, "traps": traps, "ground": fl.ground.entries.duplicate(true),
 		"enemies": ens, "enc_total": fl.enc_total.duplicate(), "enc_dead": fl.enc_dead.duplicate(),
 		"visited": fl.visited_rooms.duplicate(), "serial": fl.enc_serial, "wanderers": fl.wanderers.duplicate(),
-		"webs": fl.webs.keys()}
+		"webs": fl.webs.keys(), "pending": fl.spawner.pending.keys(), "queued": fl.spawner.queued, "hunt": fl.spawner.hunt.keys()}
 
 ## 作り直したばかりの層に、記録した様子を戻す
 static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
@@ -93,6 +93,17 @@ static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
 	fl.visited_rooms = s.get("visited", {}).duplicate()
 	fl.enc_serial = int(s.get("serial", fl.enc_serial))
 	fl.wanderers = s.get("wanderers", []).duplicate()
+	# まだ出していない遭遇(記録に無ければ、どれも出したあと)
+	var keep := {}
+	for eid in s.get("pending", []):
+		keep[int(eid)] = true
+	for eid in fl.spawner.pending.keys():
+		if not keep.has(int(eid)):
+			fl.spawner.pending.erase(eid)
+	fl.spawner.queued = int(s.get("queued", 0))
+	fl.spawner.hunt = {}
+	for eid in s.get("hunt", []):
+		fl.spawner.hunt[int(eid)] = true
 	if s.has("webs"):
 		fl.webs.clear()
 		for i in s["webs"]:

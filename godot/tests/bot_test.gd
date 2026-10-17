@@ -53,6 +53,7 @@ func _clear_floor(fl_no: int) -> Array:
 		d["open"] = true
 	main._refresh_view()
 	var kills0 := 0
+	fl.spawner.spawn_all()      # 層の魔物を全部出しておく(全部を狩りに行くので)
 	var total0: int = fl.enemies.size()
 	var frames := 0
 	var flow := PackedInt32Array()

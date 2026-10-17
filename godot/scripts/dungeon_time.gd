@@ -13,6 +13,7 @@ var resting := false
 var rest_end := 0.0            # 目を覚ます時刻(通しの分)
 var rest_from := 0.0
 var _wander_acc := 0.0
+var _queue_t := 0.0
 
 func _init(m: Node) -> void:
 	main = m
@@ -45,6 +46,7 @@ func update(delta: float) -> void:
 		_recover(dm)
 	_digest(dm, delta)
 	minutes += dm
+	_drain_queue(delta)
 	_wander_acc += dm
 	while _wander_acc >= Balance.WANDER_EVERY:
 		_wander_acc -= Balance.WANDER_EVERY
@@ -165,10 +167,12 @@ func _roll_wander() -> bool:
 	if Dice.rng.randf() >= p:
 		return false
 	var ambush := resting
-	return spawn_wanderer(ambush) and ambush
+	# 吐く夜の間に出る群れは、仲間のいる所を目指して歩いてくる
+	return spawn_wanderer(ambush, false, exhaling()) and ambush
 
-## ワンダリングの群れを一つ出す。寝込みなら近く(奇襲)、起きていれば見えない離れた所から歩いてくる。出せたら true
-func spawn_wanderer(ambush: bool, quiet: bool = false) -> bool:
+## ワンダリングの群れを一つ出す。寝込みなら近く(奇襲。すぐ襲ってくる)。起きていれば、見えない離れた所に出て、
+## 部屋から部屋へ歩き回る(Spawner)。hunt なら、仲間のいる所を目指して歩く(吐く夜)。出せたら true
+func spawn_wanderer(ambush: bool, quiet: bool = false, hunt: bool = false) -> bool:
 	var fl: FloorInstance = main.current
 	var meta: Dictionary = fl.map.data["meta"]
 	var party_n := 0
@@ -186,10 +190,12 @@ func spawn_wanderer(ambush: bool, quiet: bool = false) -> bool:
 	var lines: Array = []
 	for g in enc["groups"]:
 		lines.append(EncounterGen.mon_line(g))
-	var made: Array = fl.spawn_encounter(lines, String(enc["kind"]), fl.map.center_of(at), "うろついている")
+	var made: Array = fl.spawn_encounter(lines, String(enc["kind"]), fl.map.center_of(at), "うろついている", "chase" if ambush else "wander")
 	if made.is_empty():
 		return false
 	fl.wanderers.append(made[0].enc_id)
+	if hunt:
+		fl.spawner.hunt[made[0].enc_id] = true
 	if ambush:
 		stop_rest("")
 		for h in main.heroes:
@@ -231,13 +237,24 @@ func stairs_sealed() -> bool:
 ## 吐く夜に日が落ちた。迷宮が魔物を吐き出し、階段が塞がる。休んでいても起きていても同じ(呑まれはしない)
 func _exhale() -> void:
 	var fl: FloorInstance = main.current
-	var n := 0
-	for i in Balance.EXHALE_BURST:
-		if spawn_wanderer(false, true):
-			n += 1
+	# いっせいに出すと重いので、順番待ちに並べて、起きている魔物の上限に空きがあるときに一組ずつ出す
+	fl.spawner.queued += Balance.EXHALE_BURST
+	_queue_t = 0.0
 	Sfx.cue(fl, main.leader().position, "exhale")
 	main.log_msg("日が落ちた。今夜は吐く夜だ。迷宮が、魔物を吐き出した。", Color("ff8a6a"))
-	main.log_msg("階段は吐息に塞がれた。夜明けまで、この層から出られない。(%d組が湧いた)" % n, Color("ff9a8a"))
+	main.log_msg("階段は吐息に塞がれた。夜明けまで、この層から出られない。(%d組が湧き出してくる)" % Balance.EXHALE_BURST, Color("ff9a8a"))
+
+## 順番待ちの群れ(吐く夜)を、上限に空きがあれば、EXHALE_QUEUE_EVERY 秒に一組ずつ出す。仲間のいる所を目指して歩く
+func _drain_queue(delta: float) -> void:
+	var fl: FloorInstance = main.current
+	if fl == null or fl.spawner.queued <= 0:
+		return
+	_queue_t -= delta
+	if _queue_t > 0.0 or not fl.spawner.has_room():
+		return
+	_queue_t = Balance.EXHALE_QUEUE_EVERY
+	fl.spawner.queued -= 1
+	spawn_wanderer(false, true, true)
 
 ## 起きたまま夜を迎えた。吐息に呑まれ、夜明けにどこかの部屋で目を覚ます(回復はしない)
 func _nightfall() -> void:

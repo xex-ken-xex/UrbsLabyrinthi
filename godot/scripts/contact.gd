@@ -18,61 +18,101 @@ static func step(delta: float, bodies: Array) -> void:
 		b.bump_cd = maxf(0.0, b.bump_cd - delta)
 		b.hit_now = b.bump_cd <= 0.0
 		b.did_hit = false
-	# 広い層で、魔物が多くても軽いように、x の順に並べて、遠い組は調べない
-	var n := bodies.size()
-	var order: Array = bodies.duplicate()
-	order.sort_custom(func(p: Body, q: Body) -> bool: return p.position.x < q.position.x)
-	for i in n:
-		var a: Body = order[i]
-		if not a.is_alive():
+	# 広い層で、魔物が多く群がっても軽いように、近い組(触れそうな組)だけを、升目で先に拾っておく
+	var pairs := _near_pairs(bodies)
+	for k in range(0, pairs.size(), 2):
+		var a: Body = pairs[k]
+		var b: Body = pairs[k + 1]
+		if not a.is_alive() or not b.is_alive():
 			continue
-		for j in range(i + 1, n):
-			var b: Body = order[j]
-			if b.position.x - a.position.x > MAX_TOUCH:
-				break
-			if not b.is_alive():
-				continue
-			var d := b.position - a.position
-			var touch := a.radius + b.radius
-			var lim := touch + 2.0
-			if d.length_squared() > lim * lim:
-				continue
-			var dist := d.length()
-			var nrm := d / dist if dist > 0.01 else Vector2.from_angle(randf() * TAU)
-			if _passes(a, b):
-				if a.is_hero and b.is_hero and _still(a) and _still(b):
-					_separate(a, b, nrm, (touch - dist) * minf(1.0, 6.0 * delta))
-				continue
-			if a.is_hero == b.is_hero:
-				_separate(a, b, nrm, touch - dist)
-			else:
-				_fight(a, b, nrm, touch, delta)
+		var d := b.position - a.position
+		var touch := a.radius + b.radius
+		var lim := touch + 2.0
+		if d.length_squared() > lim * lim:
+			continue
+		var dist := d.length()
+		var nrm := d / dist if dist > 0.01 else Vector2.from_angle(randf() * TAU)
+		if _passes(a, b):
+			if a.is_hero and b.is_hero and _still(a) and _still(b):
+				_separate(a, b, nrm, (touch - dist) * minf(1.0, 6.0 * delta))
+			continue
+		if a.is_hero == b.is_hero:
+			_separate(a, b, nrm, touch - dist)
+		else:
+			_fight(a, b, nrm, touch, delta)
 	for b in bodies:
 		if b.did_hit:
 			b.bump_cd = Balance.BUMP_TICK
-	# 混み合っていると、一組を直すと別の組が重なる。数回、重なりだけを解消し直す
+	# 混み合っていると、一組を直すと別の組が重なる。数回、重なりだけを解消し直す。
+	# 2回目からは、前の回に動いた体を含む組だけを見る(群がっていても軽いように)
+	var live: Array = []
+	for k in range(0, pairs.size(), 2):
+		var a: Body = pairs[k]
+		var b: Body = pairs[k + 1]
+		if a.is_alive() and b.is_alive() and not _passes(a, b):
+			live.append(a)
+			live.append(b)
+	var moved := {}
+	var budget := RELAX_BUDGET
 	for pass_i in 16:
-		var moved := false
-		for i in n:
-			var a: Body = order[i]
-			if not a.is_alive():
+		var now := {}
+		for k in range(0, live.size(), 2):
+			var a: Body = live[k]
+			var b: Body = live[k + 1]
+			if pass_i > 0 and not moved.has(a) and not moved.has(b):
 				continue
-			for j in range(i + 1, n):
-				var b: Body = order[j]
-				if b.position.x - a.position.x > MAX_TOUCH:
-					break
-				if not b.is_alive() or _passes(a, b):
-					continue
-				var d := b.position - a.position
-				var touch := a.radius + b.radius
-				if d.length_squared() >= (touch - 0.05) * (touch - 0.05):
-					continue
-				var dist := d.length()
-				var nrm := d / dist if dist > 0.01 else Vector2.from_angle(randf() * TAU)
-				_separate(a, b, nrm, touch - dist)
-				moved = true
-		if not moved:
+			var d := b.position - a.position
+			var touch := a.radius + b.radius
+			if d.length_squared() >= (touch - 0.05) * (touch - 0.05):
+				continue
+			var dist := d.length()
+			var nrm := d / dist if dist > 0.01 else Vector2.from_angle(randf() * TAU)
+			_separate(a, b, nrm, touch - dist)
+			now[a] = true
+			now[b] = true
+			budget -= 1
+			if budget <= 0:
+				break
+		if now.is_empty() or budget <= 0:
 			break
+		moved = now
+
+## 1コマに重なりを解消し直す組の数の上限。大群が群がると解消しきれないが、残りは次のコマで直る
+const RELAX_BUDGET := 240
+
+## 触れそうな組(体の縁の間が PAIR_MARGIN 以内)を [a0, b0, a1, b1, ...] で返す。
+## 升目(MAX_TOUCH 四方)に分けて、隣り合う升目どうしだけを調べる
+const PAIR_MARGIN := 8.0
+
+static func _near_pairs(bodies: Array) -> Array:
+	var grid := {}
+	for b in bodies:
+		var key := Vector2i(floori(b.position.x / MAX_TOUCH), floori(b.position.y / MAX_TOUCH))
+		if grid.has(key):
+			(grid[key] as Array).append(b)
+		else:
+			grid[key] = [b]
+	var out: Array = []
+	for key in grid:
+		var here: Array = grid[key]
+		# 同じ升目の中の組と、右・下側の4つの升目との組(重ねて数えない)
+		for i in here.size():
+			for j in range(i + 1, here.size()):
+				_add_pair(out, here[i], here[j])
+		for dv in [Vector2i(1, 0), Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)]:
+			var other: Variant = grid.get(key + dv)
+			if other == null:
+				continue
+			for a in here:
+				for b in other:
+					_add_pair(out, a, b)
+	return out
+
+static func _add_pair(out: Array, a: Body, b: Body) -> void:
+	var lim := a.radius + b.radius + PAIR_MARGIN
+	if a.position.distance_squared_to(b.position) <= lim * lim:
+		out.append(a)
+		out.append(b)
 
 ## すり抜ける組か(仲間どうし、仲間と中立の魔物、群れの魔物とほかの魔物)
 static func _passes(a: Body, b: Body) -> bool:

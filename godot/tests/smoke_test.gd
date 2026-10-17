@@ -323,6 +323,7 @@ func _test_dive_save() -> void:
 	var lead: Hero = main.leader()
 	lead.position = fl.map.center_of(fl.up_cell) + Vector2(30, 0)
 	# 層の様子を変える: 魔物を1体減らし、1体に傷を負わせ、扉を開け、罠を見つけ、燐晶を袋に入れる
+	fl.spawner.spawn_all()      # 層の魔物は、近づくまで出ないので、先に全部出す
 	var n_en := fl.enemies.size()
 	var gone: Enemy = fl.enemies[0]
 	fl.enemies.erase(gone)
@@ -972,6 +973,7 @@ func _test_floors() -> void:
 					continue
 				count += 1
 				var m := inst.map
+				inst.spawner.spawn_all()
 				enemies += inst.enemies.size()
 				for d in m.doors:
 					d["unlocked"] = true
@@ -1146,6 +1148,7 @@ func _clear_enemies(fl: FloorInstance) -> void:
 		e.dead = true
 		e.queue_free()
 	fl.enemies.clear()
+	fl.spawner.pending.clear()      # 控えている遭遇も、出てこないようにする
 
 func _fake_enemy(fl: FloorInstance, pos: Vector2, hp: int, size: String = "M", dps_scale: float = 1.0) -> Enemy:
 	var e := Enemy.new()
@@ -1883,7 +1886,7 @@ func _test_time(main: Node) -> void:
 	var far := 1e9
 	for e in fl.enemies:
 		far = minf(far, e.position.distance_to(h0.position))
-	check(got and far > 10.0 * Balance.CELL and fl.enemies[0].state == "chase", "ワンダリング・モンスターは離れた所に出て、向かってくる (%.0f px)" % far)
+	check(got and far > 10.0 * Balance.CELL and fl.enemies[0].state == "wander", "ワンダリング・モンスターは離れた所に出て、歩き回る (%.0f px)" % far)
 	check(dt._alive_wanderers() == 1, "出たワンダリングを数える")
 	_clear_enemies(fl)
 	fl.wanderers.clear()
@@ -1904,7 +1907,10 @@ func _test_time(main: Node) -> void:
 	await _step(3)
 	var room3: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
 	check(dt.is_night() and dt.exhaling() and room3 == room2, "吐く夜に日が落ちても、放り出されない")
-	check(dt._alive_wanderers() >= 3, "吐く夜に日が落ちると、魔物が大量に湧く (%d組)" % dt._alive_wanderers())
+	check(dt._alive_wanderers() + fl.spawner.queued >= Balance.EXHALE_BURST, "吐く夜に日が落ちると、魔物が大量に湧く (出た %d組、順番待ち %d組)" % [dt._alive_wanderers(), fl.spawner.queued])
+	for i in 200:
+		dt._drain_queue(0.1)
+	check(dt._alive_wanderers() >= 3 and fl.spawner.queued == 0, "順番待ちの群れが、一組ずつ出る (%d組)" % dt._alive_wanderers())
 	_clear_enemies(fl)
 	fl.wanderers.clear()
 	var fno: int = fl.floor_no

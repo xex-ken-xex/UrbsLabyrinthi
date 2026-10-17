@@ -86,7 +86,8 @@ static var WANDER_CHANCE := 1.0 / 12.0      # 起きているとき
 static var REST_WANDER_CHANCE := 0.012      # 休んでいるとき(7時間でおよそ4割)
 const WANDER_MAX := 3                  # 層に同時にいる、ワンダリングの群れの上限
 # 吐く夜(第三節・第五節の夜。層のデータの meta.exhale)。日が落ちると迷宮が魔物を吐き、夜明けまで階段が塞がる
-const EXHALE_BURST := 5                # 日が落ちたときに、いっせいに湧く群れの数
+const EXHALE_BURST := 5                # 日が落ちたときに湧く群れの数(順番待ちに並べ、上限に空きがあれば一組ずつ出す)
+const EXHALE_QUEUE_EVERY := 1.5        # 順番待ちの群れを出す間隔(秒)
 const EXHALE_WANDER_MULT := 4.0        # 吐く夜の間、ワンダリングが出る見込みの倍率(起きていても、休んでいても)
 const EXHALE_WANDER_MAX := 10          # 吐く夜の間の、ワンダリングの群れの上限
 const SURPRISE_TIME := 1.5             # 寝込みを襲われたとき、動けない秒

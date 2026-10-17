@@ -99,6 +99,8 @@ func _draw() -> void:
 	if game.dtime != null:
 		_draw_sky(game.dtime, size_v, size_v.x - GameSettings.MINIMAP_SIZE.x - 20.0)
 	_draw_pickups(fl, size_v)
+	if GameSettings.show_fps:
+		_draw_fps(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var H := func(id: String) -> String: return Controls.hint(id)
@@ -285,6 +287,17 @@ func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
 		var ec := m.cell_of(en.position)
 		if m.in_bounds(ec.x, ec.y) and m.visible[m.idx(ec.x, ec.y)] == 1 and inside.call(ec):
 			draw_rect(Rect2(ox + ec.x * s - 1, oy + ec.y * s - 1, s + 1, s + 1), Color("ff4a3a"))
+
+## FPS と、魔物の数(設定の「FPS の表示」)。上の真ん中、時刻の下に出す。
+## 動 = 起きている、遠くを歩く = 軽い歩き方のワンダリング、眠り = 遠くで止めている、未出 = まだ出していない遭遇
+func _draw_fps(fl: FloorInstance, size_v: Vector2) -> void:
+	var fps := Engine.get_frames_per_second()
+	var c := Color("8ae08a") if fps >= 55 else (Color("f1d98a") if fps >= 40 else Color("ff6a5a"))
+	var sp := fl.spawner
+	var t := "%d FPS   魔物 動 %d / 遠くを歩く %d / 眠り %d / 未出 %d組   上限 %d" % [fps, sp.awake, sp.light_n, sp.asleep_n, sp.pending.size(), Spawner.cap]
+	if sp.queued > 0:
+		t += "   順番待ち %d組" % sp.queued
+	UI.text_center(self, size_v.x / 2.0, 92.0, t, 13, c)      # 時刻(太陽と月)の下
 
 func _draw_overlay(size_v: Vector2) -> void:
 	draw_rect(Rect2(Vector2.ZERO, size_v), Color(0, 0, 0, 0.82))
