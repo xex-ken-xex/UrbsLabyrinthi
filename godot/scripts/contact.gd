@@ -74,10 +74,13 @@ static func step(delta: float, bodies: Array) -> void:
 		if not moved:
 			break
 
-## すり抜ける組か(仲間どうし、仲間と中立の魔物)
+## すり抜ける組か(仲間どうし、仲間と中立の魔物、群れの魔物とほかの魔物)
 static func _passes(a: Body, b: Body) -> bool:
 	if a.is_hero and b.is_hero:
 		return true
+	if not a.is_hero and not b.is_hero:
+		# 群れ(Swarm)は、ほかの魔物とすり抜ける
+		return (a is Enemy and (a as Enemy).traits.has("swarm")) or (b is Enemy and (b as Enemy).traits.has("swarm"))
 	if a.is_hero != b.is_hero:
 		var en: Body = b if a.is_hero else a
 		return en is Enemy and (en as Enemy).state == "neutral"
