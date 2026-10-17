@@ -18,7 +18,7 @@
 | 素材 | ライセンス | 置き場所 |
 |---|---|---|
 | System Reference Document 5.1 と 5.2.1 の魔物の数値・規則の表 | CC-BY-4.0 | 出所は [`docs/srd-data-sources.md`](docs/srd-data-sources.md)。帰属表示はゲームの F1 の画面と下の欄 |
-| フォント M+ 1p、Shippori Mincho | SIL Open Font License 1.1 | `godot/assets/fonts/` に許諾文を同梱 |
+| フォント M+ 1p、Shippori Mincho、Dela Gothic One(擬音) | SIL Open Font License 1.1 | `godot/assets/fonts/` に許諾文を同梱 |
 | Godot Engine(書き出した実行ファイルに含まれる) | MIT | https://godotengine.org/license |
 
 ### SRD の帰属表示

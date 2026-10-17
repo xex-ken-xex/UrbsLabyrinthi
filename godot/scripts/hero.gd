@@ -50,7 +50,7 @@ var growl_t := 20.0           # 次に腹が鳴るまでの秒(空腹のとき�
 var sleep_t := 0.0            # 眠っている(休息中)、または寝込みを襲われて動けない残り秒
 # 罠の効き目(TrapFx、Main._trap_effect)
 var stuck_t := 0.0            # 動けない残り秒(網、眠りの煙、転倒、閉じる歯列、逆さの重み)
-var stuck_kind := ""          # net / teeth / sleep / prone / lift
+var stuck_kind := ""          # net / teeth / sleep / prone / lift / glue(魔物に張りつかれた)
 var poison_t := 0.0
 var poison_dps := 0.0
 var _poison_tick := 1.0
@@ -111,7 +111,10 @@ func contact_dps() -> float:
 	return ch.bump_power() * buff("power") * 0.4 if ch.has_feat("shield_master") else 0.0
 
 func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
+	var before := ch.hp
 	damage(amount, from_pos, false, (src as Enemy).mon_type() if src is Enemy else "")
+	if src is Enemy and ch.hp < before:
+		(src as Enemy).on_hit_hero(self)      # 張りつく、錆びさせる、など(魔物の特徴)
 
 ## 魔物の体当たり、飛び道具、罠から受けるダメージ。防具の軽減、鉄壁や盾構え(溜めている間)がここで効く
 ## src_type は、ダメージを与えた魔物の種別(〈動物使い〉〈看破〉が見る。罠などは空)
@@ -184,7 +187,7 @@ func _lose_hp(n: float, col: Color) -> void:
 
 func _struggle(delta: float) -> void:
 	var a := bool(cmd.get("attack", false))
-	if stuck_kind in ["net", "teeth"]:
+	if stuck_kind in ["net", "teeth", "glue"]:
 		if a and not atk_held:
 			stuck_t -= 0.3
 			lunge = Vector2.from_angle(Dice.rng.randf() * TAU) * 3.0
@@ -572,6 +575,7 @@ func _sk_burst(sk: Dictionary, center: Vector2) -> bool:
 			continue
 		var away := to.normalized() if to.length() > 0.5 else facing
 		if d > 0.0:
+			en.elem_hit(String(sk.get("elem", "")))
 			en.take_damage(d, away, self)
 		if en.dead:
 			continue
@@ -841,7 +845,7 @@ func _draw_sleep() -> void:
 	else:
 		UI.text_center(self, 0.0, y, "!", 16, Color("ff6a5a"))
 
-const STUCK_LABEL := {"teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた"}
+const STUCK_LABEL := {"glue": "張りついた", "teeth": "挟まれた", "prone": "転んだ", "lift": "浮いた"}
 
 ## 罠の効き目を、体の上に描く
 func _draw_status() -> void:

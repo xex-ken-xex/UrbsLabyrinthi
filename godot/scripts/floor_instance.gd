@@ -83,6 +83,7 @@ func spawn_encounter(monsters: Array, kind: String, center: Vector2, activity: S
 					break
 			en.setup(self, m, {"id": eid, "kind": kind, "attitude": "敵対", "activity": activity}, pos)
 			en.state = "chase"
+			en.disguised = false
 			en.died.connect(_on_enemy_died)
 			add_child(en)
 			enemies.append(en)
