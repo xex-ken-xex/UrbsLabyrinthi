@@ -45,8 +45,11 @@ func _run() -> void:
 	quit(1 if fails > 0 else 0)
 
 func _far_from_all(fl: FloorInstance, cells: float) -> Vector2:
-	## どの遭遇・魔物からも cells マス以上離れた、部屋の床(見つからなければ INF)
+	## どの遭遇・魔物からも cells マス以上離れた、部屋の床(見つからなければ INF)。
+	## 遭遇の多い階で見つからないときは、出ている魔物から離れた床を選び、まわりの控えの遭遇を片づける(まだ出ていないので、確かめたいことに響かない)
 	var m := fl.map
+	var r := cells * Balance.CELL
+	var fallback := Vector2(INF, INF)
 	for rid in m.room_cells:
 		for k in m.room_cells[rid]:
 			var c := Vector2i(k % m.w, k / m.w)
@@ -54,16 +57,26 @@ func _far_from_all(fl: FloorInstance, cells: float) -> Vector2:
 				continue
 			var p := m.center_of(c)
 			var ok := true
+			for e in fl.enemies:
+				if p.distance_to(e.position) < r:
+					ok = false
+			if not ok:
+				continue
+			if fallback.x >= INF:
+				fallback = p
 			for eid in fl.spawner.pending:
 				for t in fl.spawner.pending[eid]["tokens"]:
-					if p.distance_to(m.center_of(Vector2i(int(t["x"]), int(t["y"])))) < cells * Balance.CELL:
+					if p.distance_to(m.center_of(Vector2i(int(t["x"]), int(t["y"])))) < r:
 						ok = false
-			for e in fl.enemies:
-				if p.distance_to(e.position) < cells * Balance.CELL:
-					ok = false
 			if ok:
 				return p
-	return Vector2(INF, INF)
+	if fallback.x < INF:
+		for eid in fl.spawner.pending.keys():
+			for t in fl.spawner.pending[eid]["tokens"]:
+				if fallback.distance_to(m.center_of(Vector2i(int(t["x"]), int(t["y"])))) < r:
+					fl.spawner.pending.erase(eid)
+					break
+	return fallback
 
 func _test_pending() -> void:
 	print("層の遭遇は、近づくまで出さない")

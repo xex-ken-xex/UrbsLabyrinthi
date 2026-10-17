@@ -203,7 +203,7 @@ const ROCK = 0, ROOM = 1, CORR = 2, DOOR = 3, VOID = 4, WATER = 5, SHALLOW = 6, 
 /* VOID 縦穴・竪坑の虚空('O'。歩けないが、見通せる)、WATER 深い水('~'。歩けない、見通せる。水の魔物は通れる)、
    SHALLOW 浅瀬('='。歩けるが遅い、見通せる)、PILLAR 柱('I'。通れず、見通せない。肋骨の柱、沈んだ列柱) */
 const SCHEMA = 'urbs-labyrinthi/0.3';                      // 書き出す JSON の形の版。項目を足したり変えたりしたら上げる
-const GENERATOR = '2.1.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
+const GENERATOR = '2.2.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
 
 /* ---------- 乱数 ---------- */
 function xmur3(str) {
@@ -501,9 +501,10 @@ function genEncounter(rng, ctx, diff, area, boss) {
 }
 
 /* ---------- 罠 ---------- */
-function genTrap(rng, theme, level, where) {
+function genTrap(rng, theme, level, where, wt) {
   const defs = theme.traps.filter(d => d.where === 'any' || d.where === where);
-  const def = rng.pick(defs.length ? defs : theme.traps);
+  const pool = defs.length ? defs : theme.traps;
+  const def = wt ? rng.weighted(pool, d => wt(d.fx)) : rng.pick(pool);   // 場所に合う罠(穴のそばの落とし穴など)を選びやすく
   const si = rng.weighted([0, 1, 2], i => [60, 32, 8][i]);
   const sev = TRAP_SEV[si];
   const dc = rng.int(sev.dc[0], sev.dc[1]);
@@ -1160,9 +1161,25 @@ function generate(opts, mons) {
     return Object.values(DEN_SEP)[Math.max(0, sz)] * (1 + Math.min(.6, .12 * (n - 1))); };
   const traps = [], trapAt = new Map(), encs = [], feats = [];
   const free = r => r.cells.filter(q => !stairCells.has(q) && !trapAt.has(q));
+  /* 罠の場所の理由: 落とし穴は縦穴・竪坑のそば(床が薄い)、崩れ・岩は骨組みの古い坑道、霧と冷気は水のそば、矢と棘は扉のそば */
+  const nearT = (k, pred, R) => { const x = k % W, y = (k / W) | 0; for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && pred(tiles[I(xx, yy)])) return true; } return false; };
+  const TRAP_FIT = [[k => nearT(k, t => t === VOID, 3), ['pit']], [k => fixed[k] === 1 && tiles[k] === CORR, ['collapse', 'crush', 'boulder']], [k => nearT(k, t => t === WATER || t === SHALLOW, 3), ['fog', 'chill']], [k => nearT(k, t => t === DOOR, 3), ['darts', 'spikes']]];
+  const fitAt = k => { const s = new Set(); for (const [ok, fx] of TRAP_FIT) if (ok(k)) for (const f of fx) s.add(f); return s; };
+  const fitsFx = fx => TRAP_FIT.find(([, a]) => a.includes(fx));
+  const trapWt = fit => fx => fit.has(fx) ? 6 : fx === 'pit' ? .15 : 1;   // 縦穴から遠い所の落とし穴は、まれ
+  // 部屋の罠: 部屋のどこかに理由のある罠を選び、その理由のあるマスに置く
+  function roomTrap(r) {
+    const fr = free(r).filter(k => !calm.has(k)); if (!fr.length) return null;
+    const fit = new Set(); for (const k of fr) for (const f of fitAt(k)) fit.add(f);
+    const t = genTrap(rn, theme, level, 'room', trapWt(fit)), rule = fitsFx(t.fx), at = rule ? fr.filter(rule[0]) : [];
+    const k = at.length ? rn.pick(at) : rn.pick(fr);
+    t.id = traps.length; t.x = k % W; t.y = (k / W) | 0; t.roomId = r.id; traps.push(t); trapAt.set(k, t); return t;
+  }
+  const calm = new Set();   // 階段と縄梯子の2マス以内には罠を置かない(着いたとたんに落とし穴、にならないように)
+  for (const p of [stairs.up, stairs.down, ...props.filter(q => q.kind === 'rope')]) if (p) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const x = p.x + dx, y = p.y + dy; if (x >= 0 && y >= 0 && x < W && y < H) calm.add(I(x, y)); }
   function addTrap(k, where, roomId) {
-    if (k == null || trapAt.has(k)) return null;
-    const t = genTrap(rn, theme, level, where);
+    if (k == null || trapAt.has(k) || calm.has(k)) return null;
+    const t = genTrap(rn, theme, level, where, trapWt(fitAt(k)));
     t.id = traps.length; t.x = k % W; t.y = (k / W) | 0; t.roomId = roomId;
     traps.push(t); trapAt.set(k, t); return t;
   }
@@ -1173,6 +1190,17 @@ function generate(opts, mons) {
     e.groups.forEach((g, gi) => { for (let n = 0; n < g.n; n++) { const k = cs[ci++ % cs.length]; e.tokens.push({ x: k % W, y: (k / W) | 0, g: gi }); } });
     encs.push(e); return e;
   }
+  /* 骨組みからの深さ: 骨組みの床から、一画の床を何マス歩いて着くか。一画の奥ほど巣が多い */
+  const deep = new Int16Array(W * H).fill(-1);
+  { const q = []; for (let k = 0; k < W * H; k++) if (fixed[k] && open(k)) { deep[k] = 0; q.push(k); }
+    for (let h = 0; h < q.length; h++) { const k = q[h]; for (const [dx, dy] of N4) { const x = k % W + dx, y = ((k / W) | 0) + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const n = I(x, y); if (deep[n] < 0 && open(n)) { deep[n] = deep[k] + 1; q.push(n); } } } }
+  const nestable = r => r !== upRoom && r !== downRoom && r.site == null && !r.kind;
+  for (const r of rooms) { let d = 1e9; for (const k of r.cells) if (deep[k] >= 0) d = Math.min(d, deep[k]); r.deep = d === 1e9 ? 0 : d; }
+  { const ds = order.filter(nestable).map(r => r.deep).sort((a, b) => a - b);   // 深さの順位で 0.55〜1.45 倍(平均は1倍なので、階の魔物の数は変わらない)
+    for (const r of rooms) { const lo = ds.findIndex(d => d >= r.deep), hi = ds.length - 1 - ds.slice().reverse().findIndex(d => d <= r.deep); r.nestW = ds.length > 1 ? .55 + .9 * ((lo + hi) / 2) / (ds.length - 1) : 1; } }
+  // 主の間: 各階に一つ、一画の奥の大部屋。その層の看板の魔物(sig)が守る。竜の巣の階は竜が主
+  let master = null;
+  if (!lairLayer) for (const r of order) if (nestable(r) && r.area >= 12 && (!master || r.deep * 2 + Math.sqrt(r.area) > master.deep * 2 + Math.sqrt(master.area))) master = r;
   let lair = null;
   for (const r of order) {
     r.lit = r.kind === 'lair' || (r.big && ((kind === 'cave' && r.site != null) || rn.chance(theme.lamps)));   // 洞窟の候補地は、灯守の灯がある。竜の巣は燐晶の山が光る
@@ -1184,8 +1212,8 @@ function generate(opts, mons) {
     if (r.kind === 'lair') flavor.splice(0, flavor.length, '大穴の底。燐晶の山が鈍い赤を返し、焼けた骨が散らばっている。山の上で、巨大な赤い竜が眠っている。熱い息が、ゆっくりと上へ昇っていく。');
     r.flavor = flavor.join('');
     if (r.id === upRoom.id) { r.role = 'entrance'; continue; }
-    const boss = downRoom ? r.id === downRoom.id : r.kind === 'lair';
-    r.role = boss ? 'exit' : 'room';
+    const boss = r === master || r.kind === 'lair';
+    r.role = r === downRoom ? 'exit' : r === master ? 'master' : 'room';
     if (r.kind === 'pit') { if (rn.chance(.3)) r.treasure = genTreasure(rn, theme, level, false); continue; }   // 穴の脇。巣はない
     if (r.kind === 'sump') { r.treasure = genTreasure(rn, theme, level, true); continue; }                     // 溜まり場。上から落ちてきた物
     if (r.kind === 'lair') {   // 竜の巣。眠る竜(固定。ふつうの遭遇ではない)と、燐晶の山
@@ -1196,28 +1224,51 @@ function generate(opts, mons) {
       r.role = 'lair';
       continue;
     }
-    const p = rn.f(), pe0 = exhale ? .58 : .4, pe = pe0 * density * (r.site != null ? .3 : 1);   // 候補地は人が通るので、巣になりにくい
-    let what = boss ? (rn.chance(.7) ? 'enc' : 'feat') : p < pe ? 'enc' : p < pe0 ? 'empty' : p < pe0 + .1 ? 'trap' : p < pe0 + .18 ? 'loot' : p < pe0 + .38 ? 'feat' : 'empty';
+    const p = rn.f(), pe0 = exhale ? .58 : .4, pe = Math.min(.9, pe0 * density * (r.site != null ? .3 : r.nestW));   // 候補地は人が通るので、巣になりにくい。一画の奥ほど巣になりやすい
+    let what = boss ? 'enc' : p < pe ? 'enc' : p < Math.max(pe, pe0) ? 'empty' : p < pe0 + .1 ? 'trap' : p < pe0 + .18 ? 'loot' : p < pe0 + .38 ? 'feat' : 'empty';
     if (what === 'enc') {
       const diff = boss ? 2 : rn.weighted([0, 1, 2], i => (exhale ? [35, 40, 25] : [50, 36, 14])[i]);
-      let ge = genEncounter(rn, ctx, diff, r.area, boss);
+      const sigPool = boss ? pool.filter(q => q.world) : [];
+      let ge = (sigPool.length && genEncounter(rn, { pool: sigPool, level, party }, diff, r.area, true)) || genEncounter(rn, ctx, diff, r.area, boss);
+      if (ge && boss) { ge.master = true; ge.activity = '主の間に陣取っている'; }
       if (ge && o.ecology && !boss) {          // 縄張り: 近すぎる巣には、置かない。代わりに、見張りのない蓄えがあることがある
         const sep = denSep(ge);
         if (dens.some(d => Math.hypot(d.x - r.cx, d.y - r.cy) < Math.max(sep, d.sep))) { ge = null; if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
       }
       const e = addEnc(ge, free(r), r.id, boss);
       if (e) { dens.push({ x: r.cx, y: r.cy, sep: denSep(e) }); r.encId = e.id; if (rn.chance(boss ? .9 : .5)) r.treasure = genTreasure(rn, theme, level, boss); }
-    } else if (what === 'trap') { const fr = free(r); const t = fr.length ? addTrap(rn.pick(fr), 'room', r.id) : null; if (t) r.trapIds.push(t.id); if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
+    } else if (what === 'trap') { const t = roomTrap(r); if (t) r.trapIds.push(t.id); if (rn.chance(.5)) r.treasure = genTreasure(rn, theme, level, false); }
     else if (what === 'loot') r.treasure = genTreasure(rn, theme, level, false);
     else if (what === 'feat') { const f = rn.pick(theme.feats); const fr = free(r); if (fr.length) { const k = rn.pick(fr); r.feat = { name: f[0], desc: f[1], x: k % W, y: (k / W) | 0 }; feats.push(r.feat); } }
-    if (what !== 'trap' && rn.chance(.12)) { const fr = free(r); const t = fr.length ? addTrap(rn.pick(fr), 'room', r.id) : null; if (t) r.trapIds.push(t.id); }
+    if (what !== 'trap' && rn.chance(.12)) { const t = roomTrap(r); if (t) r.trapIds.push(t.id); }
     if (rn.chance(.34)) r.hook = rn.pick(theme.hooks);
+  }
+  /* 見張り: 巣の群れの1〜2体が、部屋を出た先の通路に立つ(気づくと巣へ走って知らせる) */
+  for (const e of encs) {
+    if (e.roomId < 0 || e.boss || e.lair || e.tokens.length < 2 || e.kind === 'mindless') continue;
+    if (!(e.activity === '見張りを立てて休んでいる' || rn.chance(e.kind === 'smart' ? .6 : .35))) continue;
+    const r = rooms[e.roomId], dist = new Map(), q = [];
+    for (const k of r.cells) { dist.set(k, 0); q.push(k); }
+    for (let h = 0; h < q.length; h++) { const k = q[h], d = dist.get(k); if (d >= 4) continue;
+      for (const [dx, dy] of N4) { const x = k % W + dx, y = ((k / W) | 0) + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const n = I(x, y);
+        if (!dist.has(n) && (tiles[n] === CORR || tiles[n] === DOOR) && roomAt[n] < 0) { dist.set(n, d + 1); q.push(n); } } }
+    const posts = [...dist].filter(([k, d]) => d >= 2 && tiles[k] === CORR && !trapAt.has(k) && !stairCells.has(k)).map(([k]) => k);
+    if (!posts.length) continue;
+    const k0 = rn.pick(posts), nS = e.tokens.length >= 5 ? 2 : 1;
+    const spots = [k0, ...posts.filter(k => k !== k0 && Math.abs(k % W - k0 % W) + Math.abs(((k / W) | 0) - ((k0 / W) | 0)) === 1)];
+    for (let i = 0; i < nS && i < spots.length; i++) { const t = e.tokens[e.tokens.length - 1 - i]; t.x = spots[i] % W; t.y = (spots[i] / W) | 0; t.sentry = true; }
   }
   /* 通路の罠と、通路をうろつく魔物 */
   const corrCells = () => { const a = []; for (let k = 0; k < W * H; k++) if (tiles[k] === CORR) a.push(k); return a; };
-  { const cc = corrCells().filter(k => { for (const [dx, dy] of N4) { const q = I(k % W + dx, ((k / W) | 0) + dy); if (tiles[q] === DOOR || tiles[q] === VOID) return false; } return true; });
+  { const posted = new Set(); for (const e of encs) for (const t of e.tokens) if (t.sentry) posted.add(I(t.x, t.y));
+    const cc = corrCells().filter(k => { if (posted.has(k) || calm.has(k)) return false; for (const [dx, dy] of N4) { const q = I(k % W + dx, ((k / W) | 0) + dy); if (tiles[q] === DOOR || tiles[q] === VOID) return false; } return true; });
     const nT = Math.round(cc.length / 70 + rn.f());
-    for (let i = 0; i < nT && cc.length; i++) addTrap(rn.pick(cc), 'corridor', -1);
+    for (let i = 0; i < nT && cc.length; i++) {   // 罠を先に決めて、その罠に理由のある場所を選ぶ(理由のある場所が無ければ、どこでも)
+      const t0 = genTrap(rn, theme, level, 'corridor', fx => fx === 'pit' ? .5 : 1), rule = fitsFx(t0.fx), at = rule ? cc.filter(k => !trapAt.has(k) && rule[0](k)) : [];
+      const k = at.length && rn.chance(.85) ? rn.pick(at) : rn.pick(cc);
+      if (trapAt.has(k) || calm.has(k)) continue;
+      t0.id = traps.length; t0.x = k % W; t0.y = (k / W) | 0; t0.roomId = -1; traps.push(t0); trapAt.set(k, t0);
+    }
     for (const k of deadEnds) if (rn.chance(.5)) addTrap(k, 'corridor', -1);
     const far = cc.filter(k => Math.abs(k % W - stairs.up.x) + Math.abs(((k / W) | 0) - stairs.up.y) > 12 && !trapAt.has(k));
     const nW = Math.round(((exhale ? 1 : 0) + (rn.chance(.6) ? 1 : 0) + ({ L: 1, XL: 2, XXL: 4, XXXL: 6 }[o.size] > 0 && rn.chance(.5) ? ({ L: 1, XL: 2, XXL: 4, XXXL: 6 }[o.size]) : 0)) * Math.max(density, .4));
@@ -1319,7 +1370,7 @@ function exportJSON(D) {
     lair: D.lair || undefined,      // 竜の巣(第10層。縦穴の底の部屋と、眠る竜の遭遇)
     rings: D.water.length ? D.water : undefined,   // 水鏡: 環ごとの水のマスの数
     traps: D.traps.map(trapOut),
-    encounters: D.encs.map(e => ({ id: e.id, roomId: e.roomId, boss: e.boss, lair: e.lair || undefined, xp: e.xp, difficulty: e.diff, activity: e.activity, attitude: e.attitude, kind: e.kind, monsters: e.groups.map(g => monLine(D, g)), tokens: e.tokens })),
+    encounters: D.encs.map(e => ({ id: e.id, roomId: e.roomId, boss: e.boss, master: e.master || undefined, lair: e.lair || undefined, xp: e.xp, difficulty: e.diff, activity: e.activity, attitude: e.attitude, kind: e.kind, monsters: e.groups.map(g => monLine(D, g)), tokens: e.tokens })),
     walls: walls(D),
     license: 'Monster data: System Reference Document ' + (D.opts.edition === '2024' ? '5.2.1' : '5.1') + ' by Wizards of the Coast LLC, CC-BY-4.0'
   };
@@ -1351,7 +1402,7 @@ function placeData(D, sel, known) {
   const enc = e => e && ({ difficulty: e.diff, total_xp: e.xp, activity: e.activity, attitude: e.attitude, monsters: e.groups.map(g => monLine(D, g)) });
   if (sel.kind === 'room') {
     const r = D.rooms[sel.id], e = r.encId != null ? D.encs[r.encId] : null;
-    const o = { kind: 'room', no: r.no, name: r.name, role: { entrance: '上り階段（入口）', exit: '下り階段', room: '部屋' }[r.role], size_ft: [r.w * 5, r.h * 5], shape: { rect: '四角', round: '円形', cave: '不定形の洞' }[r.shape], lit: r.lit, exits: r.exits.map(x => ({ dir: x.dir, type: x.type === 'secret' && known ? undefined : { open: '開口', door: '扉', locked: '施錠された扉', secret: '隠し扉' }[x.type] })).filter(x => x.type), flavor: r.flavor };
+    const o = { kind: 'room', no: r.no, name: r.name, role: { entrance: '上り階段（入口）', exit: '下り階段', master: '主の間', lair: '竜の巣', room: '部屋' }[r.role], size_ft: [r.w * 5, r.h * 5], shape: { rect: '四角', round: '円形', cave: '不定形の洞' }[r.shape], lit: r.lit, exits: r.exits.map(x => ({ dir: x.dir, type: x.type === 'secret' && known ? undefined : { open: '開口', door: '扉', locked: '施錠された扉', secret: '隠し扉' }[x.type] })).filter(x => x.type), flavor: r.flavor };
     if (r.feat) o.feature = { name: r.feat.name, desc: r.feat.desc };
     if (e && e.state !== 'defeated' && (!known || e.state === 'seen')) o.encounter = enc(e);
     const ts = r.trapIds.map(i => D.traps[i]).filter(t => !known || t.state !== 'hidden');
@@ -1816,7 +1867,7 @@ function monHtml(g) {
 function encHtml(e) {
   const b = Core.XP_BUDGET[D.opts.level].map(v => v * D.opts.party);
   return `<section class="block"><h3>遭遇${gmView() && e.state === 'unseen' ? '<span class="gm">未遭遇</span>' : ''}</h3>
-    <div class="tags"><span class="chip ${e.diff === '高' || e.diff === '危険' ? 'hot' : ''}">難度 ${e.diff}</span><span class="chip calm">計 ${e.xp} XP</span>${e.boss ? '<span class="chip hot">階段の番</span>' : ''}<span class="chip calm">${esc(e.attitude)}</span></div>
+    <div class="tags"><span class="chip ${e.diff === '高' || e.diff === '危険' ? 'hot' : ''}">難度 ${e.diff}</span><span class="chip calm">計 ${e.xp} XP</span>${e.master ? '<span class="chip hot">主の間の主</span>' : e.boss ? '<span class="chip hot">巣の主</span>' : ''}${e.tokens.some(t => t.sentry) ? '<span class="chip calm">見張りあり</span>' : ''}<span class="chip calm">${esc(e.attitude)}</span></div>
     <p class="sub">${esc(e.activity)}。${D.opts.party}人・レベル${D.opts.level}の予算は、低 ${b[0]} / 中 ${b[1]} / 高 ${b[2]} XP。</p>
     ${e.groups.map(monHtml).join('')}
     <div class="row"><button type="button" data-act="defeat" data-id="${e.id}">倒した・去った</button></div></section>`;
@@ -1860,7 +1911,7 @@ function stairsHtml(r) {
 }
 function roomHtml(r) {
   const gm = gmView(), visited = E.visited.has(r.id), e = r.encId != null ? D.encs[r.encId] : null;
-  const tags = [r.role === 'entrance' && '<span class="chip ok">上り階段</span>', r.role === 'exit' && '<span class="chip ok">下り階段</span>', `<span class="chip calm">${r.big ? '大部屋' : '小部屋'}</span>`, r.lit && '<span class="chip">灯りあり</span>', !visited && '<span class="chip calm">まだ入っていない</span>'].filter(Boolean).join('');
+  const tags = [r.role === 'entrance' && '<span class="chip ok">上り階段</span>', r.role === 'exit' && '<span class="chip ok">下り階段</span>', r.role === 'master' && '<span class="chip hot">主の間</span>', `<span class="chip calm">${r.big ? '大部屋' : '小部屋'}</span>`, r.lit && '<span class="chip">灯りあり</span>', !visited && '<span class="chip calm">まだ入っていない</span>'].filter(Boolean).join('');
   const exits = r.exits.filter(x => gm || x.type !== 'secret' || D.doors[x.doorId].found).map(x => `${x.dir}に${DOORJP[x.type]}${gm && x.type === 'secret' && !D.doors[x.doorId].found ? '（未発見）' : ''}`);
   const cleared = !e || e.state === 'defeated';
   let h = `<header class="block"><h2>${r.no}　${gm || visited ? esc(r.name) : '名の分からない部屋'}</h2><div class="tags">${tags}</div>

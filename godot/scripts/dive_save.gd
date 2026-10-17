@@ -46,11 +46,11 @@ static func floor_snap(fl: FloorInstance) -> Dictionary:
 	for e in fl.enemies:
 		if is_instance_valid(e) and not e.dead:
 			ens.append({"m": e.mon, "id": e.enc_id, "kind": e.kind, "att": e.attitude, "pos": e.position, "hp": e.hp,
-				"state": e.state, "asleep": e.asleep, "fled": e.fled})
+				"state": e.state, "asleep": e.asleep, "fled": e.fled, "sentry": e.sentry, "nest": e.nest_cell})
 	return {"explored": fl.map.explored, "doors": doors, "traps": traps, "ground": fl.ground.entries.duplicate(true),
 		"enemies": ens, "enc_total": fl.enc_total.duplicate(), "enc_dead": fl.enc_dead.duplicate(),
 		"visited": fl.visited_rooms.duplicate(), "serial": fl.enc_serial, "wanderers": fl.wanderers.duplicate(),
-		"webs": fl.webs.keys(), "pending": fl.spawner.pending.keys(), "queued": fl.spawner.queued, "hunt": fl.spawner.hunt.keys()}
+		"webs": fl.webs.keys(), "pending": fl.spawner.pending.keys(), "queued": fl.spawner.queued, "hunt": fl.spawner.hunt.keys(), "master": fl.master_enc}
 
 ## 作り直したばかりの層に、記録した様子を戻す
 static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
@@ -78,8 +78,10 @@ static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
 	for r in s.get("enemies", []):
 		var en := Enemy.new()
 		en.setup(fl, r["m"], {"id": r["id"], "kind": r["kind"], "attitude": r["att"]}, r["pos"])
+		if r.get("sentry", false):
+			en.make_sentry(r["nest"])
 		en.hp = float(r["hp"])
-		en.state = String(r["state"])
+		en.state = "idle" if String(r["state"]) == "warn" else String(r["state"])
 		en.asleep = bool(r["asleep"])
 		en.fled = bool(r["fled"])
 		if en.state != "idle":
@@ -101,6 +103,7 @@ static func floor_apply(fl: FloorInstance, s: Dictionary) -> void:
 		if not keep.has(int(eid)):
 			fl.spawner.pending.erase(eid)
 	fl.spawner.queued = int(s.get("queued", 0))
+	fl.master_enc = int(s.get("master", fl.master_enc))
 	fl.spawner.hunt = {}
 	for eid in s.get("hunt", []):
 		fl.spawner.hunt[int(eid)] = true

@@ -90,6 +90,7 @@ const CUES := {
 	"burst": ["パンッ!", Color(1.0, 0.7, 0.45), 1.2],
 	"emerge": ["スゥ…", Color(0.75, 0.75, 1.0)],
 	"sniff": ["クンクン", Color(0.9, 0.85, 0.7)],
+	"sentry": ["ピィーッ!", Color(1.0, 0.75, 0.45)],
 	# 冒険日記帳と実績
 	"jot": ["サラサラ", Color(0.85, 0.85, 0.75), 0.85],
 	"trophy": ["パンパカパーン!", Color(1.0, 0.85, 0.35), 1.3],
@@ -191,7 +192,7 @@ const STYLE := {
 	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",
-	"emerge": "soft", "sniff": "bounce", "jot": "stretch", "trophy": "bounce",
+	"emerge": "soft", "sniff": "bounce", "sentry": "stretch", "jot": "stretch", "trophy": "bounce",
 	"glare": "shake", "splash": "slam", "drop": "pop", "shape": "wave", "web_shot": "snap", "web": "stretch",
 	"squeeze": "stretch", "gaze": "snap", "stone": "shake", "stench": "wave",
 	"chant": "bounce", "ms_fire": "pop", "ms_lightning": "slam", "ms_missile": "snap", "ms_frost": "stretch", "ms_guide": "pop",

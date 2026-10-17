@@ -142,7 +142,7 @@ func _test_rope() -> void:
 		hp0 += h.ch.hp
 	main._on_rope_choice("down")
 	await _step(3)
-	check(main.current.floor_no == 2, "下りると第2階へ")
+	check(main.current.floor_no == 2, "下りると第2階へ (%d)" % main.current.floor_no)
 	var at: Vector2i = main.current.map.cell_of(main.leader().position) - main.current.map.shaft_center
 	check(absi(at.x - off.x) <= 2 and absi(at.y - off.y) <= 2, "下の階の同じ縁の角に着く (%s / %s)" % [at, off])
 	check(Journal.stat(main.gs, "rope") == 1, "縄梯子を使った回数を数える")
