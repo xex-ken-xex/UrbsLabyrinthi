@@ -40,12 +40,13 @@ const offset = (j, pt) => [pt.x - j.shaft.center[0], pt.y - j.shaft.center[1]];
 const key = (x, y) => `${x},${y}`;
 const reachAll = j => {
   const W = j.meta.grid.width, H = j.meta.grid.height, g = j.grid;
-  const open = (x, y) => x >= 0 && y >= 0 && x < W && y < H && g[y][x] !== '#' && g[y][x] !== 'O';
+  const open = (x, y) => x >= 0 && y >= 0 && x < W && y < H && '.,+='.includes(g[y][x]);   // 浅瀬は歩ける。深い水・柱・虚空・岩は歩けない
   const seen = new Uint8Array(W * H), st = [[j.stairs.up.x, j.stairs.up.y]]; seen[j.stairs.up.y * W + j.stairs.up.x] = 1;
   while (st.length) { const [x, y] = st.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy; if (open(X, Y) && !seen[Y * W + X]) { seen[Y * W + X] = 1; st.push([X, Y]); } } }
   return j.rooms.filter(r => !seen[r.center[1] * W + r.center[0]]).map(r => r.no);
 };
 const mons = {}, kg = {}, changedQuiet = { c: 0, n: 0 }, changedExhale = { c: 0, n: 0 };
+const kinds = {};   // 層ごとの骨組みの種類と、新しいマスの数(表に出す)
 const prevNight = new Map();   // depth → 前の夜の JSON
 const byDepthNight = new Map();
 for (let n = 0; n < NIGHTS; n++) for (let d = 1; d <= FLOORS; d++) {
@@ -55,17 +56,46 @@ for (let n = 0; n < NIGHTS; n++) for (let d = 1; d <= FLOORS; d++) {
   if (j.schema !== Core.SCHEMA) fail(`${tag}: schema ${j.schema}`);
   if (j.meta.depth !== d || j.meta.layer !== D0.layer || j.meta.sub !== D0.sub) fail(`${tag}: meta の depth/layer/sub が合わない`);
   const [sw, sh] = Core.SIZES[D0.size]; if (W !== sw || H !== sh) fail(`${tag}: 広さ ${W}×${H}(WIRE は ${sw}×${sh})`);
-  /* 縦穴: 中央に 13×13 の O、まわりに通路の輪 */
-  const cx = W >> 1, cy = H >> 1;
+  /* 縦穴: 中央に 13×13 の O、まわりに通路の輪(骨の大聖堂では輪も「砧の間」の床)。竜の巣の階では、縦穴の底が床(巣) */
+  const cx = W >> 1, cy = H >> 1, lairLayer = !!D0.lair;
   if (j.shaft.center[0] !== cx || j.shaft.center[1] !== cy || j.shaft.w !== Core.WIRE.shaft.w) fail(`${tag}: 縦穴が中央にない、または大きさが違う`);
   let voidOk = true, ringOk = true;
   for (let y = j.shaft.y - 1; y <= j.shaft.y + j.shaft.h; y++) for (let x = j.shaft.x - 1; x <= j.shaft.x + j.shaft.w; x++) {
     const edge = x < j.shaft.x || y < j.shaft.y || x >= j.shaft.x + j.shaft.w || y >= j.shaft.y + j.shaft.h;
     const ch = j.grid[y][x];
-    if (edge) { if (ch !== ',' && ch !== '+') ringOk = false; } else if (ch !== 'O') voidOk = false;
+    if (edge) { if (ch !== ',' && ch !== '+' && ch !== '.') ringOk = false; } else if (ch !== (lairLayer ? '.' : 'O')) voidOk = false;
   }
-  if (!voidOk) fail(`${tag}: 縦穴の中に虚空でないマスがある`);
+  if (!voidOk) fail(lairLayer ? `${tag}: 竜の巣(縦穴の底)が床でない` : `${tag}: 縦穴の中に虚空でないマスがある`);
   if (!ringOk) fail(`${tag}: 縦穴の縁の回廊が切れている`);
+  /* 骨組みの種類ごとの決まり */
+  const count = ch => { let n = 0; for (const row of j.grid) for (const c of row) if (c === ch) n++; return n; };
+  const K = kinds[D0.layer] = kinds[D0.layer] || { kind: j.meta.skeleton, water: 0, shallow: 0, pillar: 0, bridges: 0, n: 0 };
+  K.water += count('~'); K.shallow += count('='); K.pillar += count('I'); K.bridges += j.props.filter(p => p.kind === 'bridge').length; K.n++;
+  if (j.meta.skeleton === 'ring') {   // 水鏡: 三つの環の水路、橋、渡し石
+    if (!j.rings || j.rings.length !== Core.WIRE.rings.length || j.rings.some(n => n < 40)) fail(`${tag}: 水路の環が ${JSON.stringify(j.rings)}`);
+    if (!j.props.some(p => p.kind === 'bridge')) fail(`${tag}: 水路を渡る橋がない`);
+    for (const p of j.props) if (p.kind === 'bridge' && j.grid[p.y][p.x] !== ',') fail(`${tag}: 橋 (${p.x},${p.y}) が通路でない`);
+  }
+  if (j.meta.skeleton === 'nave') {   // 骨の大聖堂: 縦穴を通る軸で左右対称(扉も)
+    let asym = 0;
+    for (let y = 1; y < H - 1; y++) for (let x = 2; x < cx; x++) if (j.grid[y][x] !== j.grid[y][2 * cx - x]) asym++;
+    if (asym) fail(`${tag}: 左右対称でないマスが ${asym}`);
+  }
+  if (j.meta.skeleton === 'spiral' || lairLayer) {   // 螺旋と竜の巣: 下りは無く、巣には眠る竜が一体
+    if (j.stairs.down) fail(`${tag}: いちばん下の階に下り階段がある`);
+    if (!j.lair || j.lair.monster !== Core.WIRE.lair.monster) fail(`${tag}: 竜の巣がない`);
+    const e = j.lair && j.encounters.find(e => e.id === j.lair.encounter);
+    if (!e || !e.lair || !/眠/.test(e.activity) || e.tokens.length !== 1) fail(`${tag}: 竜が巣で眠っていない`);
+    const lr = j.lair && j.rooms.find(r => r.id === j.lair.room); if (!lr || lr.kind !== 'lair' || !lr.lit) fail(`${tag}: 竜の巣の部屋が変`);
+  }
+  if (D0.layer >= Core.WIRE.ribs.layers[0] && D0.layer <= Core.WIRE.ribs.layers[1]) {   // 肋骨の柱: 全階で同じ座標(階段のマスと縁の回廊は除く)
+    let miss = 0, all = 0;
+    for (let dx = -Core.WIRE.ribs.span; dx <= Core.WIRE.ribs.span; dx += Core.WIRE.ribs.step) for (const dy of [-Core.WIRE.ribs.dy, Core.WIRE.ribs.dy]) {
+      const x = cx + dx, y = cy + dy, ch = j.grid[y][x]; all++;
+      if (ch !== 'I' && !j.rooms.some(r => r.center[0] === x && r.center[1] === y)) miss++;
+    }
+    if (miss > 2) fail(`${tag}: 肋骨の柱が ${all} のうち ${miss} ない`);
+  }
   /* 候補地7つは、縦穴の中心からの差が全階で同じ(七角形) */
   if (j.stair_sites.length !== 7) fail(`${tag}: 候補地が ${j.stair_sites.length} 個`);
   for (const s of j.stair_sites) {
@@ -76,8 +106,10 @@ for (let n = 0; n < NIGHTS; n++) for (let d = 1; d <= FLOORS; d++) {
   /* 階段の決まり: 上り = 候補地 mirror(夜 + 階 − 1)、下り = mirror(夜 + 階) */
   const up = j.stair_sites.find(s => s.k === Core.mirrorRoom((n + d - 1) % 49)), dn = j.stair_sites.find(s => s.k === Core.mirrorRoom((n + d) % 49));
   if (!up || j.stairs.up.x !== up.x || j.stairs.up.y !== up.y) fail(`${tag}: 上り階段が候補地 ${up && up.k} にない`);
-  if (!dn || j.stairs.down.room !== dn.room) fail(`${tag}: 下り階段が候補地 ${dn && dn.k} の部屋にない`);
-  if (up && dn && up !== dn && (j.stairs.down.x !== dn.x || j.stairs.down.y !== dn.y)) fail(`${tag}: 下り階段の位置が候補地の中心でない`);
+  if (!lairLayer) {
+    if (!dn || !j.stairs.down || j.stairs.down.room !== dn.room) fail(`${tag}: 下り階段が候補地 ${dn && dn.k} の部屋にない`);
+    if (up && dn && j.stairs.down && up !== dn && (j.stairs.down.x !== dn.x || j.stairs.down.y !== dn.y)) fail(`${tag}: 下り階段の位置が候補地の中心でない`);
+  }
   /* 全部屋へ行ける */
   const bad = reachAll(j); if (bad.length) fail(`${tag}: 上り階段から行けない部屋 ${bad.join(',')}`);
   /* 竪坑: 第1〜6層に4つ。いちばん下の階だけ穴がない */
@@ -129,10 +161,10 @@ notes.push(`一画の組み替え: 静かな夜 ${(q * 100).toFixed(0)}%(決ま�
 if (changedQuiet.n && Math.abs(q - Core.WIRE.p_quiet) > .08) fail(`静かな夜の組み替えが ${(q * 100).toFixed(0)}%(決まりは ${Core.WIRE.p_quiet * 100}% ± 8)`);
 /* 5. 数理モデルの目安(層ごと、7夜の平均) */
 const avg = a => a.reduce((s, v) => s + v, 0) / (a.length || 1);
-notes.push('| 層 | 階 | 魔物/階 目安 | 平均 | 最少〜最多 | 燐晶 kg/階 目安 | 平均(生成器の宝) |', '|---|---|---|---|---|---|---|');
+notes.push('| 層 | 階 | 骨組み | 水/浅瀬/柱/橋(階平均) | 魔物/階 目安 | 平均 | 最少〜最多 | 燐晶 kg/階 目安 | 平均(生成器の宝) |', '|---|---|---|---|---|---|---|---|---|');
 for (const L of Core.WIRE.layers) {
-  const m = mons[L.layer] || [0], k = kg[L.layer] || [0], av = avg(m);
-  notes.push(`| 第${L.layer}層 | ${L.floors} | ${L.mon_floor} | ${av.toFixed(0)} | ${Math.min(...m)}〜${Math.max(...m)} | ${L.kg_floor} | ${avg(k).toFixed(0)} |`);
+  const m = mons[L.layer] || [0], k = kg[L.layer] || [0], av = avg(m), K = kinds[L.layer] || { kind: '?', water: 0, shallow: 0, pillar: 0, bridges: 0, n: 1 };
+  notes.push(`| 第${L.layer}層 | ${L.floors} | ${K.kind} | ${(K.water / K.n).toFixed(0)} / ${(K.shallow / K.n).toFixed(0)} / ${(K.pillar / K.n).toFixed(0)} / ${(K.bridges / K.n).toFixed(0)} | ${L.mon_floor} | ${av.toFixed(0)} | ${Math.min(...m)}〜${Math.max(...m)} | ${L.kg_floor} | ${avg(k).toFixed(0)} |`);
   if (Math.abs(av - L.mon_floor) > L.mon_floor * .4) fail(`第${L.layer}層: 魔物の数の平均 ${av.toFixed(0)} が目安 ${L.mon_floor} の ±40% に入らない(density を直す)`);
 }
 console.log(notes.join('\n'));

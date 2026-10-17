@@ -4,7 +4,7 @@ extends RefCounted
 ## 魔物の一覧は data/bestiary.json(tools/export-bestiary.py が層のデータから作る)。闘技場の魔物は数えない。
 ##   gs.journal = {"seen": {index: 見かけた数}, "killed": {index: 倒した数}, "first": {index: "N日目 第L層"},
 ##                 "stats": {key: 数}, "trophies": {id: 取った日}}
-## stats の key: cook_great / cook_burnt / rotten_eaten / brew_great / forge_great / wipes / deepest(着いた最も深い層) /
+## stats の key: cook_great / cook_burnt / rotten_eaten / brew_great / forge_great / wipes / deepest(着いた最も深い層) / lair(竜の巣に着いた) /
 ##               best_return(一度に持ち帰った燐晶の最高額) / mimic_bite
 
 static var _cat := {}

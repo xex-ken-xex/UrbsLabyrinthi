@@ -121,7 +121,8 @@ func setup(m: FloorMap) -> void:
 	night_no = int(d["meta"]["night"])
 	exhale = bool(d["meta"].get("exhale", false))
 	up_cell = Vector2i(int(d["stairs"]["up"]["x"]), int(d["stairs"]["up"]["y"]))
-	down_cell = Vector2i(int(d["stairs"]["down"]["x"]), int(d["stairs"]["down"]["y"]))
+	var dn: Variant = (d["stairs"] as Dictionary).get("down")
+	down_cell = Vector2i(int(dn["x"]), int(dn["y"])) if typeof(dn) == TYPE_DICTIONARY else Vector2i(-1, -1)   # 竜の巣の階(いちばん下)に下りは無い
 	for t in d["traps"]:
 		var tt: Dictionary = t.duplicate()
 		# 仕掛けの動き(fx)は、生成器の罠表が決める。振り子と噴き口は隠れていない(state: found)
@@ -352,6 +353,21 @@ func _draw() -> void:
 			if t == FloorMap.VOID:
 				draw_rect(rect, Color.BLACK)      # 虚空(縦穴・竪坑の穴)。底は真っ黒で、何も見えない
 				continue
+			if t == FloorMap.WATER or t == FloorMap.SHALLOW:
+				# 水路。深い水は暗い青、浅瀬は明るい青に平たい石
+				var wc: Color = col.get("water", Color("163646")) if t == FloorMap.WATER else col.get("shallow", Color("2e6577"))
+				draw_rect(rect, _shade(wc.lightened(_hash(x, y) * 0.08), f))
+				if t == FloorMap.SHALLOW:
+					draw_circle(rect.get_center() + Vector2(_hash(x, y) - 0.5, _hash(y, x) - 0.5) * C * 0.3, C * 0.2, _shade(Color(0.82, 0.8, 0.74), f))
+				elif _hash(x, y) > 0.8:
+					draw_circle(rect.get_center() + Vector2(_hash(y, x) - 0.5, _hash(x, y) - 0.5) * C * 0.4, C * 0.08, _shade(Color(0.55, 0.8, 0.9, 0.5), f))
+				continue
+			if t == FloorMap.PILLAR:
+				# 柱(肋骨の柱、沈んだ列柱)。床の上に骨色の丸
+				draw_rect(rect, _shade(corr, f))
+				draw_circle(rect.get_center(), C * 0.36, _shade(Color(0.1, 0.09, 0.1), f))
+				draw_circle(rect.get_center() - Vector2(1.0, 2.0), C * 0.3, _shade(Color(0.86, 0.82, 0.72), f))
+				continue
 			if t == FloorMap.ROCK:
 				if map.wall_adj[i] == 1 and tex["wall"] != null:
 					var face_side := tex["walltop"] == null or not _is_rock(x, y + 1)    # 南が床なら、壁の正面
@@ -405,7 +421,7 @@ func _draw() -> void:
 					draw_rect(Rect2(rect.position.x, rect.position.y + k * 3.0, C, 3.0), Color(0, 0, 0, _shade(Color.WHITE, f).r * (0.42 - k * 0.1)))
 	# 階段
 	_draw_stairs(up_cell, true, glow)
-	if not arena:
+	if not arena and down_cell.x >= 0:
 		_draw_stairs(down_cell, false, glow)
 	# 蜘蛛の巣
 	for i in webs:

@@ -823,6 +823,9 @@ func _enter_room(pc: Vector2i) -> void:
 	current.visited_rooms[rid] = true
 	var r: Dictionary = m.room_by_id[rid]
 	log_msg("「%s」" % r["name"], Color("d8e6ff"))
+	if String(r.get("kind", "")) == "lair":        # 大穴の底、竜の巣に着いた(到達が実績。竜は眠っている)
+		Journal.bump(gs, "lair")
+		_check_trophies()
 	var feat: Variant = r.get("feature")
 	if typeof(feat) == TYPE_DICTIONARY:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))

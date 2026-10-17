@@ -213,6 +213,8 @@ func move_speed() -> float:
 		k *= 0.85        # 光に弱い: 灯りの中では鈍る
 	if traits.has("aquatic") and not traits.has("amphib"):
 		k *= 0.6         # 水に棲む魔物は、陸では鈍い
+	elif game_floor != null:
+		k *= game_floor.map.speed_at(position)   # 浅瀬は遅い(水に棲む魔物は平気)
 	return speed * Balance.ENEMY_SPEED_SCALE * GameSettings.enemy_speed() * k
 
 func body_speed() -> float:

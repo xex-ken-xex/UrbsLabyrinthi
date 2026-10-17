@@ -1,6 +1,6 @@
 class_name FloorMap
 extends RefCounted
-## 1階ぶんの地図。Urbs Labyrinthi が書き出した JSON(urbs-labyrinthi/0.2)を読み、
+## 1階ぶんの地図。Urbs Labyrinthi が書き出した JSON(urbs-labyrinthi/0.3)を読み、
 ## 通れるか、見通せるか、どこから見えるかを答える。描画も敵も知らない。
 
 const ROCK := 0
@@ -8,6 +8,10 @@ const ROOM := 1
 const CORR := 2
 const DOOR := 3
 const VOID := 4                        # 虚空(中央の縦穴と、竪坑の穴)。歩けないが、見通せる。JSON では 'O'
+const WATER := 5                       # 深い水(水鏡の環の水路)。歩けないが、見通せる。JSON では '~'
+const SHALLOW := 6                     # 浅瀬(渡し石)。歩けるが遅い。JSON では '='
+const PILLAR := 7                      # 柱(肋骨の柱、沈んだ列柱)。通れず、見通せない。JSON では 'I'
+const SHALLOW_SPEED := 0.5             # 浅瀬での歩く速さ(水に棲む魔物は遅くならない)
 const DIRS4 := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 const DIRS8 := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 	Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
@@ -64,6 +68,9 @@ func _init(d: Dictionary) -> void:
 				",": tiles[y * w + x] = CORR
 				"+": tiles[y * w + x] = DOOR
 				"O": tiles[y * w + x] = VOID
+				"~": tiles[y * w + x] = WATER
+				"=": tiles[y * w + x] = SHALLOW
+				"I": tiles[y * w + x] = PILLAR
 				_: tiles[y * w + x] = ROCK
 	var sc: Array = (d.get("shaft", {}) as Dictionary).get("center", [w / 2, h / 2])
 	shaft_center = Vector2i(int(sc[0]), int(sc[1]))
@@ -138,31 +145,39 @@ func _flood_room(start: Vector2i, id: int) -> void:
 
 # ---------- 通れるか、見通せるか ----------
 
-## 岩と、開いていない扉。視線がふさがる(虚空は見通せる)
+## 岩と柱と、開いていない扉。視線がふさがる(虚空と水は見通せる)
 func opaque(x: int, y: int) -> bool:
 	if not in_bounds(x, y):
 		return true
 	var t := tiles[idx(x, y)]
-	if t == ROCK:
+	if t == ROCK or t == PILLAR:
 		return true
 	if t == DOOR:
 		return not door_at[idx(x, y)]["open"]
 	return false
 
-## 体が入れないマス。岩と閉じた扉に加えて、虚空(縦穴・竪坑の穴)
+## 体が入れないマス。岩と柱と閉じた扉に加えて、虚空(縦穴・竪坑の穴)と深い水
 func solid(x: int, y: int) -> bool:
 	if not in_bounds(x, y):
 		return true
-	if tiles[idx(x, y)] == VOID:
+	var t := tiles[idx(x, y)]
+	if t == VOID or t == WATER:
 		return true
 	return opaque(x, y)
+
+## そのマスでの歩く速さの倍率(浅瀬は遅い)
+func speed_at(p: Vector2) -> float:
+	var c := cell_of(p)
+	if in_bounds(c.x, c.y) and tiles[idx(c.x, c.y)] == SHALLOW:
+		return SHALLOW_SPEED
+	return 1.0
 
 ## 魔物が経路に使えるマス。閉じた普通の扉は、近づけば自分で開ける
 func monster_passable(x: int, y: int) -> bool:
 	if not in_bounds(x, y):
 		return false
 	var t := tiles[idx(x, y)]
-	if t == ROCK or t == VOID:
+	if t == ROCK or t == VOID or t == WATER or t == PILLAR:
 		return false
 	if t == DOOR:
 		var d: Dictionary = door_at[idx(x, y)]

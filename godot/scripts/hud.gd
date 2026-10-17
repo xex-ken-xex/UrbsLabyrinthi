@@ -272,6 +272,13 @@ func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
 			if t == FloorMap.VOID:
 				draw_rect(Rect2(ox + x * s, oy + y * s, s, s), Color.BLACK)   # 虚空(縦穴・竪坑の穴)
 				continue
+			if t == FloorMap.WATER or t == FloorMap.SHALLOW:
+				var wc := Color(0.12, 0.3, 0.4) if t == FloorMap.WATER else Color(0.3, 0.5, 0.58)
+				draw_rect(Rect2(ox + x * s, oy + y * s, s, s), wc if m.visible[i] == 1 else wc.darkened(0.35))
+				continue
+			if t == FloorMap.PILLAR:
+				draw_rect(Rect2(ox + x * s, oy + y * s, s, s), Color(0.8, 0.76, 0.66))   # 柱
+				continue
 			var c := Color(0.5, 0.55, 0.5) if t == FloorMap.ROOM else Color(0.38, 0.42, 0.38)
 			if t == FloorMap.DOOR:
 				c = Color("a06a30")
@@ -280,7 +287,7 @@ func _draw_minimap(fl: FloorInstance, size_v: Vector2) -> void:
 			draw_rect(Rect2(ox + x * s, oy + y * s, s, s), c)
 	for st in [[fl.up_cell, Color("7bd0ff")], [fl.down_cell, Color("ffb050")]]:
 		var cc: Vector2i = st[0]
-		if m.explored[m.idx(cc.x, cc.y)] == 1 and inside.call(cc):
+		if m.in_bounds(cc.x, cc.y) and m.explored[m.idx(cc.x, cc.y)] == 1 and inside.call(cc):
 			draw_rect(Rect2(ox + cc.x * s - 1, oy + cc.y * s - 1, s + 2, s + 2), st[1])
 	for h in game.heroes:
 		var pc := m.cell_of(h.position)
