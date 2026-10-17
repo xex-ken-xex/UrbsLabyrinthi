@@ -37,6 +37,7 @@ fs.mkdirSync(path.join(out, 'floors'), { recursive: true });
 for (const f of fs.readdirSync(path.join(out, 'floors'))) if (/^f\d\d_n\d\d_p\d\.json(\.gz)?$/.test(f)) fs.unlinkSync(path.join(out, 'floors', f));   // 古い階(階数が減ったとき用)
 let total = 0;
 const t0 = Date.now();
+const skel = new Map();   // 階 → 7夜で変わらなかったマス(人数4の地図。迷宮の断面と、縦穴から覗く下の階に使う)
 for (let night = 0; night < NIGHTS; night++) {
   for (let party = 1; party <= 4; party++) for (let depth = 1; depth <= FLOORS; depth++) {
     const D0 = DEPTHS[depth - 1];
@@ -45,6 +46,11 @@ for (let night = 0; night < NIGHTS; night++) {
     // 同じ層の2階め以降は、sub で別の地図になる(骨組みの種が変わる。縦穴と候補地は同じ位置)
     const D = Core.generate({ seed, theme, floor: D0.layer, sub: D0.sub, subs: D0.subs, night, size: D0.size, level: th.level, party, edition: '2014', ecology: true, density: D0.density }, mons);
     const j = Core.exportJSON(D);
+    if (party === 4) {
+      const g = j.grid, prev = skel.get(depth);
+      if (!prev) skel.set(depth, { rows: g.slice(), j, th, D0 });
+      else prev.rows = prev.rows.map((row, y) => [...row].map((c, x) => c === g[y][x] ? c : '#').join(''));   // 夜で替わったマスは岩とみなす(骨組みだけ残る)
+    }
     j.style = { col: th.col, short: th.short, env: th.env, see: th.see, hear: th.hear, smell: th.smell, level: th.level, water: !!th.water };
     j.meta.depth = depth; j.meta.layer = D0.layer; j.meta.sub = D0.sub; j.meta.subs = D0.subs;
     j.meta.floor_label = Core.floorLabel(th, D0.layer, D0.sub, D0.subs);
@@ -71,6 +77,24 @@ for (const [id, th] of Object.entries(Core.THEMES)) {
     sig: th.sig, floors: th.floors };
 }
 fs.writeFileSync(path.join(out, 'encounter-data.json'), JSON.stringify({ monsters: mons, themes, xp_budget: Core.XP_BUDGET }));
+/* 迷宮の断面と、縦穴から覗く下の階(Godot の scripts/abyss.gd)。7夜で変わらないマスだけ。
+   row … 縦穴の中心を通る東西の一列。well … 縦穴の中心のまわり WELL マス四方 */
+const WELL = 24;
+const section = [];
+for (let depth = 1; depth <= FLOORS; depth++) {
+  const { rows, j, th, D0 } = skel.get(depth);
+  const L = LAYERS[D0.layer - 1], [cx, cy] = j.shaft.center, W = rows[0].length, H = rows.length;
+  const well = [];
+  for (let y = cy - WELL; y <= cy + WELL; y++) {
+    let s = '';
+    for (let x = cx - WELL; x <= cx + WELL; x++) s += x >= 0 && y >= 0 && x < W && y < H ? rows[y][x] : '#';
+    well.push(s);
+  }
+  section.push({ depth, layer: D0.layer, sub: D0.sub, subs: D0.subs, theme: Core.themeForFloor(D0.layer), short: th.short, label: Core.floorLabel(th, D0.layer, D0.sub, D0.subs),
+    h_m: L.h_m, top_m: +(L.top_m + L.h_m * D0.sub).toFixed(1), w: W, h: H, cx, cy, col: th.col, lair: !!j.lair || (j.rooms || []).some(r => r.kind === 'lair'),
+    ropes: j.props.filter(p => p.kind === 'rope').map(p => [p.x - cx, p.y - cy]), row: rows[cy], well });
+}
+fs.writeFileSync(path.join(out, 'section.json'), JSON.stringify({ well: WELL, cell_m: 1.524, floors: section }));
 const { layers: _l, ...wire } = Core.WIRE;
 fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ seed, nights: NIGHTS, floors: FLOORS, layers: LAYERS, wire, schema: Core.SCHEMA, generator: Core.GENERATOR }));
 console.log(`wrote ${NIGHTS * FLOORS * 4} floors (${FLOORS} 階), ${(total / 1024).toFixed(0)} KB →`, out);

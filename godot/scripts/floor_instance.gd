@@ -37,6 +37,8 @@ var lamp_on := false           # 燐晶の灯油を灯している(光に弱い�
 var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var spawner := Spawner.new(self)   # 魔物を近づいたときに出し、遠くでは眠らせる
+var ropes: Array = []         # 縦穴の縁の縄梯子(Vector2i。縁の角のマス)。下の階の同じ所へ下りられる
+var abyss: Abyss = null       # 縦穴を覗いたときの、下の階の重なり
 var tex := {}                 # 差し替え画像(床、壁、通路、アイコン)
 var _tex_ver := -1
 
@@ -132,10 +134,17 @@ func setup(m: FloorMap) -> void:
 		trap_at[Vector2i(int(t["x"]), int(t["y"]))] = tt
 		if TrapFx.PERIODIC.has(tt["fx"]):
 			add_child(TrapFx.make(self, tt, null))
+	for p in d.get("props", []):
+		if String(p.get("kind", "")) == "rope":
+			ropes.append(Vector2i(int(p["x"]), int(p["y"])))
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
 	_spawn_webs()
+	abyss = Abyss.new()
+	abyss.setup(self)
+	add_child(abyss)
+	move_child(abyss, 0)      # 魔物や仕掛けより下に描く
 
 ## 層の遭遇は、まだ出さずに控えておく(Spawner が、仲間が近づいたら出す)。数だけは先に数える
 func _spawn_enemies() -> void:
@@ -423,6 +432,10 @@ func _draw() -> void:
 	_draw_stairs(up_cell, true, glow)
 	if not arena and down_cell.x >= 0:
 		_draw_stairs(down_cell, false, glow)
+	for rc in ropes:
+		var ri := map.idx(rc.x, rc.y)
+		if map.explored[ri] == 1 and vr.has_point(map.center_of(rc)):
+			_draw_rope(rc, 1.0 if map.visible[ri] == 1 else 0.4)
 	# 蜘蛛の巣
 	for i in webs:
 		var wc := Vector2i(int(i) % map.w, int(i) / map.w)
@@ -468,6 +481,22 @@ func _draw_web(c: Vector2, k: float) -> void:
 			var a2: Vector2 = c.lerp(pts[n], ring)
 			var b2: Vector2 = c.lerp(pts[(n + 1) % 7], ring)
 			draw_line(a2, b2, col, 1.0)
+
+## 縄梯子: 縁の角の杭と、縦穴の角から闇へ垂れる縄
+func _draw_rope(cell: Vector2i, f: float) -> void:
+	var C := float(Balance.CELL)
+	var cen := map.center_of(cell)
+	var sc := map.center_of(map.shaft_center)
+	var dir := Vector2(signf(sc.x - cen.x), signf(sc.y - cen.y))
+	var corner := cen + dir * C * 0.5
+	var post := cen - dir * C * 0.15
+	var wood := _shade(Color(0.42, 0.3, 0.18), f)
+	var rope := _shade(Color(0.72, 0.58, 0.38), f)
+	draw_circle(post, 5.0, wood)
+	draw_circle(post + Vector2(-1, -1), 3.0, _shade(Color(0.55, 0.4, 0.25), f))
+	draw_arc(post, 7.5, 0.0, TAU, 14, rope, 1.6)
+	draw_line(post, corner, rope, 2.2)
+	draw_line(corner, corner + dir * C * 0.4, rope.darkened(0.6), 2.0)
 
 func _shade(c: Color, f: float) -> Color:
 	var k := f * 1.3

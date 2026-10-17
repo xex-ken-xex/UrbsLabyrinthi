@@ -16,6 +16,7 @@ const LIST := [
 	["deep_7", "骨の大聖堂へ", "第7層に着いた"],
 	["deep_10", "未踏の底へ", "第10層に着いた"],
 	["lair", "胃袋の主", "大穴の底で、眠る竜を見た"],
+	["abyss", "深淵を覗く者", "縦穴の縁から、下の階を覗いた"],
 	["level_5", "一人前", "仲間のだれかが Lv5 になった"],
 	["level_10", "古強者", "仲間のだれかが Lv10 になった"],
 	["party_4", "四人の一行", "仲間が4人そろった"],
@@ -80,6 +81,7 @@ static func met(gs: GameState, id: String) -> bool:
 		"deep_7": return Journal.stat(gs, "deepest") >= 7
 		"deep_10": return Journal.stat(gs, "deepest") >= 10
 		"lair": return Journal.stat(gs, "lair") >= 1
+		"abyss": return Journal.stat(gs, "abyss") >= 1
 		"level_5", "level_10":
 			var need := 5 if id == "level_5" else 10
 			for c in gs.party:
