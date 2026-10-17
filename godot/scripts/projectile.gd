@@ -18,6 +18,7 @@ var hit_set := {}
 var elem := ""                 # 仲間の呪文の種類(火・雷など。魔物の再生や、雷を吸う特徴が見る)
 var spell := false             # 呪文か(魔物の、魔法への抵抗が見る)
 var web := false               # 魔物の吐いた糸(当たると絡まって動けない。傷はない)
+var chill := 0.0               # 魔物の冷たい光線(当たった仲間の足が、この秒だけ鈍る)
 
 func setup_enemy(fl: FloorInstance, pos: Vector2, d: Vector2, damage: float, col: Color, mon_type: String = "") -> void:
 	game_floor = fl
@@ -80,6 +81,8 @@ func _physics_process(delta: float) -> void:
 					queue_free()
 					return
 				h.damage(dmg, position - dir * 10.0, false, src_type)
+				if chill > 0.0 and not h.down:
+					TrapFx.slow(h, "chill", 0.6, chill)
 				queue_free()
 				return
 	queue_redraw()

@@ -166,7 +166,7 @@ func _test_magic() -> void:
 	var ha := a.hp
 	a.take_damage(10.0, Vector2.RIGHT, null)
 	var hb := b.hp
-	b.elem_hit("fire", true)
+	b.elem_hit("", true)       # 魔力の傷(火は、この悪魔には効かない)
 	b.take_damage(10.0, Vector2.RIGHT, null)
 	check(is_equal_approx(hb - b.hp, (ha - a.hp) * 0.5), "魔法に強い魔物は、呪文の傷が半分 (%.1f / %.1f)" % [hb - b.hp, ha - a.hp])
 	var res := 0

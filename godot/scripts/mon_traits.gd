@@ -27,6 +27,14 @@ extends RefCounted
 ##   gaze 石化の視線(見つめ合うと、体が石になる) / stench 悪臭(そばにいると気分が悪くなる)
 ##   glow 光る体(灯りの外でも見える) / absorb_lightning 雷を吸う / water_sus 冷気に弱い
 ##   recall 迷宮を覚えている(壁越しにも、遠くから迫る) / siege 扉を壊す
+## 第三弾(ken 10/17「第一弾・第二弾の続き」):
+##   caster 呪文を唱える(MonSpells。詠唱してから、火の矢・金縛り・眠り・魅了・癒し・霧の歩みなど)
+##   legend 伝説的な抵抗(気絶・眠り・足止めを3回まで跳ね返す)
+##   fey_anc 妖精の血(眠らない) / immutable 変わらぬ体(足止めが効かない)
+##   misty 霧になって逃げる(一度だけ、倒れる代わりに霧になって離れる)
+##   heated 熱い体(近くで殴ると、殴った側が火傷する)
+##   devil_sight 悪魔の目(〈隠密〉で隠れていても見通す)
+##   ダメージの耐性・無効・弱点と、状態の無効は、印ではなく damage_mods で引く(SRD の re / im / vu / ci)
 
 const FLAGS := {
 	"Pack Tactics": "pack", "Martial Advantage": "pack",
@@ -59,7 +67,19 @@ const FLAGS := {
 	"Illumination": "glow", "Ignited Illumination": "glow", "Variable Illumination": "glow",
 	"Lightning Absorption": "absorb_lightning", "Water Susceptibility": "water_sus",
 	"Labyrinthine Recall": "recall", "Siege Monster": "siege",
+	# 第三弾
+	"Innate Spellcasting": "caster", "Spellcasting": "caster",
+	"Legendary Resistance": "legend", "Fey Ancestry": "fey_anc", "Immutable Form": "immutable",
+	"Misty Escape": "misty", "Heated Body": "heated", "Devil's Sight": "devil_sight",
+	"Stone Camouflage": "shadow", "Earth Glide": "ghost",
 }
+## ダメージの倍率(耐性・無効・弱点)。SRD は 半分 / 0 / 2倍。リアルタイムなので弱点は 1.5倍、
+## 武器への無効は 0.25倍に和らげた(魔法の武器が少ないうちに、倒せない魔物が出ないように。闘技場で見直す)
+const RESIST := 0.5
+const IMMUNE := 0.0
+const IMMUNE_WEAPON := 0.25
+const VULNERABLE := 1.5
+const WEAPON_TYPES := ["bludgeoning", "piercing", "slashing"]
 ## 再生を止める、仲間の攻撃の種類(スキルの elem)
 const REGEN_STOP := ["fire", "acid", "radiant"]
 
@@ -81,6 +101,42 @@ static func flags_for(m: Dictionary) -> Dictionary:
 		var f: String = FLAGS.get(String(n if typeof(n) == TYPE_STRING else n.get("n", "")), "")
 		if f != "":
 			out[f] = true
+	return out
+
+## ダメージの種類ごとの倍率と、効かない状態。{"mult": {種類: 倍率}, "ci": {状態: true}}
+## 種類: fire / cold / lightning / poison / acid / necrotic / radiant / thunder / psychic / force、
+##   武器は bludgeoning / piercing / slashing。「魔法でない武器」だけに効くものは nm_ を付ける。spell は呪文の傷
+static func damage_mods(m: Dictionary) -> Dictionary:
+	var src := _lookup(String(m.get("index", "")))
+	var mult := {}
+	for pair in [["re", RESIST], ["im", IMMUNE], ["vu", VULNERABLE]]:
+		for s in src.get(pair[0], []):
+			for k in _damage_keys(String(s)):
+				var v: float = pair[1]
+				if pair[0] == "im" and (WEAPON_TYPES.has(k) or k.begins_with("nm_")):
+					v = IMMUNE_WEAPON
+				mult[k] = float(mult.get(k, 1.0)) * v
+	var ci := {}
+	for c in src.get("ci", []):
+		ci[String(c)] = true
+	return {"mult": mult, "ci": ci}
+
+static func _damage_keys(s: String) -> Array:
+	var t := s.to_lower()
+	var out: Array = []
+	if t.contains("damage from spells"):
+		return ["spell"]
+	if t.contains("wielded by good"):
+		return []        # 善の者が振るう魔法の武器だけ(この迷宮では見分けない)
+	if t.contains("nonmagical"):
+		for w in WEAPON_TYPES:
+			if t.contains(w):
+				out.append("nm_" + w)
+		return out
+	for part in t.replace(" and ", ", ").split(","):
+		var k := part.strip_edges()
+		if k != "":
+			out.append(k)
 	return out
 
 ## 耐久力の修正値(しぶとさの判定に使う)

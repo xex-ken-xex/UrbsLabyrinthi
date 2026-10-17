@@ -101,6 +101,20 @@ var squeeze_t := 0.0          # 扉の下をくぐっている
 var _trait2_t := 0.0
 var _note_cd := 0.0
 var _glow_vis := false
+# 第三弾の特徴
+var dmods := {}               # ダメージの種類 → 倍率(耐性・無効・弱点。MonTraits.damage_mods)
+var cimm := {}                # 効かない状態(SRD の ci。Stunned、Unconscious など)
+var legend := 0               # 伝説的な抵抗の残り(気絶・眠り・足止めを跳ね返す)
+var spells: Array = []        # 唱える呪文(MonSpells)
+var spell_cds := {}           # 呪文 → 残りの待ち時間
+var cast_id := ""             # 詠唱している呪文
+var cast_t := 0.0
+var cast_at := Vector2.ZERO   # 狙った所
+var cast_tgt: Hero = null
+var vanish_t := 0.0           # 姿を消している
+var misty_used := false
+var mist_t := 0.0             # 霧になって逃げている
+var heat_cd := 0.0
 # 眠らせる(Spawner)
 var dormant := false          # 仲間から遠いので、動きも描画も止めている
 var light := false            # ワンダリング・モンスターの軽い歩き方(位置だけ Spawner が進める)
@@ -139,6 +153,14 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	charge_cd = randf_range(0.5, 2.0)
 	web_attack = (m.get("attacks", []) as Array).any(func(a): return String(a.get("n", "")) == "Web")
 	web_cd = randf_range(1.0, 3.0)
+	var dm := MonTraits.damage_mods(m)
+	dmods = dm["mult"]
+	cimm = dm["ci"]
+	legend = 3 if traits.has("legend") else 0
+	if traits.has("caster"):
+		spells = MonSpells.kit_for(m, mon_type())
+		for sid in spells:
+			spell_cds[sid] = randf_range(1.5, 4.0)
 	# 出た瞬間から、見えるかを決めておく(暗がりに出た魔物が、最初のコマだけ見えないように)
 	var vc := fl.map.cell_of(pos)
 	visible = fl.map.in_bounds(vc.x, vc.y) and fl.map.visible[fl.map.idx(vc.x, vc.y)] == 1
@@ -274,6 +296,34 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 		_note("冷気に弱い", Color("9ad8ff"))
 	if traits.has("sun_weak") and in_light:
 		amount *= 1.3
+	# 耐性・無効・弱点(SRD の re / im / vu)。武器なら、その武器の傷の種類
+	var dtype := elem
+	var magic := spell
+	if dtype == "" and spell:
+		dtype = "force"
+	elif dtype == "" and src is Hero and is_instance_valid(src):
+		dtype = (src as Hero).weapon_dtype()
+		magic = (src as Hero).weapon_magic()
+	var dm := damage_mult(dtype, magic, spell)
+	if dm != 1.0:
+		amount *= dm
+		if dm <= 0.0:
+			_note("効かない", Color(0.75, 0.75, 0.8))
+		elif dm < 1.0:
+			_note("効きが悪い", Color(0.8, 0.8, 0.85))
+		else:
+			_note("よく効く!", Color("ffd27a"))
+	if traits.has("heated") and src is Hero and is_instance_valid(src) and elem == "" and not spell and heat_cd <= 0.0 \
+			and position.distance_to(src.position) <= radius + src.radius + 40.0:
+		# 熱い体: 近くで殴ると、殴った側が火傷する
+		heat_cd = 0.8
+		(src as Hero).damage(maxf(1.0, dmg * 0.3), position, false, mon_type())
+		Sfx.cue(game_floor, src.position, "burn")
+	if amount <= 0.0:
+		flash = 0.06
+		if state == "idle" or state == "neutral" or state == "wander":
+			game_floor.alert_encounter(enc_id)
+		return
 	if traits.has("reckless"):
 		amount *= 1.15
 	var red := clampf((ac - 10) * 0.03, 0.0, 0.45)
@@ -290,6 +340,8 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 	game_floor.add_child(Spark.make(position - from_dir.normalized() * radius * 0.6, 10.0, Color("fff0a0"), 0.14))
 	if hp <= 0.0 and _hold_on(final, elem):
 		hp = 1.0
+	if hp <= 0.0 and traits.has("misty") and not misty_used:
+		_mist_away()
 	if hp <= 0.0:
 		_die()
 		return
@@ -299,17 +351,65 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 		target = src
 	_check_flee(src as Hero if src is Hero and is_instance_valid(src) else null)
 
+## ダメージの倍率(耐性・無効・弱点)。dtype は傷の種類、magic は魔力を帯びた武器か、spell は呪文か
+func damage_mult(dtype: String, magic: bool, spell: bool) -> float:
+	var k := float(dmods.get(dtype, 1.0))
+	if not magic and not spell:
+		k *= float(dmods.get("nm_" + dtype, 1.0))
+	if spell:
+		k *= float(dmods.get("spell", 1.0))
+	return k
+
+## 状態が効かないか(SRD の ci、妖精の血)。cond: stun 気絶 / sleep 眠り / blind 目くらまし / hold 足止め・網
+func immune_to(cond: String) -> bool:
+	match cond:
+		"stun":
+			return cimm.has("Stunned") or cimm.has("Paralyzed")
+		"sleep":
+			return cimm.has("Unconscious") or traits.has("fey_anc")
+		"blind":
+			return cimm.has("Blinded")
+		"hold":
+			return cimm.has("Restrained") or cimm.has("Grappled")
+		"prone":
+			return cimm.has("Prone")
+		"slow":
+			return traits.has("immutable")
+		"poison":
+			return cimm.has("Poisoned") or dmods.get("poison", 1.0) == 0.0
+	return false
+
+## 状態を弾くか(効かない、または伝説的な抵抗)。弾いたら true
+func _shrug(cond: String) -> bool:
+	if immune_to(cond):
+		_note({"sleep": "眠らない", "poison": "毒が効かない"}.get(cond, "効かない"), Color(0.8, 0.8, 0.85))
+		return true
+	if legend > 0:
+		legend -= 1
+		_cue_seen("shrug")
+		_note("跳ね返した(残り%d)" % legend, Color("ffd27a"))
+		return true
+	return false
+
 func apply_slow(secs: float, v: float = 0.45) -> void:
+	if slow_t <= 0.0 and _shrug("slow"):
+		return
 	slow_t = maxf(slow_t, secs)
 	slow_v = v
 
-func apply_stun(secs: float) -> void:
+func apply_stun(secs: float, cond: String = "stun") -> void:
+	if stun_t <= 0.0 and _shrug(cond):
+		return
 	stun_t = maxf(stun_t, secs)
+	_end_cast()
 
 func apply_sunder(secs: float) -> void:
 	sunder_t = maxf(sunder_t, secs)
 
 func poison(secs: float, dps: float) -> void:
+	if immune_to("poison"):
+		_note("毒が効かない", Color(0.7, 0.85, 0.6))
+		return
 	poison_dps = maxf(poison_dps if poison_t > 0.0 else 0.0, dps)
 	poison_t = maxf(poison_t, secs)
 
@@ -397,11 +497,12 @@ func _can_sense(h: Hero) -> bool:
 		# 迷宮を覚えている: 遠くから、壁越しにも迫る
 		cells *= 1.5
 		through = cells
-	cells *= 1.0 - h.ch.skill_fx("stealth")    # 〈隠密〉
+	if not traits.has("devil_sight"):
+		cells *= 1.0 - h.ch.skill_fx("stealth")    # 〈隠密〉(悪魔の目は見通す)
 	var d := position.distance_to(h.position)
 	if d > cells * Balance.CELL:
 		return false
-	if not asleep and d <= through * (1.0 - h.ch.skill_fx("stealth")) * Balance.CELL:
+	if not asleep and d <= through * (1.0 if traits.has("devil_sight") else 1.0 - h.ch.skill_fx("stealth")) * Balance.CELL:
 		return true
 	var a := game_floor.map.cell_of(position)
 	var b := game_floor.map.cell_of(h.position)
@@ -553,6 +654,14 @@ func _chase(delta: float) -> void:
 	if squeeze_t > 0.0:
 		_squeeze_step(delta)
 		return
+	if cast_t > 0.0:
+		_cast_step(delta)
+		return
+	if mist_t > 0.0:
+		_steer(delta, position - to_t, move_speed() * 1.3)     # 霧になって離れる
+		return
+	if not spells.is_empty() and _try_cast(dist, seen):
+		return
 	if web_attack and web_cd <= 0.0 and seen and dist > 60.0 and dist < 200.0 and target.stuck_t <= 0.0:
 		_shoot_web(target)
 	if flyby_t > 0.0:
@@ -695,6 +804,11 @@ func _draw_overlays(dy: float = 0.0) -> void:
 		draw_arc(Vector2.ZERO, radius + 1.5, 0.0, TAU, 20, Color(0.55, 0.9, 0.35, 0.7), 2.0)
 	if stun_t > 0.0:
 		UI.text_center(self, 0.0, -radius - 16.0 + dy, "zzz", 12, Color(0.8, 0.9, 1.0))
+	if cast_t > 0.0:
+		# 詠唱: 足もとに紫の輪が満ちていく。頭上に呪文の名前
+		var k := 1.0 - cast_t / MonSpells.CAST_TIME
+		draw_arc(Vector2.ZERO, radius + 6.0, -PI / 2.0, -PI / 2.0 + TAU * k, 24, Color(0.8, 0.55, 1.0, 0.9), 2.5)
+		UI.text_center(self, 0.0, -radius - 26.0 + dy, String(MonSpells.def(cast_id).get("name", "")), 12, Color(0.88, 0.75, 1.0))
 	if hp < max_hp:
 		var bw := maxf(radius * 2.0, 20.0)
 		draw_rect(Rect2(-bw / 2.0, -radius - 9.0 + dy, bw, 4.0), Color(0, 0, 0, 0.7))
@@ -716,6 +830,14 @@ func _tick_traits(delta: float) -> void:
 	grab_cd = maxf(0.0, grab_cd - delta)
 	rust_cd = maxf(0.0, rust_cd - delta)
 	_emerge_cd = maxf(0.0, _emerge_cd - delta)
+	heat_cd = maxf(0.0, heat_cd - delta)
+	vanish_t = maxf(0.0, vanish_t - delta)
+	if mist_t > 0.0:
+		mist_t -= delta
+		if mist_t <= 0.0:
+			traits.erase("ghost")
+	for sid in spell_cds:
+		spell_cds[sid] = maxf(0.0, float(spell_cds[sid]) - delta)
 	web_cd = maxf(0.0, web_cd - delta)
 	lit_cd = maxf(0.0, lit_cd - delta)
 	stench_cd = maxf(0.0, stench_cd - delta)
@@ -757,6 +879,10 @@ func _trait_look(c: Vector2i) -> void:
 		_in_wall = inside
 		if inside:
 			a = minf(a, 0.45)
+	if vanish_t > 0.0 and flash <= 0.0:
+		a = minf(a, 0.12)       # 姿消し
+	if mist_t > 0.0:
+		a = minf(a, 0.4)        # 霧
 	modulate.a = a
 
 func _cue_seen(id: String) -> void:
@@ -1038,3 +1164,173 @@ func _squeeze_step(delta: float) -> void:
 	intent = to.normalized()
 	self_move += step
 	position += step
+
+# ---------- 第三弾: 呪文、霧になって逃げる ----------
+
+## 唱える呪文を選んで、詠唱を始める。始めたら true
+func _try_cast(dist: float, seen: bool) -> bool:
+	if hidden_form() or windup_t > 0.0 or charge_t > 0.0:
+		return false
+	for sid in spells:
+		if float(spell_cds.get(sid, 0.0)) > 0.0:
+			continue
+		var sp := MonSpells.def(sid)
+		var k := String(sp["kind"])
+		var reach := float(sp["range"]) * Balance.CELL
+		if k == "heal":
+			var who := _hurt_ally(reach)
+			if who == null:
+				continue
+			_begin_cast(sid, who.position, null)
+			return true
+		if k == "blink":
+			if dist > radius + target.radius + 30.0 or hp_frac() > 0.7:
+				continue
+			_begin_cast(sid, position, target)
+			return true
+		if k == "vanish":
+			if vanish_t > 0.0 or dist > reach:
+				continue
+			_begin_cast(sid, position, target)
+			return true
+		if not seen or dist > reach or dist < radius + target.radius + 8.0 and k == "bolt":
+			continue
+		_begin_cast(sid, target.position, target)
+		return true
+	return false
+
+func _hurt_ally(reach: float) -> Enemy:
+	var best: Enemy = null
+	var low := 0.7
+	for en in game_floor.enemies:
+		if en.dead or en.dormant or en.state == "neutral" or position.distance_to(en.position) > reach:
+			continue
+		if en.hp_frac() < low:
+			low = en.hp_frac()
+			best = en
+	return best
+
+func _begin_cast(sid: String, at: Vector2, tgt: Hero) -> void:
+	var sp := MonSpells.def(sid)
+	cast_id = sid
+	cast_at = at
+	cast_tgt = tgt
+	cast_t = MonSpells.CAST_TIME
+	spell_cds[sid] = float(sp["cd"]) * randf_range(0.9, 1.2)
+	_cue_seen("chant")
+
+func _end_cast() -> void:
+	cast_t = 0.0
+	cast_id = ""
+	cast_tgt = null
+
+## 詠唱の間は止まって、狙いを追う。唱え終えたら放つ
+func _cast_step(delta: float) -> void:
+	if cast_tgt != null and is_instance_valid(cast_tgt) and not cast_tgt.down:
+		cast_at = cast_tgt.position
+		intent = (cast_at - position).normalized() * 0.01
+	cast_t -= delta
+	if cast_t <= 0.0:
+		var sid := cast_id
+		var at := cast_at
+		var tgt := cast_tgt
+		_end_cast()
+		_cast_fire(sid, at, tgt)
+
+func _cast_fire(sid: String, at: Vector2, tgt: Hero) -> void:
+	var sp := MonSpells.def(sid)
+	var cue := String(sp.get("cue", ""))
+	match String(sp["kind"]):
+		"bolt":
+			var n := int(sp.get("count", 1))
+			var base := (at - position).normalized()
+			for i in n:
+				var d := base.rotated((i - (n - 1) / 2.0) * 0.18)
+				var p := Projectile.new()
+				p.setup_enemy(game_floor, position + d * radius, d, maxf(1.0, dmg * float(sp["mult"]) * randf_range(0.85, 1.15)), sp["color"], mon_type())
+				p.speed = float(sp.get("speed", 300.0))
+				p.life = float(sp["range"]) * Balance.CELL * 1.3 / p.speed
+				p.elem = String(sp["elem"])
+				p.spell = true
+				p.chill = float(sp.get("chill", 0.0))
+				game_floor.add_child(p)
+			_cue_seen(cue)
+		"hold":
+			if tgt != null and is_instance_valid(tgt) and not tgt.down and not tgt.is_rolling():
+				tgt.hold("hold", float(sp["secs"]))
+				Sfx.cue(game_floor, tgt.position, cue)
+		"sleep", "vine":
+			var hit := false
+			for h in game_floor.heroes:
+				if not h.down and not h.is_rolling() and h.position.distance_to(at) <= float(sp["radius"]):
+					h.hold("sleep" if String(sp["kind"]) == "sleep" else "vine", float(sp["secs"]))
+					hit = true
+			game_floor.add_child(Spark.make(at, float(sp["radius"]), Color(0.8, 0.75, 1.0) if String(sp["kind"]) == "sleep" else Color(0.5, 0.8, 0.4), 0.4, true))
+			Sfx.cue(game_floor, at, cue)
+			if hit and String(sp["kind"]) == "sleep":
+				game_floor.message.emit("%sの眠りの呪文で、仲間が眠った" % display_name, "danger")
+		"charm":
+			if tgt != null and is_instance_valid(tgt) and not tgt.down:
+				tgt.confuse_t = maxf(tgt.confuse_t, float(sp["secs"]))
+				Sfx.cue(game_floor, tgt.position, cue)
+				game_floor.message.emit("%sは%sに魅入られた。しばらく前後左右が逆になる" % [tgt.ch.name, display_name], "danger")
+		"heat":
+			if tgt != null and is_instance_valid(tgt) and not tgt.down:
+				tgt.damage(maxf(1.0, dmg * float(sp["mult"])), position, true, mon_type())
+				Sfx.cue(game_floor, tgt.position, cue)
+		"dark":
+			for h in game_floor.heroes:
+				if not h.down and h.position.distance_to(at) <= float(sp["radius"]):
+					h.blind_t = maxf(h.blind_t, float(sp["secs"]))
+			game_floor.add_child(Spark.make(at, float(sp["radius"]), Color(0.08, 0.05, 0.12), 0.8, true))
+			Sfx.cue(game_floor, at, cue)
+			game_floor.darkened.emit()
+		"heal":
+			var who := _hurt_ally(float(sp["range"]) * Balance.CELL)
+			if who != null:
+				var n2 := who.max_hp * float(sp["frac"])
+				who.hp = minf(float(who.max_hp), who.hp + n2)
+				if who.visible:
+					Sfx.cue(game_floor, who.position, cue)
+					game_floor.spawn_text(who.position + Vector2(0, -who.radius - 8), "+%d" % int(n2), Color("7be08a"))
+		"vanish":
+			_cue_seen(cue)
+			vanish_t = float(sp["secs"])
+		"blink":
+			var to := _blink_spot(int(sp["cells"]))
+			if to.x < INF:
+				_cue_seen(cue)
+				position = to
+				if visible:
+					Sfx.cue(game_floor, to, "warp_out")
+
+## 霧の歩み: 仲間から離れた、通れる床(見つからなければ INF)
+func _blink_spot(cells: int) -> Vector2:
+	var map := game_floor.map
+	var mc := map.cell_of(position)
+	var away := Vector2.ZERO
+	for h in game_floor.heroes:
+		if not h.down:
+			away += position - h.position
+	var best := Vector2(INF, INF)
+	var best_s := -INF
+	for i in 24:
+		var c := mc + Vector2i(randi_range(-cells, cells), randi_range(-cells, cells))
+		if not map.in_bounds(c.x, c.y) or not map.monster_passable(c.x, c.y) or not map.los(mc.x, mc.y, c.x, c.y):
+			continue
+		var p := map.center_of(c)
+		var s := (p - position).dot(away.normalized()) + p.distance_to(position) * 0.2
+		if s > best_s:
+			best_s = s
+			best = p
+	return best
+
+## 霧になって逃げる(吸血鬼): 一度だけ、倒れる代わりに霧になって壁を抜け、離れていく
+func _mist_away() -> void:
+	misty_used = true
+	hp = maxf(1.0, max_hp * 0.2)
+	mist_t = 6.0
+	traits["ghost"] = true
+	_end_cast()
+	_cue_seen("mist")
+	_note("霧になった", Color(0.85, 0.85, 0.95))

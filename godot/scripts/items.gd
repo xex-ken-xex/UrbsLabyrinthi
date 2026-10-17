@@ -61,7 +61,7 @@ const BASE_ITEMS := {
 	"greataxe": {"name": "大斧", "kind": "weapon", "cat": "axe", "power": 5.0, "price": 420, "desc": "蛮族が好む重い斧。"},
 	"spear": {"name": "槍", "kind": "weapon", "cat": "spear", "power": 2.5, "price": 140, "desc": "突き押す。"},
 	"quarterstaff": {"name": "杖", "kind": "weapon", "cat": "staff", "power": 1.0, "price": 30, "desc": "ただの木の杖。"},
-	"crystal_staff": {"name": "魔晶の杖", "kind": "weapon", "cat": "staff", "power": 1.5, "spell": 2.0, "price": 300, "desc": "燐晶を嵌めた杖。呪文の威力+2。"},
+	"crystal_staff": {"name": "魔晶の杖", "kind": "weapon", "magic": true, "cat": "staff", "power": 1.5, "spell": 2.0, "price": 300, "desc": "燐晶を嵌めた杖。呪文の威力+2。"},
 	"shortbow": {"name": "短弓", "kind": "weapon", "cat": "bow", "power": 1.5, "spell": 1.0, "price": 150, "desc": "軽い弓。矢の威力+1。"},
 	# 珍しい武器(店に無い。遺体から、まれに出る)。tech で固有の技
 	"shadow_dagger": {"name": "影縫いの短剣", "kind": "weapon", "cat": "dagger", "power": 2.0, "price": 600, "rare": true, "tech": "w_shadow",
