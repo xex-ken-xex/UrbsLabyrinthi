@@ -1,13 +1,16 @@
 class_name Sfx
 extends Node2D
-## 効果音の代わりの、ベタな擬音の文字(「ギィ…」「バチン!」)。その場で少し浮いて消える。
-## 音はまだ無い(#22)。音を入れたら、音ありの設定のときは cue() で鳴らし、文字は出さない。
+## ベタな擬音の文字(「ギィ…」「バチン!」)。このゲームの手ごたえの本体(ken 10/16: 音は入れない)。
+## 文字は擬音用のフォント(UI.cue_font)で、一文字ずつ動く。動き方は STYLE(擬音ごと)で決める:
+##   pop 弾けて浮く / slam 大きく叩きつけて縮み、揺れる / bounce 一文字ずつ跳ねながら出る /
+##   shake 震え続ける / stretch 一文字ずつ伸びて出る(… や ー が間延びする) / soft ふわっと出て消える /
+##   snap 横から素早く滑り込む / wave 波打つ
 
 const CUES := {
 	"door": ["ギィ…", Color(0.9, 0.85, 0.75)],
 	"door_secret": ["ゴゴゴ…", Color(0.85, 0.8, 1.0)],
 	"unlock": ["カチリ", Color(1.0, 0.92, 0.6)],
-	"unlock_fail": ["ガチャ…", Color(1.0, 0.6, 0.55)],
+	"unlock_fail": ["ガチャガチャッ", Color(1.0, 0.6, 0.55)],
 	"trap": ["バチン!", Color(1.0, 0.45, 0.4)],
 	"trap_alarm": ["キィィィ!", Color(1.0, 0.7, 0.4)],
 	"trap_found": ["おや?", Color(1.0, 0.85, 0.5)],
@@ -20,7 +23,7 @@ const CUES := {
 	"rest": ["パチパチ…", Color(1.0, 0.75, 0.45)],
 	"crystal": ["キラッ", Color(0.75, 0.95, 1.0)],
 	"crystal_big": ["ゴロッ", Color(0.75, 0.95, 1.0)],
-	"stun": ["ピヨ…", Color(1.0, 0.95, 0.55)],
+	"stun": ["ピヨピヨ", Color(1.0, 0.95, 0.55)],
 	"sunder": ["バキッ", Color(1.0, 0.7, 0.45)],
 	"exhale": ["ゴオォォ…", Color(1.0, 0.55, 0.45)],
 	"sealed": ["ズン…", Color(0.85, 0.7, 0.95)],
@@ -31,8 +34,8 @@ const CUES := {
 	"burnt": ["プスプス…", Color(0.6, 0.55, 0.55)],
 	"munch": ["モグモグ", Color(1.0, 0.88, 0.65)],
 	"growl": ["ぐぅ〜", Color(0.95, 0.85, 0.7), 0.85],
-	"growl_hard": ["ぐぅぅ〜…", Color(1.0, 0.7, 0.6)],
-	"bellyache": ["グルル…", Color(0.7, 0.85, 0.5)],
+	"growl_hard": ["ぐぎゅるる〜", Color(1.0, 0.7, 0.6)],
+	"bellyache": ["ギュルル…", Color(0.7, 0.85, 0.5)],
 	"charge_hit": ["ドンッ!", Color(1.0, 0.7, 0.4)],
 	"charge_miss": ["ブンッ", Color(0.85, 0.85, 0.9)],
 	# 罠(TrapFx と Main._trigger_trap)。3つ目の数は、文字の大きさの倍率
@@ -54,10 +57,10 @@ const CUES := {
 	"gas": ["シュー…", Color(0.8, 0.75, 0.95)],
 	"swing": ["ブォン", Color(0.85, 0.85, 0.95)],
 	"jet": ["ゴッ", Color(1.0, 0.55, 0.25)],
-	"pit": ["ズボッ", Color(0.85, 0.7, 0.55)],
+	"pit": ["ガコン!", Color(0.85, 0.7, 0.55), 1.2],
 	"warp": ["ﾌｯ", Color(0.75, 0.7, 1.0)],
 	"warp_out": ["ﾌｯ", Color(0.75, 0.7, 1.0), 0.75],
-	"squeak": ["キュッ", Color(1.0, 0.85, 0.6)],
+	"squeak": ["ギシッ", Color(1.0, 0.85, 0.6)],
 	"summon": ["ズモモ…", Color(0.8, 0.5, 0.9), 1.3],
 	"rust": ["ジュワッ", Color(0.9, 0.55, 0.35)],
 	"spin": ["グルン", Color(0.9, 0.85, 1.0)],
@@ -71,47 +74,137 @@ const CUES := {
 	"chill": ["ヒュオォ…", Color(0.75, 0.9, 1.0)],
 	"teeth": ["ガチン!", Color(1.0, 0.7, 0.5)],
 	"lift": ["フワッ", Color(0.85, 0.85, 1.0)],
+	# 倒れる・起きる・強くなる・倒す・転がる
+	"down": ["バタッ", Color(1.0, 0.5, 0.45), 1.2],
+	"revive": ["ハッ!", Color(0.7, 1.0, 0.75)],
+	"levelup": ["パァァッ", Color(0.6, 0.85, 1.0), 1.2],
+	"kill": ["ドサッ", Color(0.8, 0.75, 0.7)],
+	"dodge": ["サッ", Color(0.85, 0.9, 1.0), 0.85],
+	# 迷宮で使う道具
+	"glass": ["パリン", Color(0.85, 0.95, 1.0)],
+	"ignite": ["ボッ", Color(1.0, 0.8, 0.4)],
+	"recall": ["シュワワ…", Color(0.75, 0.85, 1.0)],
+	# スキル(SKILL_CUE)
+	"sk_rush": ["ダダダッ", Color(1.0, 0.8, 0.55)],
+	"sk_power": ["フンッ!", Color(1.0, 0.7, 0.45)],
+	"sk_wall": ["ガシィン", Color(0.85, 0.9, 1.0)],
+	"sk_sweep": ["ブオンッ", Color(0.9, 0.9, 1.0)],
+	"sk_rage": ["ウオォォ!", Color(1.0, 0.45, 0.35), 1.2],
+	"sk_charge": ["ドドドッ", Color(1.0, 0.75, 0.5)],
+	"sk_roar": ["ガアァッ!", Color(1.0, 0.55, 0.4), 1.3],
+	"sk_quake": ["ズズゥン", Color(0.9, 0.75, 0.55), 1.3],
+	"sk_throw": ["シュッ", Color(0.9, 0.9, 0.95)],
+	"sk_haste": ["シュタッ", Color(0.8, 1.0, 0.9)],
+	"sk_smoke": ["ボフッ", Color(0.8, 0.8, 0.85)],
+	"sk_stab": ["ズブッ", Color(1.0, 0.55, 0.5)],
+	"sk_bolt": ["ピシュン", Color(0.75, 0.8, 1.0)],
+	"sk_fire": ["ボウッ", Color(1.0, 0.55, 0.25), 1.2],
+	"sk_frost": ["パキパキッ", Color(0.7, 0.9, 1.0)],
+	"sk_thunder": ["バリバリッ!", Color(1.0, 1.0, 0.6), 1.2],
+	"sk_heal": ["ポワッ", Color(0.6, 1.0, 0.7)],
+	"sk_holy": ["カッ!", Color(1.0, 0.95, 0.7), 1.2],
+	"sk_bless": ["キラキラ", Color(1.0, 0.95, 0.7)],
+	"sk_mass_heal": ["ポワァァ…", Color(0.6, 1.0, 0.7)],
+	"sk_arrow": ["ヒュンッ", Color(0.85, 0.95, 0.85)],
+	"sk_triple": ["ヒュヒュヒュッ", Color(0.85, 0.95, 0.85)],
+	"sk_snare": ["ビシッ", Color(0.9, 0.85, 0.6)],
+	"sk_snipe": ["ズドンッ", Color(1.0, 0.8, 0.5), 1.2],
+	"sk_shield": ["キィィン", Color(0.75, 0.85, 1.0)],
+	"sk_sleep": ["モワモワ…", Color(0.8, 0.75, 0.95)],
+	"sk_regen": ["ポワァ…", Color(0.7, 1.0, 0.8)],
+	"sk_spin": ["グルンッ", Color(0.9, 0.9, 1.0)],
+	"sk_twin": ["シュシュッ", Color(0.9, 0.9, 1.0)],
+	"sk_cleave": ["ガゴンッ", Color(1.0, 0.7, 0.45), 1.2],
+	"sk_bonk": ["ゴンッ", Color(1.0, 0.8, 0.5)],
+	"sk_pierce": ["ズドッ", Color(1.0, 0.75, 0.55)],
+	"sk_aim": ["キリキリ…", Color(0.9, 0.9, 0.8)],
+	"sk_focus": ["ブゥン…", Color(0.7, 0.75, 1.0)],
+	"sk_shadow": ["ズッ", Color(0.7, 0.6, 0.9)],
+	"sk_rend": ["ドゴォッ", Color(1.0, 0.6, 0.35), 1.4],
+	"sk_comet": ["ギュオッ", Color(0.75, 0.9, 1.0)],
 	# 能力値のロール(DiceFx。サイコロ3つぶん)
 	"dice_1": ["ゴロゴロ", Color(1.0, 0.92, 0.7)],
 	"dice_2": ["ゴロ", Color(0.95, 0.85, 0.65)],
 	"dice_3": ["ゴロゴロゴロ", Color(1.0, 0.95, 0.8)],
+}
+## 擬音ごとの動き方(無いものは pop)
+const STYLE := {
+	"door": "stretch", "door_secret": "shake", "unlock": "pop", "unlock_fail": "shake",
+	"trap": "slam", "trap_alarm": "shake", "trap_found": "soft", "disarm": "pop", "disarm_fail": "slam",
+	"corpse": "bounce", "drink": "pop", "stairs": "bounce", "search": "bounce", "rest": "bounce",
+	"crystal": "soft", "crystal_big": "slam", "stun": "wave", "sunder": "slam", "exhale": "shake", "sealed": "slam",
+	"charge_full": "pop", "charge_hit": "slam", "charge_miss": "snap",
+	"sizzle": "stretch", "simmer": "bounce", "burnt": "soft", "munch": "bounce", "growl": "wave", "growl_hard": "wave", "bellyache": "shake",
+	"click": "pop", "fuse": "stretch", "boom": "slam", "spikes": "snap", "rumble": "shake", "smash": "slam", "creak": "shake",
+	"rubble": "shake", "thud": "slam", "clang": "slam", "flame": "stretch", "dart": "snap", "grind": "shake", "crush": "slam",
+	"net": "snap", "gas": "stretch", "swing": "snap", "jet": "pop", "pit": "slam", "warp": "soft", "warp_out": "soft",
+	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
+	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
+	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce",
+	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
+	"glass": "snap", "ignite": "pop", "recall": "stretch",
+	"sk_rush": "snap", "sk_power": "slam", "sk_wall": "slam", "sk_sweep": "snap", "sk_rage": "shake", "sk_charge": "shake",
+	"sk_roar": "slam", "sk_quake": "slam", "sk_throw": "snap", "sk_haste": "snap", "sk_smoke": "soft", "sk_stab": "pop",
+	"sk_bolt": "snap", "sk_fire": "slam", "sk_frost": "shake", "sk_thunder": "shake", "sk_heal": "soft", "sk_holy": "slam",
+	"sk_bless": "bounce", "sk_mass_heal": "stretch", "sk_arrow": "snap", "sk_triple": "snap", "sk_snare": "pop",
+	"sk_snipe": "slam", "sk_shield": "stretch", "sk_sleep": "wave", "sk_regen": "soft", "sk_spin": "wave", "sk_twin": "snap",
+	"sk_cleave": "slam", "sk_bonk": "slam", "sk_pierce": "snap", "sk_aim": "stretch", "sk_focus": "shake", "sk_shadow": "soft",
+	"sk_rend": "slam", "sk_comet": "snap",
+}
+
+## スキルを使ったときの擬音(スキルの id → CUES の id)
+const SKILL_CUE := {
+	"rush": "sk_rush", "power_up": "sk_power", "ironwall": "sk_wall", "sweep": "sk_sweep", "rage": "sk_rage", "charge": "sk_charge",
+	"roar": "sk_roar", "quake": "sk_quake", "knife": "sk_throw", "haste": "sk_haste", "smoke": "sk_smoke", "crit": "sk_stab",
+	"bolt": "sk_bolt", "fireball": "sk_fire", "frost": "sk_frost", "thunder": "sk_thunder", "heal": "sk_heal", "smite": "sk_holy",
+	"bless": "sk_bless", "mass_heal": "sk_mass_heal", "arrow": "sk_arrow", "triple": "sk_triple", "snare": "sk_snare",
+	"snipe": "sk_snipe", "mana_shield": "sk_shield", "sleep": "sk_sleep", "regen_light": "sk_regen", "w_spin": "sk_spin",
+	"w_twin": "sk_twin", "w_cleave": "sk_cleave", "w_stun": "sk_bonk", "w_pierce": "sk_pierce", "w_aim": "sk_aim",
+	"w_focus": "sk_focus", "w_shadow": "sk_shadow", "w_rend": "sk_rend", "w_comet": "sk_comet", "flash": "flash",
 }
 const LIFE := 0.9
 
 var text := ""
 var color := Color.WHITE
 var size := 1.0
+var style := "pop"
 var age := 0.0
+var _chars: PackedStringArray = []
+var _seed := 0.0
 
-## 音を鳴らす設定か(音を入れるまでは、いつも false)
-static func sound_on() -> bool:
-	return false
-
-## 擬音を出す(音ありなら、音を鳴らす)。parent は層(FloorInstance)など、pos はその中の位置
+## 擬音を出す。parent は層(FloorInstance)など、pos はその中の位置
 static func cue(parent: Node, pos: Vector2, id: String) -> void:
 	if parent == null or not CUES.has(id):
 		return
-	if sound_on():
-		return       # ここで音を鳴らす(#22)
 	var f := Sfx.new()
 	f.text = String(CUES[id][0])
 	f.color = CUES[id][1]
 	f.size = float(CUES[id][2]) if (CUES[id] as Array).size() > 2 else 1.0
+	f.style = String(STYLE.get(id, "pop"))
 	f.position = pos + Vector2(0, -22)
 	f.z_index = 21
 	parent.add_child(f)
 
+func _ready() -> void:
+	_chars = PackedStringArray()
+	for i in text.length():
+		_chars.append(text.substr(i, 1))
+	_seed = randf() * 10.0
+
+## 消えるまでの秒(大きいもの、文字の多いもの、伸びるものは長め)
+func life() -> float:
+	var l := LIFE * (1.0 + (size - 1.0) * 0.3)
+	match style:
+		"bounce", "stretch": l += 0.06 * _chars.size()
+		"slam", "shake", "wave": l += 0.2
+	return l
+
 func _process(delta: float) -> void:
 	age += delta
-	if age >= LIFE * (1.0 + (size - 1.0) * 0.3):
+	if age >= life():
 		queue_free()
 		return
 	queue_redraw()
 
 func _draw() -> void:
-	var life := LIFE * (1.0 + (size - 1.0) * 0.3)
-	var a := 1.0 - clampf((age - (life - 0.4)) / 0.4, 0.0, 1.0)
-	var pop := 1.0 + 0.25 * (1.0 - clampf(age / 0.12, 0.0, 1.0))
-	if size >= 2.0 and age < 0.3:
-		pop += 0.4 * (1.0 - age / 0.3)     # 大きな擬音は、最初にもう一回り大きく弾ける
-	UI.text_center(self, 0.0, -age * 14.0, text, int(14 * size * pop), Color(color.r, color.g, color.b, a))
+	CueText.draw_word(self, _chars, style, age, life(), 14.0 * size, color, _seed, size >= 2.0)

@@ -144,6 +144,7 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		stuck_t = 0.0
 		cancel_charge()
 		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
+		Sfx.cue(game_floor, position + Vector2(0, 14), "down")
 		downed.emit(self)
 
 ## 罠で動けなくなる。網と歯列は、攻撃を連打するともがいて早く抜けられる
@@ -178,6 +179,7 @@ func _lose_hp(n: float, col: Color) -> void:
 		poison_t = 0.0
 		stuck_t = 0.0
 		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
+		Sfx.cue(game_floor, position + Vector2(0, 14), "down")
 		downed.emit(self)
 
 func _struggle(delta: float) -> void:
@@ -201,6 +203,8 @@ func revive(frac: float) -> void:
 	down = false
 	ch.hp = maxf(1.0, ch.max_hp() * frac)
 	iframes = 1.0
+	if game_floor != null:
+		Sfx.cue(game_floor, position, "revive")
 
 func is_rolling() -> bool:
 	return roll_t > 0.0
@@ -287,6 +291,7 @@ func _move(delta: float) -> void:
 		roll_dir = facing if mv.length() <= 0.1 else mv.normalized()
 		roll_t = Balance.ROLL_TIME
 		roll_cd = ch.roll_cooldown()
+		Sfx.cue(game_floor, position + Vector2(0, 16), "dodge")
 		iframes = Balance.ROLL_TIME + 0.08
 	cmd["dodge"] = false
 	if roll_t > 0.0:
@@ -477,6 +482,12 @@ func use_skill(id: String) -> bool:
 		cds[id] = float(sk["cd"])
 		if kind != "buff_party":
 			game_floor.spawn_text(position + Vector2(0, -radius - 22), String(sk["name"]), Color("ffe9a8"))
+		# 技の擬音: 攻める技は正面に、自分や仲間にかける技は体の上に
+		if Sfx.SKILL_CUE.has(id):
+			var at := position + Vector2(0, 18)
+			if kind in ["projectile", "burst_ahead", "rush", "strike"]:
+				at = position + aim * 34.0 + Vector2(0, 14)
+			Sfx.cue(game_floor, at, String(Sfx.SKILL_CUE[id]))
 	return ok
 
 ## スキルの威力。杖の技「魔力の溜め」の間は、呪文が強まる

@@ -36,6 +36,15 @@ static func title_font() -> Font:
 			_title = font()
 	return _title
 
+## 擬音の文字: Dela Gothic One(太い描き文字。SIL OFL 1.1)
+static var _cue: Font
+static func cue_font() -> Font:
+	if _cue == null:
+		_cue = load("res://assets/fonts/DelaGothicOne-Regular.ttf") as Font
+		if _cue == null:
+			_cue = bold_font()
+	return _cue
+
 static func text(ci: CanvasItem, pos: Vector2, s: String, size: int = 14, color: Color = Color.WHITE, outline: bool = true) -> void:
 	if outline:
 		ci.draw_string_outline(font(), pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 4, Color(0, 0, 0, 0.85 * color.a))

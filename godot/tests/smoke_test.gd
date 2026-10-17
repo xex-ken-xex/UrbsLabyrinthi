@@ -1509,7 +1509,7 @@ func _test_game() -> void:
 	make._on_roll_stats()
 	var rs: Dictionary = make._cur()["stats"]
 	check(make._cur()["method"] == "roll" and Jobs.ABILS.all(func(x): return int(rs[x]) >= 3 and int(rs[x]) <= 18), "ふると、各能力値を3d6で振る")
-	check(make.get_children().any(func(n): return n is DiceFx) or Sfx.sound_on(), "ふると、ゴロゴロの擬音が出る")
+	check(make.get_children().any(func(n): return n is DiceFx), "ふると、ゴロゴロの擬音が出る")
 	make._rolling = 0.0
 	var before: Dictionary = make._cur()["stats"].duplicate()
 	make._on_class(CharaMake.CLASS_IDS.find("wizard"))
@@ -1667,7 +1667,17 @@ func _test_game() -> void:
 	# 擬音
 	var nk := fl.get_child_count()
 	Sfx.cue(fl, main.leader().position, "door")
-	check(fl.get_child_count() == nk + 1 and not Sfx.sound_on(), "音なしでは、擬音の文字が出る")
+	check(fl.get_child_count() == nk + 1, "擬音の文字が出る")
+	var unstyled: Array = []
+	for id in Sfx.CUES:
+		if not Sfx.STYLE.has(id) or not ["pop", "slam", "bounce", "shake", "stretch", "soft", "snap", "wave"].has(String(Sfx.STYLE[id])):
+			unstyled.append(id)
+	check(unstyled.is_empty() and UI.cue_font() != UI.font(), "どの擬音にも動き方があり、擬音用のフォントで描く %s" % str(unstyled))
+	var no_cue: Array = []
+	for sid in Jobs.SKILLS:
+		if not Sfx.SKILL_CUE.has(sid) or not Sfx.CUES.has(String(Sfx.SKILL_CUE[sid])):
+			no_cue.append(sid)
+	check(no_cue.is_empty(), "どのスキルにも擬音がある %s" % str(no_cue))
 	# スキル
 	var casts := 0
 	for h in main.heroes:
