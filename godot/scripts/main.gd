@@ -846,12 +846,35 @@ func _enter_room(pc: Vector2i) -> void:
 		log_msg("上の階から落ちてきた物が、底に積もっている。見上げると、竪坑の口が小さな四角に見える。", Color(0.78, 0.82, 0.86))
 		if PhosFlow.sump_has_lost(current, r):
 			log_msg("見覚えのある品が混じっている。上で失くした物が、ここまで落ちてきたらしい。", Color("f1d98a"))
+	else:
+		var fv := room_flavor(current, r)
+		if fv != "":
+			log_msg(fv, Color(0.74, 0.78, 0.82))
 	var feat: Variant = r.get("feature")
 	if typeof(feat) == TYPE_DICTIONARY:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))
 	var hook: Variant = r.get("hook")
 	if typeof(hook) == TYPE_STRING:
 		log_msg(hook, Color("c9b6ff"))
+
+## 部屋に初めて入ったときの描写(見える物と、聞こえる音かにおい。設計 §11.3)。部屋と夜で決まる(同じ部屋は同じ描写)
+static func room_flavor(fl: FloorInstance, r: Dictionary) -> String:
+	var see: Array = fl.style.get("see", [])
+	var hear: Array = fl.style.get("hear", [])
+	var smell: Array = fl.style.get("smell", [])
+	if see.is_empty():
+		return ""
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("flavor|%d|%d|%d" % [fl.floor_no, fl.night_no, int(r.get("id", 0))])
+	var out := String(see[rng.randi_range(0, see.size() - 1)])
+	var other: Array = hear if (rng.randf() < 0.5 or smell.is_empty()) else smell
+	if not other.is_empty():
+		out += String(other[rng.randi_range(0, other.size() - 1)])
+	if bool(r.get("lit", false)):
+		out += "灯守の灯が一つ、青い光を落としている。"
+	if String(r.get("kind", "")) == "pit":
+		out += "床の真ん中に、四角い穴が黒く口を開けている。下の階へ続いているらしい。"
+	return out
 
 func _open_doors_near_heroes() -> void:
 	var m := current.map

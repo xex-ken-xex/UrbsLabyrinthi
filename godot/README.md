@@ -357,6 +357,7 @@ godot --headless --path godot -s res://tests/spawner_test.gd               # 魔
 godot --headless --path godot -s res://tests/perf_probe.gd                 # 重さの比べ(ワンダリングを30組まで出す)
 godot --headless --path godot -s res://tests/abyss_test.gd                 # 縦穴を覗く、縄梯子、溜まり場、迷宮の断面
 godot --headless --path godot -s res://tests/flow_test.gd                  # 燐の流れ(燐晶の量、下の層の魔物、骨亡者、溜まり場、竜の気配)
+godot --headless --path godot -s res://tests/content_test.gd               # 迷宮の中身(部屋の描写、遺体の理由と等級、水ぎわの自生物)
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- /tmp   # 各画面を撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- /tmp  # 擬音の動き方を並べて撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/abyss_shot.gd -- /tmp # 縦穴を覗く・縄梯子・迷宮の断面を撮る
@@ -422,6 +423,8 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/flow_sh
 - 吐く夜の夜の間は、ワンダリング・モンスターの半分が一つ下の層の魔物になる(レベルはこの層 +2 まで)。
 - 第7層から下の吐く夜は、竜の気配がする。遺体の6割が焦げ、縦穴の縁に硫黄の華が吹き出し、夜の間は縁が熱い(2秒ごとに 1d4)。
 - 階に置く燐晶(宝の山と露頭)の量は、数理モデルの層ごとの目安 `kg_floor`(`data/manifest.json`)× `Balance.CRYSTAL_SCALE` に合わせる(`GroundItems.kg_factor`)。
+
+迷宮の中身(設計 §11)。部屋に初めて入ると、名前に続けて描写(見える物と、音かにおい。部屋と夜で決まる)をログに出す。遺体には死んだ理由がある: 罠のそば、巣の部屋を出てすぐ、縦穴の縁(骨。上の階から落ちた)、通路の行き止まり、竪坑の底。調べると等級(第1〜2層 灰、第3〜4層 青銅、第5〜6層 銀、第7層から 黒鉄)と理由がログに出る。骨の層の遺体の3割は120年前の遠征隊で、装備を落としやすい。水ぎわの自生物(水鏡草など)は水路と浅瀬のそばに生える。
 - 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
 - 拾うと、その物の絵が拾った仲間の頭の上へ跳ね上がり、右の地図の下に絵つきで知らせが出る(続けて同じ物を拾うと、数や重さをまとめる。`pickup_pop.gd`、`hud.gd`)。
 - 施錠された扉の解錠は、成功すると錠前の弓が外れて金の光が散り、失敗すると錠前が揺れて赤く光る(`unlock_fx.gd`)。

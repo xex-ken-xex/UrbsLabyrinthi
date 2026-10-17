@@ -25,6 +25,8 @@ const OUTCROP_MAX := 150        # 露頭の数の上限
 var _room_cells: Array = []     # Vector2i(部屋のマス)
 var _corr_cells: Array = []
 var _wall_cells: Array = []     # 壁に接している床のマス
+var _water_cells: Array = []    # 水路か浅瀬に接している床のマス(水ぎわの自生物)
+var _dead_ends: Array = []      # 通路の行き止まり(遺体の理由)
 
 func setup(floor_inst: FloorInstance) -> void:
 	fl = floor_inst
@@ -40,10 +42,23 @@ func setup(floor_inst: FloorInstance) -> void:
 			if absi(x - fl.up_cell.x) + absi(y - fl.up_cell.y) < 3 or absi(x - fl.down_cell.x) + absi(y - fl.down_cell.y) < 3:
 				continue
 			(_room_cells if t == FloorMap.ROOM else _corr_cells).append(c)
+			var wall := false
+			var wet := false
+			var open_n := 0
 			for dv in FloorMap.DIRS4:
-				if m.in_bounds(x + dv.x, y + dv.y) and m.tiles[m.idx(x + dv.x, y + dv.y)] == FloorMap.ROCK:
-					_wall_cells.append(c)
-					break
+				if not m.in_bounds(x + dv.x, y + dv.y):
+					continue
+				var nt := m.tiles[m.idx(x + dv.x, y + dv.y)]
+				wall = wall or nt == FloorMap.ROCK
+				wet = wet or nt == FloorMap.WATER or nt == FloorMap.SHALLOW
+				if not m.solid(x + dv.x, y + dv.y):
+					open_n += 1
+			if wall:
+				_wall_cells.append(c)
+			if wet:
+				_water_cells.append(c)
+			if t == FloorMap.CORR and open_n == 1:
+				_dead_ends.append(c)
 
 # ---------- 置く ----------
 
@@ -161,6 +176,7 @@ func _spawn_sump(room: Dictionary) -> void:
 	var cen := fl.map.center_of(cell)
 	for i in Dice.rng.randi_range(1, 2):
 		add_corpse(_free_pos(cen, 30.0), {}, "bones")
+		entries[-1]["why"] = "shaft"
 	for i in Dice.rng.randi_range(2, 4):
 		var id: String = ["relic_tag", "relic_coins", "relic_tools", "relic_gear", "potion", "lamp_oil"][Dice.rng.randi_range(0, 5)]
 		add_item(_free_pos(cen, 34.0), id)
@@ -244,20 +260,108 @@ func _spawn_forage() -> void:
 				break
 		var spot := String(row[2])
 		var c := _pick_cell(spot == "wall", 0.35 if spot == "corr" else 0.0)
+		if spot == "water" and not _water_cells.is_empty():
+			c = _water_cells[Dice.rng.randi_range(0, _water_cells.size() - 1)]     # 水ぎわの自生物は、水路と浅瀬のそばに
 		if c.x < 0:
 			continue
 		add_item(_jitter_in_cell(c), String(row[0]), 1 if Dice.rng.randf() < 0.8 else 2)
 
-## 先に来て、戻らなかった者たち。上の層ほど多い
+## 先に来て、戻らなかった者たち。上の層ほど多い。
+## 死んだ場所には理由がある(設計 §11.2): 罠の手前、巣の手前(巣の魔物にやられた)、縦穴の縁(上の階から落ちた)、
+## 通路の行き止まり(逃げ込んで力尽きた)。理由は調べたときにログに出る
+const CORPSE_WHY := {
+	"trap": "足もとの床に、仕掛けの跡がある。罠にかかったらしい。",
+	"nest": "爪と牙の跡がある。この先の巣の主にやられたらしい。",
+	"rim": "体じゅうの骨が折れている。上の階の縁から落ちてきたらしい。",
+	"dead_end": "行き止まりに追い詰められて、ここで力尽きたらしい。",
+	"shaft": "骨がばらばらに砕けている。竪坑を、上の階から落ちてきたらしい。",
+}
+const CORPSE_WHY_W := {"trap": 0.25, "nest": 0.25, "rim": 0.1, "dead_end": 0.12, "": 0.28}
+const RANKS := ["灰", "青銅", "銀", "黒鉄"]      # 潜行許可証の等級(層で決まる)
+const EXPEDITION_P := 0.3                       # 骨の層の遺体が、120年前の遠征隊である確率
+
+## 層の等級(第1〜2層 灰、第3〜4層 青銅、第5〜6層 銀、第7層から 黒鉄)
+static func rank_of(layer: int) -> String:
+	return RANKS[clampi(int((layer - 1) / 2), 0, RANKS.size() - 1)]
+
 func _spawn_corpses() -> void:
 	var cells := _room_cells.size() + _corr_cells.size()
 	var n := int(round(float(cells) / 300.0 * maxf(0.3, 1.0 - 0.07 * fl.layer_no)))
 	n = maxi(n, 1)
+	var nests: Array = []
+	for r in fl.map.rooms:
+		if r.get("encounter") != null and String(r.get("kind", "")) != "lair":
+			nests.append(r)
+	var rim: Array = PhosFlow.rim_cells(fl, 1, 2) if fl.floor_no > 1 else []
+	var traps: Array = fl.traps.filter(func(t): return not fl.map.solid(int(t["x"]), int(t["y"])))
 	for i in n:
-		var c := _pick_cell(Dice.rng.randf() < 0.5, 0.25)
-		if c.x >= 0:
-			var p := _jitter_in_cell(c)
-			add_corpse(p, _corpse_cause(p))
+		var why := _roll_why(traps, nests, rim)
+		var c := Vector2i(-1, -1)
+		var nest_id := -1
+		match why:
+			"trap":
+				var t: Dictionary = traps[Dice.rng.randi_range(0, traps.size() - 1)]
+				c = fl.map.nearest_walkable(Vector2i(int(t["x"]), int(t["y"])) + FloorMap.DIRS4[Dice.rng.randi_range(0, 3)], 2)
+			"nest":
+				var r: Dictionary = nests[Dice.rng.randi_range(0, nests.size() - 1)]
+				c = _outside_room(r)
+				nest_id = int(r["id"])
+			"rim":
+				c = rim[Dice.rng.randi_range(0, rim.size() - 1)]
+			"dead_end":
+				c = _dead_ends[Dice.rng.randi_range(0, _dead_ends.size() - 1)]
+		if c.x < 0:
+			why = ""
+			c = _pick_cell(Dice.rng.randf() < 0.5, 0.25)
+		if c.x < 0:
+			continue
+		var p := _jitter_in_cell(c)
+		add_corpse(p, _corpse_cause(p), "bones" if why == "rim" else "")
+		var e: Dictionary = entries[-1]
+		e["why"] = why
+		e["rank"] = rank_of(fl.layer_no)
+		if nest_id >= 0 and why == "nest":
+			e["nest"] = nest_id
+		if theme == "hone" and Dice.rng.randf() < EXPEDITION_P:
+			e["expedition"] = true
+
+func _roll_why(traps: Array, nests: Array, rim: Array) -> String:
+	var ok := {"trap": not traps.is_empty(), "nest": not nests.is_empty(), "rim": not rim.is_empty(), "dead_end": not _dead_ends.is_empty(), "": true}
+	var total := 0.0
+	for k in CORPSE_WHY_W:
+		if ok[k]:
+			total += float(CORPSE_WHY_W[k])
+	var pick := Dice.rng.randf() * total
+	for k in CORPSE_WHY_W:
+		if not ok[k]:
+			continue
+		pick -= float(CORPSE_WHY_W[k])
+		if pick <= 0.0:
+			return k
+	return ""
+
+## 巣の部屋の外の、入口から少し離れた床(巣の手前で見張りに殺された遺体)
+func _outside_room(r: Dictionary) -> Vector2i:
+	var m := fl.map
+	var cen: Array = r.get("center", [r["x"], r["y"]])
+	var start := m.nearest_walkable(Vector2i(int(cen[0]), int(cen[1])), 4)
+	if start.x < 0:
+		return start
+	var flow := m.compute_flow(start.x, start.y, 14)
+	var rid := int(r["id"])
+	var cands: Array = []
+	for i in flow.size():
+		var d := flow[i]
+		if d < 2 or d > 14 or m.room_at[i] == rid:
+			continue
+		var t := m.tiles[i]
+		if t == FloorMap.ROOM or t == FloorMap.CORR:
+			cands.append(i)
+	if cands.is_empty():
+		return Vector2i(-1, -1)
+	cands.sort_custom(func(a, b): return flow[a] < flow[b])
+	var k: int = cands[Dice.rng.randi_range(0, mini(5, cands.size() - 1))]      # 部屋を出てすぐの所
+	return Vector2i(k % m.w, k / m.w)
 
 # ---------- 魔物が倒れたとき ----------
 
@@ -348,19 +452,32 @@ func search_corpse(e: Dictionary) -> Array:
 		fl.message.emit("遺体の陰から、%sが現れた!" % nm, "danger")
 	return made
 
+## 調べたときに分かる、遺体の身の上(等級と、死んだ理由)。無ければ ""
+static func corpse_story(e: Dictionary) -> String:
+	var out := ""
+	if e.get("expedition", false):
+		out = "百二十年前の遠征隊の紋章をつけている。装備は古いが、作りがよい。"
+	elif String(e.get("rank", "")) != "":
+		out = "認識票は%s等級。" % String(e["rank"])
+	out += String(CORPSE_WHY.get(String(e.get("why", "")), ""))
+	return out
+
 const RARE_WEAPON_CHANCE := 0.04     # 遺体から、珍しい武器(固有の技つき)が出る確率
 
 func _loot_corpse(e: Dictionary) -> void:
 	var pos: Vector2 = e["pos"]
 	fl.message.emit("遺体を調べた", "info")
 	Sfx.cue(fl, pos, "corpse")
+	var lines := corpse_story(e)
+	if lines != "":
+		fl.message.emit(lines, "info")
 	for k in Dice.rng.randi_range(1, 3):
 		add_crystal(pos, Crystal.roll(base, Dice.rng, 0.2), Dice.rng.randf_range(0.08, 0.35) * Balance.CRYSTAL_SCALE / 0.3, _burst(110.0))
 	var table := [["relic_tag", 0.6], ["relic_coins", 0.45], ["relic_tools", 0.25], ["relic_gear", 0.15], ["potion", 0.12]]
 	for r in table:
 		if Dice.rng.randf() < float(r[1]):
 			add_item(pos, String(r[0]), 1, _burst(110.0))
-	if Dice.rng.randf() < 0.12:
+	if Dice.rng.randf() < (0.35 if e.get("expedition", false) else 0.12):     # 遠征隊の装備は古いが、作りがよい
 		var gid := ItemDB.roll_gear(fl.layer_no, Dice.rng)
 		if gid != "":
 			add_item(pos, gid, 1, _burst(110.0))
