@@ -1543,7 +1543,7 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 	var it := ItemDB.get_item(id)
 	var rare := int(it.get("price", 0)) >= 40 or String(it.get("kind", "")) in ["weapon", "armor", "acc"]
 	var magic := ItemDB.is_magic(id)
-	var icol := Color("d8b8ff") if magic else (Color("d8f0d8") if not rare else Color("ffe9a8"))
+	var icol := ItemDB.name_color(id, Color("d8f0d8") if not rare else Color("ffe9a8"))     # 魔法の品は格の色(薄緑・青・黄)
 	if magic and not back and Time.get_ticks_msec() - _magic_cue_ms > 400:
 		_magic_cue_ms = Time.get_ticks_msec()
 		Sfx.cue(h.game_floor, h.position, "magic_pick")      # 魔法の品は、ほかの拾い物と分けて鳴らす
@@ -1553,7 +1553,7 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 	if back:
 		log_msg("取り戻した: %s(上で失くした物)" % ItemDB.item_name(id), Color("f1d98a"))
 	elif magic:
-		log_msg("魔法の品を拾った: %s" % ItemDB.item_name(id), Color("d8b8ff"))
+		log_msg("魔法の品を拾った: %s" % ItemDB.item_name(id), icol)
 	elif rare:
 		log_msg("拾った: %s" % ItemDB.item_name(id), Color("ffe9a8"))
 

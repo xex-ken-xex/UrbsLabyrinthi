@@ -260,7 +260,7 @@ static func _tokens(map: FloorMap, room: Dictionary, mons: Array) -> Array:
 ## last_magic に、落とした魔法の品の id が入る
 static var last_magic := ""
 static func drop_loot(fl: FloorInstance, layer: int, pos: Vector2) -> String:
-	var mid := ItemDB.roll_magic(layer, Dice.rng, ["weapon", "armor", "acc"])
+	var mid := ItemDB.roll_magic_drop(layer, Dice.rng, ["weapon", "armor", "acc"])
 	last_magic = mid
 	if mid != "":
 		fl.ground.add_item(pos, mid, 1, Vector2.from_angle(Dice.rng.randf() * TAU) * 80.0)

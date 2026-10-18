@@ -68,6 +68,28 @@ func _test_data() -> void:
 		if String(ItemDB.ITEMS[ItemDB.roll_magic(10, rng, ["weapon", "armor", "acc"])]["kind"]) == "consumable":
 			gear_only = false
 	check(gear_only, "種類を絞れる(層の主は武器・防具・装飾品だけ)")
+	check(ItemDB.PLUS_ITEMS.has("m1_longsword") and ItemDB.PLUS_ITEMS.has("m3_plate") and ItemDB.item_name("m2_longsword") == "長剣+2"
+		and is_equal_approx(float(ItemDB.ITEMS["m2_longsword"]["power"]), float(ItemDB.ITEMS["longsword"]["power"]) + 2.0)
+		and int(ItemDB.ITEMS["m3_plate"]["ac"]) == int(ItemDB.ITEMS["plate"]["ac"]) + 3 and ItemDB.is_magic("m1_spear"), "ふつうの武器・防具の+1〜+3がある(長剣+2 は威力+2、板金鎧+3 は防御+3)")
+	var plus_shallow := true
+	var plus_seen := {}
+	for i in 400:
+		var a2 := ItemDB.roll_magic_drop(2, rng)
+		if ItemDB.PLUS_ITEMS.has(a2):
+			plus_seen[int(ItemDB.PLUS_ITEMS[a2]["plus"])] = true
+		if int(ItemDB.ITEMS[a2]["mlayer"]) > 2:
+			plus_shallow = false
+	var deep_plus := {}
+	for i in 400:
+		var a3 := ItemDB.roll_magic_drop(9, rng)
+		if ItemDB.PLUS_ITEMS.has(a3):
+			deep_plus[int(ItemDB.PLUS_ITEMS[a3]["plus"])] = true
+	check(plus_shallow and plus_seen.keys() == [1] and deep_plus.has(3), "落とし物の半分は+N。第2層では+1だけ、深い層では+3も出る")
+	check(ItemDB.grade("m1_longsword") == "plus1" and ItemDB.grade("m2_longsword") == "magic" and ItemDB.grade("flame_tongue") == "magic"
+		and ItemDB.grade("m3_plate") == "legend" and ItemDB.grade("sun_blade") == "legend" and ItemDB.grade("longsword") == "",
+		"名前の色: +1 は薄緑、名のある品と+2 は青、+3 と第6層からの品は黄色(ken 10/18)")
+	check(ItemDB.name_color("longsword", Color.RED) == Color.RED and ItemDB.name_color("m3_plate", Color.RED).r > 0.9 and ItemDB.name_color("flame_tongue", Color.RED).b > 0.9
+		and ItemDB.name_color("m1_spear", Color.RED).g > 0.9, "色は黄・青・薄緑。ふつうの品はもとの色")
 	var in_gear := false
 	for i in 400:
 		if ItemDB.is_magic(ItemDB.roll_gear(10, rng)):

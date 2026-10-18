@@ -228,7 +228,7 @@ func _spawn_deposit(room: Dictionary, tr: Dictionary, f: float = 1.0) -> void:
 		if gid != "":
 			add_item(_free_pos(cen, 22.0), gid)
 	if Dice.rng.randf() < MAGIC_PILE_CHANCE:
-		var mid := ItemDB.roll_magic(fl.layer_no, Dice.rng)
+		var mid := ItemDB.roll_magic_drop(fl.layer_no, Dice.rng)
 		if mid != "":
 			add_item(_free_pos(cen, 22.0), mid)
 
@@ -524,7 +524,7 @@ func _loot_corpse(e: Dictionary) -> void:
 	if Dice.rng.randf() < RARE_WEAPON_CHANCE:
 		add_item(pos, String(ItemDB.RARE_WEAPONS[Dice.rng.randi_range(0, ItemDB.RARE_WEAPONS.size() - 1)]), 1, _burst(110.0))
 	if Dice.rng.randf() < (MAGIC_EXPEDITION_CHANCE if e.get("expedition", false) else MAGIC_CORPSE_CHANCE):
-		var mid := ItemDB.roll_magic(fl.layer_no, Dice.rng)
+		var mid := ItemDB.roll_magic_drop(fl.layer_no, Dice.rng)
 		if mid != "":
 			add_item(pos, mid, 1, _burst(110.0))
 	var rows := _forage_table()
@@ -566,7 +566,7 @@ func draw(ci: CanvasItem, view: Rect2) -> void:
 				var bob := sin(tms * 2.2 + ph * TAU) * 1.2
 				var glow: Variant = GLOW.get(id)
 				if glow == null and ItemDB.is_magic(id):
-					glow = MAGIC_GLOW
+					glow = ItemDB.name_color(id, MAGIC_GLOW)
 				if glow != null:
 					var gc: Color = glow
 					ci.draw_circle(pos + Vector2(0, -2), 12.0 + sin(tms * 2.0 + ph * 6.0) * 1.5, Color(gc.r, gc.g, gc.b, 0.16 * k))
@@ -575,7 +575,7 @@ func draw(ci: CanvasItem, view: Rect2) -> void:
 				if t2 != null:
 					ci.draw_texture_rect(t2, Rect2(pos - Vector2(10, 12 - bob), Vector2(20, 20)), false, Color(k, k, k))
 				if ItemDB.is_magic(id):
-					_glint(ci, pos + Vector2(6, -10 + bob), tms, ph, MAGIC_GLOW.lightened(0.4), k)     # 魔法の品は、紫にきらめく
+					_glint(ci, pos + Vector2(6, -10 + bob), tms, ph, ItemDB.name_color(id, MAGIC_GLOW).lightened(0.4), k)     # 魔法の品は、格の色にきらめく
 
 func _draw_crystal(ci: CanvasItem, e: Dictionary, pos: Vector2, k: float, tms: float, ph: float) -> void:
 	var purity := String(e["purity"])

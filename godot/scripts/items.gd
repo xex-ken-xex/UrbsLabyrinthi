@@ -153,12 +153,44 @@ const MAGIC_ITEMS := {
 		"desc": "120秒間、火の傷が半分になる。舌に、灰の味が残る。"},
 }
 
+## 魔力の+1〜+3(SRD の Weapon / Armor, +1〜+3)。炉火の槌の武器と鎧の、魔力を帯びた品。id は "m1_longsword" のように。
+## 威力は1につき+1(技の威力のある弓・杖は、そちらも+1)、防御は1につき+1。+1 は第2層、+2 は第4層、+3 は第6層から出る
+const PLUS_LAYER := {1: 2, 2: 4, 3: 6}
+const PLUS_PRICE := {1: 500, 2: 1500, 3: 4000}
+static var PLUS_ITEMS: Dictionary = _plus_items()
+
+static func _plus_items() -> Dictionary:
+	var out := {}
+	for id in SHOPS["smith"]:
+		var b: Dictionary = BASE_ITEMS.get(id, {})
+		var k := String(b.get("kind", ""))
+		if k != "weapon" and k != "armor":
+			continue
+		for n in [1, 2, 3]:
+			var it: Dictionary = b.duplicate(true)
+			it["name"] = "%s+%d" % [b["name"], n]
+			it["magic"] = true
+			it["plus"] = n
+			it["plus_of"] = id
+			it["mlayer"] = int(PLUS_LAYER[n])
+			it["price"] = int(b["price"]) + int(PLUS_PRICE[n])
+			if k == "weapon":
+				it["power"] = float(b["power"]) + n
+				if b.has("spell"):
+					it["spell"] = float(b["spell"]) + n
+				it["desc"] = "%s\n魔力を帯びている(威力+%d)。" % [b["desc"], n]
+			else:
+				it["ac"] = int(b["ac"]) + n
+				it["desc"] = "%s\n魔力を帯びている(防御+%d)。" % [b["desc"], n]
+			out["m%d_%s" % [n, id]] = it
+	return out
+
 ## 全品。自生物、魔物の素材、遺品(ForageData、tools/make-items.py が作る)と、市場の食材(Cooking)を足してある。燐晶ではないので、税がかからない
 static var ITEMS: Dictionary = _all_items()
 
 ## 鍛冶で作れる品(素材からだけ作れる品)と、その良品・逸品も足す(Smithing)
 static func _all_items() -> Dictionary:
-	var all: Dictionary = BASE_ITEMS.merged(MAGIC_ITEMS).merged(ForageData.ITEMS).merged(Cooking.ingredient_items()).merged(Smithing.gear_items())
+	var all: Dictionary = BASE_ITEMS.merged(MAGIC_ITEMS).merged(PLUS_ITEMS).merged(ForageData.ITEMS).merged(Cooking.ingredient_items()).merged(Smithing.gear_items())
 	return all.merged(Smithing.tier_items(all))
 
 const SHOPS := {
@@ -228,7 +260,43 @@ static func roll_magic(layer: int, rng: RandomNumberGenerator, kinds: Array = []
 	return String(pool[pool.size() - 1])
 
 static func is_magic(id: String) -> bool:
-	return MAGIC_ITEMS.has(id)
+	return MAGIC_ITEMS.has(id) or PLUS_ITEMS.has(id)
+
+## 魔法の品の格(名前の色。ken 10/18): +1 は薄緑、名のある品と+2 は青、+3 と第6層からの名のある品(本当に強い品)は黄色。ふつうの品は ""
+const GRADE_COLOR := {"plus1": Color(0.66, 0.94, 0.62), "magic": Color(0.48, 0.72, 1.0), "legend": Color(1.0, 0.86, 0.36)}
+static func grade(id: String) -> String:
+	if PLUS_ITEMS.has(id):
+		match int(PLUS_ITEMS[id]["plus"]):
+			1: return "plus1"
+			3: return "legend"
+		return "magic"
+	if MAGIC_ITEMS.has(id):
+		return "legend" if int(MAGIC_ITEMS[id]["mlayer"]) >= 6 else "magic"
+	return ""
+
+## 名前の色。魔法の品でなければ fallback
+static func name_color(id: String, fallback: Color) -> Color:
+	var g := grade(id)
+	return GRADE_COLOR[g] if g != "" else fallback
+
+## 魔法の品の落とし物: 半分は名のある品(roll_magic)、半分は魔力の+1〜+3(深い層ほど+の大きい品)。消耗品だけの絞り込みでは、名のある品だけ
+static func roll_magic_drop(layer: int, rng: RandomNumberGenerator, kinds: Array = []) -> String:
+	if rng.randf() < 0.5 and (kinds.is_empty() or kinds.has("weapon") or kinds.has("armor")):
+		var pool: Array = []
+		for id in PLUS_ITEMS:
+			var it: Dictionary = PLUS_ITEMS[id]
+			if int(it["mlayer"]) <= layer and (kinds.is_empty() or kinds.has(String(it["kind"]))):
+				pool.append(id)
+		if not pool.is_empty():
+			# いちばん大きい+を出やすく
+			var top := 0
+			for id in pool:
+				top = maxi(top, int(PLUS_ITEMS[id]["plus"]))
+			var want := top if rng.randf() < 0.6 else rng.randi_range(1, top)
+			var hit: Array = pool.filter(func(x): return int(PLUS_ITEMS[x]["plus"]) == want)
+			if not hit.is_empty():
+				return String(hit[rng.randi_range(0, hit.size() - 1)])
+	return roll_magic(layer, rng, kinds)
 
 ## 深い層ほど、良い装備が出る
 static func roll_gear(floor_no: int, rng: RandomNumberGenerator) -> String:
@@ -253,7 +321,7 @@ static func detail(id: String) -> String:
 		s += "\n野営の燃料になる(燃料1つで、火が1時間もつ)。"
 	if it.get("forged", false) or it.has("tier"):
 		s += "\n店には無い。自宅の鍛冶場で作る。"
-	if MAGIC_ITEMS.has(id):
+	if is_magic(id):
 		s += "\n[魔法の品] 迷宮でまれに見つかる。層の主は必ず一つ落とす。"
 	if GUILD_ONLY.has(id):
 		s += "\n店では売れない。坑口館(冒険者ギルド)の遺品課が引き取り、謝礼を出す。"
