@@ -65,6 +65,7 @@ const CUES := {
 	"t_lantern": ["ふわ…", Color(1.0, 0.6, 0.55), 2.4],
 	"t_revive": ["ハッ!", Color(0.7, 1.0, 0.75), 2.6],
 	"t_key": ["チャリッ", Color(1.0, 0.9, 0.6), 2.4],
+	"t_stamp": ["ポンッ", Color(1.0, 0.82, 0.55), 2.6],
 	# 罠(TrapFx と Main._trigger_trap)。3つ目の数は、文字の大きさの倍率
 	"click": ["カチッ", Color(1.0, 0.8, 0.5)],
 	"fuse": ["シュウゥ…", Color(1.0, 0.7, 0.4)],
@@ -223,7 +224,7 @@ const STYLE := {
 	"t_coin": "pop", "t_sell": "bounce", "t_whisper": "wave", "t_pray": "stretch", "t_write": "bounce", "t_peel": "snap",
 	"t_geta": "bounce", "t_sway": "wave", "t_fortune": "soft", "t_bell": "bounce", "t_anvil": "slam", "t_door": "stretch",
 	"t_hush": "stretch", "t_chatter": "bounce", "t_pen": "bounce", "t_bustle": "bounce", "t_slide": "snap", "t_lantern": "wave",
-	"t_revive": "pop", "t_key": "pop",
+	"t_revive": "pop", "t_key": "pop", "t_stamp": "pop",
 	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",

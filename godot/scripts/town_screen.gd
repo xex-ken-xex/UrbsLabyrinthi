@@ -750,6 +750,7 @@ func _content_guild() -> void:
 	var rc := UIKit.vbox(6)
 	rc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cols.add_child(rc)
+	_guild_permit(lc)
 	_guild_relics(lc)
 	_guild_insurance(lc)
 	_guild_house(lc)
@@ -762,6 +763,12 @@ func _wrap(t: String, sz: int, col: Color = UIKit.TEXT) -> Label:
 	lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return lb
+
+## 許可証課: 潜行許可証の等級(Permit。ken 10/16)。層の主を倒すと、戻ったときに書き換える
+func _guild_permit(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("許可証課  潜行許可証", 18, UIKit.ACCENT))
+	var nx := Permit.next_hint(gs)
+	box.add_child(_wrap("いまの許可証: %s。%s" % [Permit.label(gs), nx if nx != "" else "最上の等級。竜の巣まで潜れる。"], 15, UIKit.GOLD))
 
 ## 預金課: 所持金を預ける・引き出す(100銀貨 単位。ken 10/18)。店で使えるのは所持金だけ。預金は全滅しても無事
 func _guild_bank(box: VBoxContainer) -> void:

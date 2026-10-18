@@ -9,6 +9,7 @@ var inventory := {}                # アイテムid → 個数
 var silver := 300           # 所持金。店で使えるのはこれだけ。迷宮へも持って入る(全滅で失う)
 var bank_silver := 0        # 預金(坑口館の預金課。ken 10/18)。査定・依頼・遺品の謝礼はここへ入る。全滅しても無事
 const BANK_UNIT := 100      # 預ける・引き出すのは 100銀貨 単位
+var permit := 0             # 潜行許可証の等級(Permit。0 灰 / 1 青銅 / 2 銀 / 3 黒鉄)
 var day := 0
 var visited_town := false
 var blessed := false           # 神殿の加護。次に潜るとき一度だけ効く
@@ -82,6 +83,7 @@ func new_game(chars: Array) -> void:
 	inventory = {"potion": 3, "ether": 1}
 	silver = 300
 	bank_silver = 0
+	permit = 0
 	day = 0
 	visited_town = false
 	blessed = false
@@ -431,7 +433,7 @@ func to_dict() -> Dictionary:
 	var chars: Array = []
 	for c in party:
 		chars.append(c.to_dict())
-	return {"version": 1, "party": chars, "inventory": inventory, "silver": silver, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
+	return {"version": 1, "party": chars, "inventory": inventory, "silver": silver, "bank": bank_silver, "permit": permit, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
 		"food": food, "clock": clock, "home": home, "journal": journal, "flow": flow}
 
 func save() -> bool:
@@ -475,6 +477,14 @@ func load_save() -> bool:
 			food.append({"id": String(f["id"]), "q": int(f.get("q", 1)), "until": float(f.get("until", 0.0)), "n": int(f.get("n", 1))})
 	home = Home.sanitize(parsed.get("home", {}))
 	journal = Journal.sanitize(parsed.get("journal", {}))
+	if parsed.has("permit"):
+		permit = int(parsed["permit"])
+	else:
+		# 許可証の無い頃の記録: もう着いた層までは潜ってよいことにする(締め出さない)
+		permit = 0
+		while permit < Permit.MAX_LAYER.size() - 1 and Permit.MAX_LAYER[permit] < Journal.stat(self, "deepest"):
+			permit += 1
+		permit = maxi(permit, Permit.earned(self))
 	flow = PhosFlow.sanitize(parsed.get("flow", {}))
 	clock = 0.0
 	set_clock(maxf(float(parsed.get("clock", 0.0)), town_clock()))
