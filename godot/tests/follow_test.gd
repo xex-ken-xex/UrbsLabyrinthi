@@ -111,11 +111,15 @@ func _run() -> void:
 		else:
 			print("    角で止まった: 仲間 %s → %s、行き先 %s" % [str(cs[0]), str(m.cell_of(fol.position)), str(m.cell_of(goal))])
 	check(ok2 == corners.size(), "角の外にいても、細い通路の奥のリーダーについて来る (%d / %d)" % [ok2, corners.size()])
+	check(main.current == fl, "測っている間に、別の階へ移っていない")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
 
+## 魔物と罠を除く(仲間が落とし穴を踏み、敏捷力セーヴに失敗すると下の階へ落ちて測れなくなる。セーヴの出目しだいで落ちたり落ちなかったりした)
 func _clear(fl: FloorInstance) -> void:
+	fl.traps.clear()
+	fl.trap_at.clear()
 	fl.spawner.pending.clear()
 	for e in fl.enemies:
 		e.queue_free()
