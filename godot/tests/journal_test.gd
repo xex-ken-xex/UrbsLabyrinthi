@@ -46,7 +46,7 @@ func _test_catalog() -> void:
 	check(Journal.layer_ids().size() == 10 and Journal.layer(1)["mons"].size() > 10, "層は10、第1層の魔物は %d種" % Journal.layer(1)["mons"].size())
 	var first := String(Journal.layer(1)["mons"][0])
 	check(String(Journal.mon(first).get("name", "")) != "" and (Journal.mon(first)["layers"] as Array).any(func(x): return int(x) == 1), "層の魔物に、名前と出る層がある (%s)" % first)
-	check(Trophies.ids().size() == Trophies.LIST.size() + 9 and not Trophies.ids().has("layer_all_2") and Trophies.name_of("layer_all_1") == "第1〜2層 狩り尽くし",
+	check(Trophies.ids().size() == Trophies.LIST.size() + 9 + LayerBoss.layers().size() and not Trophies.ids().has("layer_all_2") and Trophies.name_of("layer_all_1") == "第1〜2層 狩り尽くし",
 		"実績は %d。顔ぶれが同じ第1層と第2層の狩り尽くしは一つ" % Trophies.ids().size())
 
 func _test_dungeon() -> void:

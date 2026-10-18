@@ -7,6 +7,7 @@ extends Control
 var here := 0          # いまいる階(0 は街)
 var known := 0         # 着いたことのある最も深い階
 var selected := 0      # 一覧で選んだ階
+var slain := {}        # 階 → 「第N層の主 討伐済」(層の主を倒した層の、いちばん下の階。LayerBoss.slain_label)
 
 func _ready() -> void:
 	clip_contents = true
@@ -100,6 +101,12 @@ func _draw() -> void:
 			var nm := "第%d層 %s" % [layer, String(f.get("short", ""))] if reached else "第%d層 ？？？" % layer
 			draw_string(font, Vector2(4, y0 + 11), nm, HORIZONTAL_ALIGNMENT_LEFT, left - 22, 11, UIKit.GOLD if reached else UIKit.DIM)
 			draw_string(font, Vector2(size.x - right + 6, y0 + 11), "%dm" % int(round(float(f["top_m"]))), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, UIKit.DIM)
+		if slain.has(depth):
+			var st := String(slain[depth])
+			var sw := font.get_string_size(st, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+			var sp := Vector2(size.x - right - 6 - sw, y0 + hh * 0.5 + 4)
+			draw_string_outline(font, sp, st, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color(0, 0, 0, 0.9))
+			draw_string(font, sp, st, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, LayerBoss.NAME_COLOR)
 		if depth == selected:
 			draw_rect(Rect2(left - 4, y0, size.x - left - right + 8, hh), Color(0.6, 0.8, 1.0, 0.9), false, 1.0)
 		if depth == here:

@@ -94,6 +94,8 @@ func _draw() -> void:
 	_draw_pickups(fl, size_v)
 	if GameSettings.show_fps:
 		_draw_fps(fl, size_v)
+	if game.boss_fx != null and game.boss_fx.active:
+		_draw_boss(fl, size_v)
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var H := func(id: String) -> String: return Controls.hint(id)
@@ -107,6 +109,33 @@ func _draw() -> void:
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))
 	if not overlay.is_empty():
 		_draw_overlay(size_v)
+
+## 層の主の HP の棒(ken 10/18。上の真ん中に、小さく二つ名、大きく魔物の名、その下に細長い赤い棒)。
+## 戦いの間だけ。モノクロより上に描くので色がつく。2体目からは小さく下へ並べる
+func _draw_boss(fl: FloorInstance, size_v: Vector2) -> void:
+	var y := 100.0
+	var k := 0
+	for en in fl.enemies:
+		if not en.unique or en.dead:
+			continue
+		var sc := 1.0 if k == 0 else 0.72
+		var cx := size_v.x / 2.0
+		var cf := UI.cue_font()
+		var ep := "▶ %s ◀" % en.epithet
+		var es := int(14 * sc)
+		var ew := UI.font().get_string_size(ep, HORIZONTAL_ALIGNMENT_LEFT, -1, es).x
+		UI.text(self, Vector2(cx - ew / 2.0, y), ep, es, Color(0.92, 0.9, 0.82))
+		var ns := int(30 * sc)
+		var nw := cf.get_string_size(en.base_name, HORIZONTAL_ALIGNMENT_LEFT, -1, ns).x
+		var np := Vector2(cx - nw / 2.0, y + 6.0 + ns)
+		draw_string_outline(cf, np, en.base_name, HORIZONTAL_ALIGNMENT_LEFT, -1, ns, 6, Color(0.05, 0.03, 0.06, 0.9))
+		draw_string(cf, np, en.base_name, HORIZONTAL_ALIGNMENT_LEFT, -1, ns, Color.WHITE)
+		var bw := 380.0 * sc
+		var bar := Rect2(cx - bw / 2.0, np.y + 10.0, bw, 6.0 * sc)
+		draw_rect(bar.grow(1.5), Color(0, 0, 0, 0.75))
+		draw_rect(Rect2(bar.position, Vector2(bw * en.hp_frac(), bar.size.y)), Color("e8402e"))
+		y = bar.end.y + 26.0
+		k += 1
 
 ## 迷宮の中の時刻を、太陽と月で見せる(時計は無い)。1時間刻みで動く。
 ## 昼は太陽が左(夜明け)から右(日没)へ、夜は月が同じ弧を渡る

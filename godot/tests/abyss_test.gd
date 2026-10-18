@@ -125,11 +125,18 @@ func _test_peer() -> void:
 
 func _test_rope() -> void:
 	print("[縄梯子]")
-	check(main.rope_dc(5.0) == 10 and main.rope_dc(15.0) == 14, "縄梯子の難易度は階の高さで決まる(5m 10、15m 14)")
+	check(main.rope_dc(5.0) == 12 and main.rope_dc(15.0) == 16, "縄梯子の難易度は階の高さで決まる(5m 12、15m 16。#74 で上げた)")
 	var fl: FloorInstance = main.current
 	var rc: Vector2i = fl.ropes[0]
 	main.place_party(fl.map.center_of(rc))
 	await _step(3)
+	# 縄梯子のそばの魔物(#74: いると取りつけない。縄梯子の下で待つ魔物も)は、先に片づけておく
+	for e in fl.enemies.duplicate():
+		if e.position.distance_to(main.leader().position) < main.ROPE_MON_CELLS * Balance.CELL * 1.5:
+			e.dead = true
+			fl.enemies.erase(e)
+			e.queue_free()
+	await _step(2)
 	main._update_hint()
 	check(String(main.hud.hint).contains("縄梯子"), "縄梯子のそばで案内が出る (%s)" % main.hud.hint)
 	main.interact()

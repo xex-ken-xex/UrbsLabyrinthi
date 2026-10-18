@@ -553,6 +553,7 @@ func _test_cooking_dive() -> void:
 	main.dtime.resting = true
 	main.dtime.rest_end = main.dtime.minutes + 600.0
 	hh.growl_t = 0.0
+	main.dtime._wander_acc = -1e9      # 寝込みを襲われると休みが止まるので、この間はワンダリングを振らない
 	var rests := 0
 	for i in 40:
 		main.dtime.update(0.1)
@@ -561,6 +562,7 @@ func _test_cooking_dive() -> void:
 				n.set_meta("seen", true)
 				rests += 1
 	main.dtime.stop_rest("")
+	main.dtime._wander_acc = 0.0
 	check(hh.ch.max_mp() > 0 and hh.ch.hp > 1.0 and hh.ch.mp == 0.0 and (hf.ch.max_mp() == 0 or hf.ch.mp > 0.0),
 		"空腹のまま休むと、HP は戻るが MP は戻らない (HP %.0f MP %.1f / 満腹の仲間 MP %.1f)" % [hh.ch.hp, hh.ch.mp, hf.ch.mp])
 	check(rests >= 2, "休んでいる間、空腹の人の頭上で「ぐーきゅるきゅる」が続く (%d 回)" % rests)

@@ -33,6 +33,7 @@ const LIST := [
 	["mimic", "宝箱に噛まれた", "物のふりをした魔物に張りつかれた"],
 ]
 const LAYER_ALL := "layer_all_"
+const BOSS := "boss_"          # 層の主を倒した(LayerBoss。層ごと)
 
 ## 全部の実績の id(並び順)
 static func ids() -> Array:
@@ -42,9 +43,13 @@ static func ids() -> Array:
 	for n in Journal.layer_ids():
 		if not Journal.same_as_prev(n):
 			out.append(LAYER_ALL + str(n))
+	for L in LayerBoss.layers():
+		out.append(BOSS + str(L))
 	return out
 
 static func name_of(id: String) -> String:
+	if id.begins_with(BOSS):
+		return "第%d層の主を討つ" % int(id.substr(BOSS.length()))
 	if id.begins_with(LAYER_ALL):
 		var n := int(id.substr(LAYER_ALL.length()))
 		var e := Journal.span_end(n)
@@ -55,6 +60,9 @@ static func name_of(id: String) -> String:
 	return id
 
 static func desc_of(id: String) -> String:
+	if id.begins_with(BOSS):
+		var L := int(id.substr(BOSS.length()))
+		return "第%d層の主(%s)を倒した" % [L, String(LayerBoss.def(L).get("room", ""))]
 	if id.begins_with(LAYER_ALL):
 		var n := int(id.substr(LAYER_ALL.length()))
 		var e2 := Journal.span_end(n)
@@ -69,6 +77,8 @@ static func has(gs: GameState, id: String) -> bool:
 
 ## 条件を満たしているか
 static func met(gs: GameState, id: String) -> bool:
+	if id.begins_with(BOSS):
+		return LayerBoss.kills(gs, int(id.substr(BOSS.length()))) >= 1
 	if id.begins_with(LAYER_ALL):
 		var p := Journal.layer_progress(gs, int(id.substr(LAYER_ALL.length())))
 		return p.y > 0 and p.x >= p.y
