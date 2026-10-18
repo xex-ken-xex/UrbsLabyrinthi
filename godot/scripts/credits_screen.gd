@@ -9,9 +9,9 @@ extends Control
 signal closed
 
 const SRD_ATTRIBUTION := "This work includes material taken from the System Reference Document 5.1 (“SRD 5.1”) by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode."
-const SRD_CHANGES := "Changes: the SRD 5.1 material used in this game (monster statistics, traits and actions, traps, spells, conditions, class proficiencies, equipment and damage dice) has been abridged, rescaled for real-time play and translated into Japanese. Names in Japanese are unofficial translations or new names made for this game."
+const SRD_CHANGES := "Changes: the SRD 5.1 material used in this game (monster statistics, traits and actions, traps, spells, conditions, class proficiencies, equipment, magic items and damage dice) has been abridged, rescaled for real-time play and translated into Japanese. Names in Japanese are unofficial translations or new names made for this game."
 const SRD_NO_ENDORSE := "This game is not affiliated with, endorsed, sponsored, or specifically approved by Wizards of the Coast LLC."
-const SRD_JA := "魔物の数値・特徴・行動、罠、呪文、状態、クラスの習熟、装備、ダメージの式を SRD 5.1 から借り、要点だけに縮め、リアルタイムに合わせて係数をかけ、日本語にした。日本語の名前は、このゲームのための仮訳か、新しく付けた名前で、公式の訳語ではない。このゲームは Wizards of the Coast LLC と関係がなく、同社が認めたものでもない。"
+const SRD_JA := "魔物の数値・特徴・行動、罠、呪文、状態、クラスの習熟、装備、魔法の品、ダメージの式を SRD 5.1 から借り、要点だけに縮め、リアルタイムに合わせて係数をかけ、日本語にした。日本語の名前は、このゲームのための仮訳か、新しく付けた名前で、公式の訳語ではない。このゲームは Wizards of the Coast LLC と関係がなく、同社が認めたものでもない。"
 const FONTS := [
 	["M+ 1p", "Copyright 2016 The M+ Project Authors."],
 	["Shippori Mincho", "Copyright 2021 The Shippori Mincho Project Authors (https://github.com/fontdasu/ShipporiMincho)"],

@@ -28,6 +28,7 @@ var pending_return := false
 var fire_until := -1.0            # 野営の火が消える時刻(迷宮の時刻、分)。燃料1つで1時間
 var _kill_cue_ms := -1000            # 魔物が倒れた擬音を、最後に出した時刻(間引く)
 var _jot_cue_ms := 0               # 冒険日記帳に書き足す擬音(サラサラ)を、続けて出さない
+var _magic_cue_ms := 0
 var _menu_fx: Array = []           # 持ち物の画面で起きた手ごたえ(料理、食べる)。閉じたら出す [擬音, Hero]
 var pending_rest := false         # 持ち物の「休む」を押した(閉じたら休み始める)
 var dtime: DungeonTime = null      # 迷宮の中の時間(闘技場では使わない)
@@ -1049,6 +1050,8 @@ func _check_traps() -> void:
 			_trigger_trap(t2, e)
 
 ## 予兆のない罠の、踏んだ瞬間の擬音(予兆のある罠は TrapFx.START_CUE)
+## 罠の傷の種類(書き出しの日本語)→ 耐性の種類(耐火の胸甲などが見る)
+const TRAP_ELEM := {"火": "fire", "冷気": "cold", "光輝": "radiant", "力場": "force", "毒": "poison"}
 const TRAP_CUE := {"pit": "pit", "teleport": "warp", "teleport_one": "warp", "cage": "trap", "alarm": "trap_alarm", "squeak": "squeak",
 	"summon": "summon", "rust": "rust", "rotate": "spin", "trip": "trip", "poison": "poison", "slide": "slide", "prone": "slide",
 	"blind": "flash", "fear": "wail", "chill": "chill", "restrain": "teeth", "lift": "lift", "bolt": "trap"}
@@ -1115,7 +1118,7 @@ func _trigger_trap(t: Dictionary, victim: Body) -> void:
 		if hero != null:
 			var dealt := maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * (1.0 - hero.ch.skill_fx("survival")))
 			log_msg("%sダメージ %d" % [t.get("damage_type", ""), int(round(dealt))], Color("ff6a5a"))
-			hero.damage(dealt, hero.position + Vector2(0, 1), true)
+			hero.damage(dealt, hero.position + Vector2(0, 1), true, "", String(TRAP_ELEM.get(String(t.get("damage_type", "")), "")))
 		else:
 			en.take_damage(maxf(1.0, n * Balance.TRAP_DMG_SCALE * scale * Balance.TRAP_MON_MULT), Vector2.DOWN, null)
 	if failed and victim.is_alive():
@@ -1539,12 +1542,18 @@ func _on_ground_picked(e: Dictionary, h: Hero) -> void:
 			h.game_floor.spawn_text(h.position + Vector2(0, -34), "依頼の品が揃った", Color("f1d98a"))
 	var it := ItemDB.get_item(id)
 	var rare := int(it.get("price", 0)) >= 40 or String(it.get("kind", "")) in ["weapon", "armor", "acc"]
-	var icol := Color("d8f0d8") if not rare else Color("ffe9a8")
+	var magic := ItemDB.is_magic(id)
+	var icol := Color("d8b8ff") if magic else (Color("d8f0d8") if not rare else Color("ffe9a8"))
+	if magic and not back and Time.get_ticks_msec() - _magic_cue_ms > 400:
+		_magic_cue_ms = Time.get_ticks_msec()
+		Sfx.cue(h.game_floor, h.position, "magic_pick")      # 魔法の品は、ほかの拾い物と分けて鳴らす
 	var itex := ItemIcons.texture(id)
 	h.game_floor.add_child(PickupPop.make(itex, "%s%s%s" % [ItemDB.item_name(id), "" if qty == 1 else " ×%d" % qty, "(取り戻した)" if back else ""], icol, e["pos"], h))
 	hud.add_pickup("item_" + id, itex, ItemDB.item_name(id), icol, float(qty), "")
 	if back:
 		log_msg("取り戻した: %s(上で失くした物)" % ItemDB.item_name(id), Color("f1d98a"))
+	elif magic:
+		log_msg("魔法の品を拾った: %s" % ItemDB.item_name(id), Color("d8b8ff"))
 	elif rare:
 		log_msg("拾った: %s" % ItemDB.item_name(id), Color("ffe9a8"))
 
@@ -1881,6 +1890,10 @@ func climb_rope(dir: int, c: Vector2i) -> void:
 		# 外した: 途中から落ちる(出目1は上から下まで)。登るときは、少し滑り落ちて仲間に引き上げられる。
 		# 傷は落ちた高さ(m)× 6(ken 10/18。高い層ではまず助からない)
 		var fall := rope_fall_m(h_m, int(r[1]), dir)
+		if h.ch.equip_fx("feather") > 0.0:
+			Sfx.cue(current, h.position + Vector2(0, -10), "feather")      # 羽落ちの指輪
+			log_msg("%sは手を滑らせたが、羽落ちの指輪でふわりと降りた(%sm)" % [h.ch.name, _m(fall)], Color("c8e0ff"))
+			continue
 		Sfx.cue(current, h.position + Vector2(0, -10), "slip")
 		log_msg("%sは %d%+d で手を滑らせ、%sm 落ちた" % [h.ch.name, int(r[1]), int(r[2]), _m(fall)], Color("ff9a7a"))
 		h.damage(maxf(1.0, fall * ROPE_FALL_DMG), h.position + Vector2(0, 1), true)
@@ -1906,8 +1919,13 @@ func _fall_down() -> void:
 	if at.x < INF:
 		place_party(at)
 	for h in heroes:
-		if not h.down:
-			h.damage(maxf(1.0, Dice.roll("1d6") * Balance.TRAP_DMG_SCALE), h.position + Vector2(0, 1), true)
+		if h.down:
+			continue
+		if h.ch.equip_fx("feather") > 0.0:
+			Sfx.cue(current, h.position + Vector2(0, -10), "feather")      # 羽落ちの指輪
+			log_msg("%sは羽落ちの指輪で、ふわりと降りた" % h.ch.name, Color("c8e0ff"))
+			continue
+		h.damage(maxf(1.0, Dice.roll("1d6") * Balance.TRAP_DMG_SCALE), h.position + Vector2(0, 1), true)
 
 ## 水鏡など: 同じ層の別の部屋へ
 func _trap_teleport() -> void:
@@ -1981,6 +1999,8 @@ func close_inventory() -> void:
 			var off: Vector2 = fx[2] if fx.size() > 2 else Vector2.ZERO
 			if String(fx[0]).begins_with("@"):
 				current.spawn_text(h.position + Vector2(0, -36) + off, String(fx[0]).substr(1), Color("ffe08a"))
+			elif String(fx[0]) == "~fire":
+				current.add_child(Spark.make(h.position + off, 3.0 * Balance.CELL, Color(1.0, 0.55, 0.2), 0.4, true))     # 火球の珠の炎の輪
 			else:
 				Sfx.cue(current, h.position + off, String(fx[0]))
 	_menu_fx.clear()
@@ -2107,6 +2127,22 @@ func use_special(id: String, _c: Character) -> bool:
 			hc.poison_t = 0.0
 			_menu_fx.append(["drink", hc])
 			return true
+		"fireball":
+			# 火球の珠: 前へ投げる。弾けたところから3マスの魔物を焼く
+			var it3: Dictionary = ItemDB.ITEMS[id]
+			var lead3 := leader()
+			var at := lead3.position + lead3.facing.normalized() * 3.0 * Balance.CELL
+			var n3 := 0
+			for e in current.enemies.duplicate():
+				if e.dead or e.position.distance_to(at) > 3.0 * Balance.CELL + e.radius * 0.6:
+					continue
+				e.elem_hit("fire", true)
+				e.take_damage(float(Dice.roll("%dd6" % int(it3["v"]))), (e.position - at).normalized(), lead3)
+				n3 += 1
+			_menu_fx.append(["~fire", lead3, at - lead3.position])
+			_menu_fx.append(["sk_fire", lead3, at - lead3.position])
+			log_msg("%sを投げた。%d体の魔物が炎に包まれた。" % [it3["name"], n3], Color("ffb070"))
+			return true
 		"sleep_throw", "shriek":
 			var it2: Dictionary = ItemDB.ITEMS[id]
 			var lead := leader()
@@ -2191,6 +2227,8 @@ func _on_boss_fallen(layer: int, pos: Vector2) -> void:
 	var what := "大きな燐晶の塊"
 	if gid != "":
 		what += "と%s" % String(ItemDB.ITEMS[gid]["name"])
+	if LayerBoss.last_magic != "":
+		what += "、魔法の品の%s" % ItemDB.item_name(LayerBoss.last_magic)
 	log_msg("第%d層の主を倒した。%sが転がり出た。" % [layer, what], Color("ffe9a8"))
 	_check_trophies()
 

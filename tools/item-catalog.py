@@ -38,6 +38,9 @@ EXISTING = [
     ("regen_elixir", "bottle", dict(liquid="f0f0d0", big=True, glow=True)),
     ("marrow_elixir", "bottle", dict(liquid="f8d870", big=True, glow=True)),
     ("murky", "bottle", dict(liquid="5a5040")),
+    # 魔法の消耗品(書院と迷宮。godot/scripts/items.gd の MAGIC_ITEMS)
+    ("fire_bead", "charm", dict(col="ff7a30")),
+    ("fire_res_draught", "bottle", dict(liquid="d84a20", big=True, glow=True)),
     # 鍛冶の材料(炉火の槌で売る。data/smithing.json)
     ("tetsukai", "ingot", dict(col="8a8e98")),
     ("sumi", "lump", dict(col="2a2628", kind="dung")),

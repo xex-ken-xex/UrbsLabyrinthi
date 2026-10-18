@@ -140,10 +140,16 @@ func receive_contact(amount: float, from_pos: Vector2, src: Body) -> void:
 
 ## 魔物の体当たり、飛び道具、罠から受けるダメージ。防具の軽減、鉄壁や盾構え(溜めている間)がここで効く
 ## src_type は、ダメージを与えた魔物の種別(〈動物使い〉〈看破〉が見る。罠などは空)
-func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_type: String = "") -> void:
+func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_type: String = "", elem: String = "") -> void:
 	if down or iframes > 0.0 or roll_t > 0.0 or rush_t > 0.0:
 		return
 	var n := amount * buff("guard") * ch.taken_mult(src_type)
+	if elem == "poison" and ch.equip_fx("poison_immune") > 0.0:
+		_note("毒が効かない", Color(0.7, 0.85, 0.6))      # 毒除けの護符
+		return
+	if elem != "" and (ch.resists(elem) or buff(elem + "_res") < 1.0):
+		n *= 0.5           # 耐火の胸甲・霜の刃・耐火の水薬
+		_note("%sに強い" % ItemDB.ELEM_JP.get(elem, elem), Color("ffc890"))
 	if not ignore_armor:
 		n *= 1.0 - maxf(0.0, ch.damage_reduction() - rust * Balance.AC_REDUCTION)
 	if charging() and ch.has_feat("shield_master"):
@@ -175,6 +181,14 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		Sfx.cue(game_floor, position + Vector2(0, 14), "down")
 		downed.emit(self)
 
+## 頭上の短い文字(耐性など。続けて出さない)
+var _note_cd := 0.0
+func _note(t: String, c: Color) -> void:
+	if _note_cd > 0.0:
+		return
+	_note_cd = 1.5
+	game_floor.spawn_text(position + Vector2(0, -radius - 18), t, c)
+
 ## 罠で動けなくなる。網と歯列は、攻撃を連打するともがいて早く抜けられる
 func hold(why: String, secs: float) -> void:
 	if down:
@@ -199,6 +213,9 @@ func gaze_by(amount: float, who: String) -> void:
 
 func poison(secs: float, dps: float) -> void:
 	if down:
+		return
+	if ch.equip_fx("poison_immune") > 0.0:
+		_note("毒が効かない", Color(0.7, 0.85, 0.6))      # 毒除けの護符
 		return
 	if ch.meal_v("poison") > 0.0:
 		dps *= ch.meal_v("poison")      # 毒除け
@@ -392,6 +409,10 @@ func _tick(delta: float) -> void:
 		ch.mp = minf(ch.max_mp(), ch.mp + ch.regen_mp() * delta)     # 迷宮では自然に戻らない(休息で戻す)。闘技場だけ戻る
 	if buffs.has("regen"):
 		ch.hp = minf(ch.max_hp(), ch.hp + float(buffs["regen"]["v"]) * delta)
+	var rg := ch.equip_fx("regen")
+	if rg > 0.0:
+		ch.hp = minf(ch.max_hp(), ch.hp + ch.max_hp() * rg * delta)      # 再生の指輪
+	_note_cd = maxf(0.0, _note_cd - delta)
 
 func _move(delta: float) -> void:
 	_attack_input(delta)
@@ -517,13 +538,31 @@ func _swing_hit(aim: Vector2, dmg_mult: float, reach_mult: float, knock_mult: fl
 			continue
 		n += 1
 		var dir := to.normalized() if to.length() > 0.5 else aim
+		var welem := weapon_elem()
+		if welem != "":
+			en.elem_hit(welem)      # 炎の舌・霜の刃・陽光の剣: 傷が火・冷気・光になる(火と光は再生を止める)
+		var dealt0 := stat_dealt
 		en.take_damage(dmg, dir, self)
+		_magic_on_hit(en, stat_dealt - dealt0)
 		if not en.dead:
 			en.knock = dir * Balance.ATTACK_KNOCK * float(sw["knock"]) * knock_mult / maxf(0.5, en.body_mass())
 			if Dice.rng.randf() < float(sw.get("stun", 0.0)):
 				en.apply_stun(0.6)
-		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0 * sqrt(dmg_mult), Color("ffe0a0"), 0.14))
+		game_floor.add_child(Spark.make(en.position - dir * en.radius * 0.5, 12.0 * sqrt(dmg_mult), ELEM_SPARK.get(welem, Color("ffe0a0")), 0.14))
 	return n
+
+## 魔法の武器の火花の色(傷の種類ごと)
+const ELEM_SPARK := {"fire": Color(1.0, 0.55, 0.2), "cold": Color(0.6, 0.9, 1.0), "radiant": Color(1.0, 0.95, 0.6)}
+
+## 魔法の武器の、当てたあとの効き目。命吸いの剣は与えた傷の一部で癒え、毒蛇の短剣はときどき毒にする
+func _magic_on_hit(en: Enemy, dealt: float) -> void:
+	var w := ch.equip_item("weapon")
+	if w.has("drain") and dealt > 0.0 and ch.hp < ch.max_hp():
+		var heal := dealt * float(w["drain"])
+		ch.hp = minf(ch.max_hp(), ch.hp + heal)
+		game_floor.spawn_text(position + Vector2(0, -radius - 10), "+%d" % maxi(1, int(round(heal))), Color("7be08a"))
+	if w.has("venom") and not en.dead and Dice.rng.randf() < float(w["venom"]):
+		en.poison(4.0, maxf(1.0, dealt * 0.3))
 
 ## 武器の傷の種類(魔物の耐性が見る)。斬る・突く・叩く
 const WEAPON_DTYPE := {"sword": "slashing", "axe": "slashing", "dagger": "piercing", "spear": "piercing", "bow": "piercing",
@@ -531,6 +570,10 @@ const WEAPON_DTYPE := {"sword": "slashing", "axe": "slashing", "dagger": "pierci
 
 func weapon_dtype() -> String:
 	return String(WEAPON_DTYPE.get(ch.weapon_cat(), "bludgeoning"))
+
+## 魔法の武器の傷の種類(火・冷気・光)。ふつうの武器は ""
+func weapon_elem() -> String:
+	return String(ch.equip_item("weapon").get("elem", ""))
 
 ## 魔力を帯びた武器か(珍しい武器と、魔晶の杖)。「魔法でない武器」への耐性を抜ける
 func weapon_magic() -> bool:

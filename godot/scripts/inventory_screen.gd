@@ -827,7 +827,7 @@ func _use_sel() -> void:
 	var c := _ch()
 	var it: Dictionary = ItemDB.ITEMS[sel_id]
 	var r := ""
-	if String(it["kind"]) == "consumable" and special_handler.is_valid() and ["light", "return", "buff", "cure", "sleep_throw", "shriek"].has(String(it["use"])):
+	if String(it["kind"]) == "consumable" and special_handler.is_valid() and ["light", "return", "buff", "cure", "sleep_throw", "shriek", "fireball"].has(String(it["use"])):
 		if special_handler.call(sel_id, c):
 			gs.remove_item(sel_id)
 			r = "%sを使った" % it["name"]

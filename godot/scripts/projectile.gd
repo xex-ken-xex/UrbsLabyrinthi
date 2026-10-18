@@ -80,7 +80,7 @@ func _physics_process(delta: float) -> void:
 						Sfx.cue(game_floor, h.position, "web")
 					queue_free()
 					return
-				h.damage(dmg, position - dir * 10.0, false, src_type)
+				h.damage(dmg, position - dir * 10.0, false, src_type, elem)
 				if chill > 0.0 and not h.down:
 					TrapFx.slow(h, "chill", 0.6, chill)
 				queue_free()

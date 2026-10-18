@@ -10,6 +10,7 @@ const MAGNET_R := 46.0         # 吸い寄せられ始める距離
 const MAGNET_SPEED := 190.0
 const POP_DELAY := 0.35        # 飛び散ってから、拾えるまで
 ## 光る自生物(淡い光の輪を描く)
+const MAGIC_GLOW := Color(0.72, 0.5, 1.0)
 const GLOW := {"tomoshi_take": Color("8ad8f0"), "hikari_goke": Color("a8f0d8"), "shizuku_goke": Color("a8e0ff"), "yawaraka_hikari": Color("c8c0ff"),
 	"iki_take": Color("c898f0"), "kagami_goke": Color("e8f4ff"), "inori_goke": Color("fff8d0"), "zui_mitsu": Color("fff0c0"), "sui_sho_mo": Color("e8ffff")}
 const SIZE_MASS := {"T": 0.4, "S": 0.7, "M": 1.0, "L": 1.6, "H": 2.5, "G": 4.0}
@@ -226,6 +227,10 @@ func _spawn_deposit(room: Dictionary, tr: Dictionary, f: float = 1.0) -> void:
 		var gid := ItemDB.roll_gear(fl.layer_no, Dice.rng)
 		if gid != "":
 			add_item(_free_pos(cen, 22.0), gid)
+	if Dice.rng.randf() < MAGIC_PILE_CHANCE:
+		var mid := ItemDB.roll_magic(fl.layer_no, Dice.rng)
+		if mid != "":
+			add_item(_free_pos(cen, 22.0), mid)
 
 ## 壁ぎわの露頭(小さな光る石)。kg は合わせて置く量(Balance.CRYSTAL_SCALE をかける前)。
 ## 1個はおよそ 0.1kg。深い層で量が多いときは、数を OUTCROP_MAX までにして、1個を大きくする
@@ -495,6 +500,9 @@ static func corpse_story(e: Dictionary) -> String:
 	return out
 
 const RARE_WEAPON_CHANCE := 0.04     # 遺体から、珍しい武器(固有の技つき)が出る確率
+const MAGIC_CORPSE_CHANCE := 0.03    # 遺体から、魔法の品が出る確率(遠征隊の遺体は MAGIC_EXPEDITION_CHANCE)
+const MAGIC_EXPEDITION_CHANCE := 0.08
+const MAGIC_PILE_CHANCE := 0.06      # 宝の山から、魔法の品が出る確率
 
 func _loot_corpse(e: Dictionary) -> void:
 	var pos: Vector2 = e["pos"]
@@ -515,6 +523,10 @@ func _loot_corpse(e: Dictionary) -> void:
 			add_item(pos, gid, 1, _burst(110.0))
 	if Dice.rng.randf() < RARE_WEAPON_CHANCE:
 		add_item(pos, String(ItemDB.RARE_WEAPONS[Dice.rng.randi_range(0, ItemDB.RARE_WEAPONS.size() - 1)]), 1, _burst(110.0))
+	if Dice.rng.randf() < (MAGIC_EXPEDITION_CHANCE if e.get("expedition", false) else MAGIC_CORPSE_CHANCE):
+		var mid := ItemDB.roll_magic(fl.layer_no, Dice.rng)
+		if mid != "":
+			add_item(pos, mid, 1, _burst(110.0))
 	var rows := _forage_table()
 	if not rows.is_empty() and Dice.rng.randf() < 0.2:
 		add_item(pos, String((rows[Dice.rng.randi_range(0, rows.size() - 1)] as Array)[0]), 1, _burst(110.0))
@@ -553,6 +565,8 @@ func draw(ci: CanvasItem, view: Rect2) -> void:
 				var id := String(e["id"])
 				var bob := sin(tms * 2.2 + ph * TAU) * 1.2
 				var glow: Variant = GLOW.get(id)
+				if glow == null and ItemDB.is_magic(id):
+					glow = MAGIC_GLOW
 				if glow != null:
 					var gc: Color = glow
 					ci.draw_circle(pos + Vector2(0, -2), 12.0 + sin(tms * 2.0 + ph * 6.0) * 1.5, Color(gc.r, gc.g, gc.b, 0.16 * k))
@@ -560,6 +574,8 @@ func draw(ci: CanvasItem, view: Rect2) -> void:
 				var t2 := ItemIcons.texture(id)
 				if t2 != null:
 					ci.draw_texture_rect(t2, Rect2(pos - Vector2(10, 12 - bob), Vector2(20, 20)), false, Color(k, k, k))
+				if ItemDB.is_magic(id):
+					_glint(ci, pos + Vector2(6, -10 + bob), tms, ph, MAGIC_GLOW.lightened(0.4), k)     # 魔法の品は、紫にきらめく
 
 func _draw_crystal(ci: CanvasItem, e: Dictionary, pos: Vector2, k: float, tms: float, ph: float) -> void:
 	var purity := String(e["purity"])
