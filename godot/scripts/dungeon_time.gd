@@ -7,6 +7,9 @@ extends RefCounted
 ## 休むと HP と MP が戻る(迷宮では、ほかに自然には戻らない)。6〜8時間で目を覚ますか、中断で終わる。
 ## 満腹度も、ここで減らす(起きていると16時間で空。休んでいると3分の1の速さ)。空腹だと、その人の頭上で腹が鳴る。
 
+## 日没の鐘(設計 §11.5)。街の鐘が、迷宮の中でも遠く七つ聞こえる。画面の外の出来事なのでログだけ
+const BELL := "遠くで、街の鐘が七つ鳴った。日が落ちる。"
+
 var main: Node                 # Main
 var minutes := float(Balance.DIVE_START_MIN)    # 潜り始めからの通しの分(0時起点。日をまたぐと 1440 を超える)
 var resting := false
@@ -71,6 +74,8 @@ func update(delta: float) -> void:
 			_exhale()
 		elif not resting:
 			_nightfall()
+		else:
+			main.log_msg(BELL, Color("d8c8a0"))
 	elif was_night and not is_night() and main.current != null and main.current.exhale:
 		main.log_msg("夜が明けた。階段を塞いでいた吐息が、引いていく。", Color("e8dcb0"))
 
@@ -276,6 +281,7 @@ func _exhale() -> void:
 	fl.spawner.queued += Balance.EXHALE_BURST
 	_queue_t = 0.0
 	Sfx.cue(fl, main.leader().position, "exhale")
+	main.log_msg(BELL, Color("d8c8a0"))
 	main.log_msg("日が落ちた。今夜は吐く夜だ。迷宮が、魔物を吐き出した。", Color("ff8a6a"))
 	main.log_msg("階段は吐息に塞がれた。夜明けまで、この層から出られない。(%d組が湧き出してくる)" % Balance.EXHALE_BURST, Color("ff9a8a"))
 	if not PhosFlow.layer_info(fl.layer_no + 1).is_empty():
@@ -298,6 +304,7 @@ func _nightfall() -> void:
 	var fl: FloorInstance = main.current
 	var m := fl.map
 	var pc := m.cell_of(main.leader().position)
+	main.log_msg(BELL, Color("d8c8a0"))
 	main.log_msg("日が落ちた。吐息が満ちて、意識が遠のく…", Color("b8a8e8"))
 	var at: Vector2 = main.random_room_pos(fl, m.room_at[m.idx(pc.x, pc.y)])
 	if at.x >= INF:

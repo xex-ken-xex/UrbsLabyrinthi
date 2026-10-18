@@ -38,6 +38,7 @@ var enc_serial := 5000
 var lamp_on := false           # 燐晶の灯油を灯している(光に弱い魔物が弱る)
 var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
+var world_props: Array = []    # 地図屋の印、壁の落書き、闇潜りの野営(FloorProps)
 var master_enc := -1           # 主の間の主(遭遇の id)。倒すと、まわりの控えの巣が散る
 const MASTER_REACH := 36.0         # 主の間からこのマス数までの巣は、みな散る
 const MASTER_SCATTER_ELSE := 0.25  # それより遠い巣が散る割合
@@ -142,6 +143,7 @@ func setup(m: FloorMap) -> void:
 	for p in d.get("props", []):
 		if String(p.get("kind", "")) == "rope":
 			ropes.append(Vector2i(int(p["x"]), int(p["y"])))
+	world_props = FloorProps.pick(d.get("props", []))
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
@@ -475,6 +477,7 @@ func _draw() -> void:
 		var ri := map.idx(rc.x, rc.y)
 		if map.explored[ri] == 1 and vr.has_point(map.center_of(rc)):
 			_draw_rope(rc, 1.0 if map.visible[ri] == 1 else 0.4)
+	FloorProps.draw(self, vr)
 	if hot:
 		_draw_heat(vr)
 	# 蜘蛛の巣
