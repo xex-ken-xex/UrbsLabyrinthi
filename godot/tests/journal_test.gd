@@ -130,7 +130,7 @@ func _test_screen() -> void:
 	inv._set_tab("trophy")
 	check(inv.item_list.item_count == Trophies.ids().size() and inv.item_list.get_item_text(inv.ids.find("first_kill")).begins_with("★"), "実績の欄: 取ったものは ★")
 	inv._on_pick(inv.ids.find("layer_all_9"))
-	check(inv.detail.text.contains("まだ取っていない") and inv.detail.text.contains("種"), "まだの実績は、進み具合が出る")
+	check(inv.detail.text.contains("まだ解除していない") and inv.detail.text.contains("種"), "まだの実績は、進み具合が出る (%s)" % inv.detail.text.replace("\n", " | ").left(300))
 	main.close_inventory()
 	await _step(2)
 

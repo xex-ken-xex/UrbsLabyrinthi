@@ -45,11 +45,11 @@ func _run() -> void:
 	check(_focus() == town.shop_list, "店に入ると、品物の一覧を操れる")
 	await _press(JOY_BUTTON_DPAD_DOWN)
 	check(town.sel_id != "", "十字キーで品物を選ぶと説明が出る")
-	var silver := town.gs.bank_silver
+	var silver := town.gs.silver
 	await _press(JOY_BUTTON_A)
 	check(_focus() is Button and _focus().text == "購入する", "A で購入のボタンへ移る")
 	await _press(JOY_BUTTON_A)
-	check(town.gs.bank_silver < silver, "A で買える")
+	check(town.gs.silver < silver, "A で買える")
 	check(_focus() != null, "買ったあとも焦点が残る")
 	if _focus() != town.shop_list:
 		await _press(JOY_BUTTON_B)

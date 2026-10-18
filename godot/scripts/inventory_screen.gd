@@ -64,7 +64,7 @@ func _refresh_weight() -> void:
 	if weight_lbl == null:
 		return
 	weight_lbl.text = String(load_handler.call()) if load_handler.is_valid() else ""
-	weight_lbl.add_theme_color_override("font_color", UIKit.BAD if weight_lbl.text.contains("重すぎる") else UIKit.DIM)
+	weight_lbl.add_theme_color_override("font_color", UIKit.BAD if weight_lbl.text.contains("重すぎる") else UIKit.GOLD)
 
 ## 迷宮の中で、記録をつけられるようにする
 func set_save(h: Callable) -> void:
@@ -124,7 +124,7 @@ func _ready() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(gap)
-	weight_lbl = UIKit.label("", 14, UIKit.DIM)      # 荷の重さ(Burden)
+	weight_lbl = UIKit.label("", 17, UIKit.TEXT)     # 荷の重さ(Burden。ken 10/18「持ち物画面に重量表記」)
 	head.add_child(weight_lbl)
 	head.add_child(UIKit.label(Updater.build_text(), 13, UIKit.DIM))   # Release「test」の説明にある commit と同じ
 	root.add_child(head)
@@ -283,7 +283,7 @@ func _fill_items() -> void:
 		var k := String(ItemDB.ITEMS[id]["kind"])
 		if k == "consumable" or k == "tome" or k == "material":
 			ids.append(id)
-			item_list.add_item("%s  ×%d" % [ItemDB.item_name(id), gs.count(id)], ItemIcons.texture(id))
+			item_list.add_item("%s  ×%d   %skg" % [ItemDB.item_name(id), gs.count(id), _kg(Burden.item_kg(id) * gs.count(id))], ItemIcons.texture(id))
 	if ids.is_empty():
 		item_list.add_item("(使えるものがない)")
 		item_list.set_item_disabled(0, true)
@@ -298,7 +298,7 @@ func _fill_equip() -> void:
 		l.custom_minimum_size = Vector2(44, 0)
 		r.add_child(l)
 		var cur := String(c.equip[slot[0]])
-		var l2 := UIKit.label(ItemDB.item_name(cur) if cur != "" else "(なし)", 16, UIKit.GOLD if cur != "" else UIKit.DIM)
+		var l2 := UIKit.label((ItemDB.item_name(cur) + "  %skg" % _kg(Burden.item_kg(cur))) if cur != "" else "(なし)", 16, UIKit.GOLD if cur != "" else UIKit.DIM)
 		l2.custom_minimum_size = Vector2(200, 0)
 		r.add_child(l2)
 		var s: String = slot[0]
@@ -306,12 +306,13 @@ func _fill_equip() -> void:
 		b.disabled = cur == ""
 		r.add_child(b)
 		slot_box.add_child(r)
+	slot_box.add_child(UIKit.label("装備の重さ %skg(立っている仲間の装備は、荷の重さに入る)" % _kg(Burden.gear_kg(c)), 13, UIKit.DIM))
 	for id in gs.item_ids():
 		var k := String(ItemDB.ITEMS[id]["kind"])
 		if k == "weapon" or k == "armor" or k == "acc":
 			ids.append(id)
 			var ok := ItemDB.can_equip(id, c.cls)
-			item_list.add_item("%s%s  ×%d" % ["" if ok else "× ", ItemDB.item_name(id), gs.count(id)])
+			item_list.add_item("%s%s  ×%d   %skg" % ["" if ok else "× ", ItemDB.item_name(id), gs.count(id), _kg(Burden.item_kg(id) * gs.count(id))])
 			if not ok:
 				item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.5, 0.5, 0.55))
 	if sel_id != "" and ids.has(sel_id):
@@ -701,7 +702,7 @@ func _fill_food() -> void:
 			var key := _food_key(s)
 			ids.append(key)
 			var bad := Cooking.rotten(s, now)
-			item_list.add_item("%s ×%d   %s" % [Cooking.stack_name(s, now), int(s["n"]), Cooking.left_text(s, now)], ItemIcons.texture("dish_" + String(s["id"])))
+			item_list.add_item("%s ×%d   %s   %skg" % [Cooking.stack_name(s, now), int(s["n"]), Cooking.left_text(s, now), _kg(Burden.DISH_KG * int(s["n"]))], ItemIcons.texture("dish_" + String(s["id"])))
 			if bad:
 				item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.62, 0.72, 0.42))
 				item_list.set_item_icon_modulate(item_list.item_count - 1, Color(0.55, 0.75, 0.4))

@@ -261,7 +261,7 @@ func _back_to_inn(said: String) -> void:
 func _on_party_made(chars: Array) -> void:
 	gs.new_game(chars)
 	DiveSave.clear()
-	go_town(["「ようこそ、ヴェルガ・ノクスへ。許可証は灰等級から。」", "預け金 %d銀貨。装備と薬を整えてから、迷宮へ。" % gs.bank_silver])
+	go_town(["「ようこそ、ヴェルガ・ノクスへ。許可証は灰等級から。」", "所持金 %d銀貨。装備と薬を整えてから、迷宮へ。稼ぎは坑口館の預金に入る。" % gs.silver])
 
 func _on_continue() -> void:
 	if gs.load_save():
@@ -833,6 +833,9 @@ func _check_wipe() -> void:
 	# 帰還積立が効くのは、腐葉の回廊(第1〜2層)まで(ken 10/18)。それより深いと、灯手隊は拾いに行けない
 	var covered := dive_insured and GameState.insurance_covers(current.map.data["meta"])
 	var lost_items := gs.lose_half() if covered else gs.lose_everything()
+	# 所持金も迷宮に持って入っている(ken 10/18 預金と分けた)。帰還積立が効けば半分は戻る
+	var lost_silver := gs.silver - (int(floor(gs.silver * 0.5)) if covered else 0)
+	gs.silver -= lost_silver
 	var was_insured := dive_insured
 	dive_insured = covered      # 全滅の報告の文面も、効いたかどうかで決める
 	# 燐の流れ: 放っておいた遺体は骨亡者に。上の階で失った物は、竪坑を落ちて溜まり場へ
@@ -853,6 +856,7 @@ func _check_wipe() -> void:
 		{"text": "", "size": 8},
 		{"text": "未査定の燐晶 %d銀貨相当 を失った" % lost, "size": 16},
 		{"text": lost_line, "size": 16, "color": Color("ff9a8a")},
+		{"text": "所持金 %d銀貨 も失った(預金は無事)" % lost_silver if lost_silver > 0 else "", "size": 16, "color": Color("ff9a8a")},
 		{"text": rescue_line, "size": 16, "color": Color("f1d98a")},
 		{"text": "残してきた物は、竪坑を落ちて、第6層の底の溜まり場に積もるだろう" if sunk else "", "size": 14, "color": Color(0.78, 0.82, 0.86)},
 		{"text": "", "size": 8},
@@ -865,9 +869,9 @@ func _after_overlay() -> void:
 		gs.day += 1
 		phase = "transition"
 		if dive_insured:
-			call_deferred("go_town", ["全滅した。未査定の燐晶と、持ち物の半分を迷宮に残してきた。帰還積立のおかげで、装備は戻った。預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせよう。"])
+			call_deferred("go_town", ["全滅した。未査定の燐晶と、持ち物の半分を迷宮に残してきた。帰還積立のおかげで、装備は戻った。預金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせよう。"])
 		else:
-			call_deferred("go_town", ["全滅した。未査定の燐晶も、持ち物も装備も、すべて迷宮に残してきた。預け金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせ、鍛冶屋で装備を整え直そう。"])
+			call_deferred("go_town", ["全滅した。未査定の燐晶も、持ち物も装備も、すべて迷宮に残してきた。預金 %d銀貨 は無事だ。" % gs.bank_silver, "倒れた仲間は神殿で蘇らせ、鍛冶屋で装備を整え直そう。"])
 
 # ---------- 部屋、扉、罠 ----------
 
@@ -1295,6 +1299,8 @@ func _update_hint() -> void:
 		h = "E: 街へ戻る" if current.floor_no == 1 else "E: 上へ戻る"
 	if h == "" and leader().carrying != null:
 		h = "%s: %sを下ろす" % [Controls.hint("interact"), leader().carrying.ch.name]
+	elif h == "" and leader().pulling():
+		h = "%s: 遺体カートから下ろす" % Controls.hint("interact")
 	hud.hint = h
 
 func interact() -> void:
@@ -1303,7 +1309,10 @@ func interact() -> void:
 	var fallen := _fallen_in_reach()
 	if fallen != null:
 		if leader().carry(fallen):
-			log_msg("%sは、倒れた%sを背負った。足と攻撃が半分になる。" % [leader().ch.name, fallen.ch.name], Color("e8dcb0"))
+			if fallen.on_cart:
+				log_msg("倒れた%sを、遺体カートに載せた。%sが引く。" % [fallen.ch.name, fallen.carried_by.ch.name], Color("e8dcb0"))
+			else:
+				log_msg("%sは、倒れた%sを背負った。足と攻撃が半分になる。" % [leader().ch.name, fallen.ch.name], Color("e8dcb0"))
 		_update_hint()
 		return
 	var door: Variant = _nearest_locked_door()
@@ -1356,6 +1365,15 @@ func interact() -> void:
 			enter_floor(current.floor_no - 1, "down")
 		return
 	var lead := leader()
+	if lead.pulling():
+		var names: Array = []
+		for o: Hero in lead.cart_load:
+			names.append(o.ch.name)
+		Sfx.cue(current, lead.cart_pos + Vector2(0, -10.0), "set_down")
+		lead.set_down()
+		log_msg("遺体カートから、%sを下ろした。" % "、".join(names), Color(0.8, 0.8, 0.85))
+		_update_hint()
+		return
 	if lead.carrying != null:
 		var who := lead.carrying.ch.name
 		lead.set_down()
@@ -1370,7 +1388,7 @@ func _fallen_in_reach() -> Hero:
 	if current == null or arena != null:
 		return null
 	var lead := leader()
-	if lead.down or lead.carrying != null:
+	if lead.down or (lead.carrying != null and not Hero.has_cart):
 		return null
 	for h in heroes:
 		if h != lead and h.down and h.carried_by == null and h.position.distance_to(lead.position) <= Hero.CARRY_REACH:
@@ -1398,6 +1416,11 @@ func _left_behind_says() -> bool:
 
 ## 背負われている体を背中に載せ、荷の重さを数え直す(0.5秒ごと)
 func _update_carry_and_load(delta: float) -> void:
+	Hero.has_cart = arena == null and gs.count("corpse_cart") > 0
+	for h in heroes:
+		if h.pulling() and not Hero.has_cart:
+			h.set_down()          # カートを手放した(足もとに置いた)
+		h.tow_cart()
 	for h in heroes:
 		h.ride()
 	if arena != null:
@@ -1815,8 +1838,8 @@ func climb_rope(dir: int, c: Vector2i) -> void:
 		if h.down:
 			continue
 		var roll: int = h.ch.roll_d20()
-		if h.carrying != null:
-			roll = mini(roll, h.ch.roll_d20())     # 倒れた仲間を背負っていると、不利(二度振って低いほう)
+		if h.carrying != null or h.pulling():
+			roll = mini(roll, h.ch.roll_d20())     # 倒れた仲間を背負っている・カートを担いでいると、不利(二度振って低いほう)
 		var b: int = h.ch.skill_bonus("athletics")
 		rolls.append([h, roll, b, roll == 20 or (roll != 1 and roll + b >= dc)])
 	log_msg("縄梯子を%s(〈運動〉 難易度 %d)" % ["下りる" if dir > 0 else "登る", dc], Color("e8dcb0"))
@@ -2163,7 +2186,7 @@ func return_to_surface() -> void:
 	lines += [
 		"持ち帰った燐晶(査定前の見積もり)  %d銀貨" % gross,
 		"燐晶税(3割)  −%d銀貨" % tax,
-		"預け金に加えた額  +%d銀貨   →   預け金 %d銀貨" % [net, gs.bank_silver],
+		"坑口館の預金に入れた額  +%d銀貨   →   預金 %d銀貨" % [net, gs.bank_silver],
 		"茸や素材など、迷宮の自生物は、持ち物のまま(燐晶ではないので、税はかからない)",
 	]
 	var downed: Array = []
@@ -2194,6 +2217,6 @@ func return_to_surface() -> void:
 			perf = c.skill_fx("performance")
 			performer = c.name
 	if perf > 0.0:
-		gs.bank_silver += int(perf)
+		gs.silver += int(perf)        # 芸の稼ぎは、手もとの所持金
 		lines.append("%sが宿で芸を見せた  +%d銀貨(〈芸能〉)" % [performer, int(perf)])
 	go_town(lines)

@@ -72,7 +72,7 @@ func _set_room(id: String) -> void:
 	_build()
 	town.call_deferred("_refocus_content")
 
-## 操作のあと: 上の欄(預け金、HP)と、この欄を作り直す
+## 操作のあと: 上の欄(所持金と預金、HP)と、この欄を作り直す
 func _after(line: String, col: Color = UIKit.GOOD) -> void:
 	var won := Trophies.line(Trophies.evaluate(gs))
 	if won != "":
@@ -356,5 +356,5 @@ func _show_build() -> void:
 		room = id
 		sel = ""
 		_after("大家が職人を呼んだ。%sができた。(-%d銀貨)" % [rm["name"], int(rm["price"])]))
-	b.disabled = gs.bank_silver < int(rm["price"])
+	b.disabled = gs.silver < int(rm["price"])
 	actions.add_child(b)

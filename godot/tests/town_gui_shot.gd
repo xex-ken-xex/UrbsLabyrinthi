@@ -46,7 +46,7 @@ func _run() -> void:
 	await _shot(out + "/sleep_after.png")
 	town._go("temple")
 	await _secs(1.2)
-	main.gs.bank_silver = 500
+	main.gs.silver = 500
 	town._bless()
 	await _secs(1.1)
 	await _shot(out + "/bless.png")

@@ -118,7 +118,7 @@ var last_report: Array = []        # 坑口館の査定課で、もう一度読�
 var notices: Array = []
 var party_bar: HBoxContainer
 var silver_label: Label
-var date_label: Label              # 今夜の座暦の日付(預け金の上)
+var date_label: Label              # 今夜の座暦の日付(所持金の上)
 var signs: Control                 # 広場の看板(画面の上に置く)
 var report_box: PanelContainer     # 地上へ戻ったときの、ギルドの査定報告
 var place_box: HBoxContainer       # 店の中: 左に戻るボタン、右に中身
@@ -423,7 +423,7 @@ func _refresh_top() -> void:
 		var l := UIKit.label("%s  Lv%d %s%s\nHP %d/%d  MP %d/%d" % [c.name, c.level, Jobs.CLASSES[c.cls]["name"], tag, int(ceil(c.hp)), c.max_hp(), int(c.mp), c.max_mp()], 14,
 			UIKit.BAD if c.hp <= 0.0 else UIKit.TEXT)
 		party_bar.add_child(l)
-	silver_label.text = "預け金 %d銀貨" % gs.bank_silver
+	silver_label.text = "所持金 %d銀貨   預金 %d銀貨" % [gs.silver, gs.bank_silver]
 	var sp := TownLines.special_name(gs.day) if ZaCalendar.date(gs.day)["month"] != 13 else ""      # 座渡しは、日付に名前が入っている
 	date_label.text = "%s  %s%s" % [ZaCalendar.label(gs.day), ZaCalendar.setsu(gs.day), ("  " + sp) if sp != "" else ""]
 
@@ -557,7 +557,7 @@ func _fill_shop() -> void:
 			shop_ids.append(id)
 			var price := gs.buy_price(id)
 			shop_list.add_item("%s   %d銀" % [ItemDB.item_name(id), price], ItemIcons.texture(id))
-			if price > gs.bank_silver:
+			if price > gs.silver:
 				shop_list.set_item_custom_fg_color(shop_list.item_count - 1, Color(0.55, 0.45, 0.45))
 	else:
 		for id in gs.item_ids():
@@ -595,25 +595,25 @@ func _show_shop_detail() -> void:
 				else:
 					t += "\n[color=#8a90a0]%s  (装備できない)[/color]" % c.name
 		var b := UIKit.button("購入する", _buy.bind(-1))
-		b.disabled = gs.buy_price(sel_id) > gs.bank_silver
+		b.disabled = gs.buy_price(sel_id) > gs.silver
 		shop_actions.add_child(b)
 		if location == "market":
 			var b5 := UIKit.button("5つ買う", _buy_n.bind(5))
-			b5.disabled = gs.buy_price(sel_id) * 5 > gs.bank_silver
+			b5.disabled = gs.buy_price(sel_id) * 5 > gs.silver
 			shop_actions.add_child(b5)
 		if kind == "weapon" or kind == "armor" or kind == "acc":
 			for i in gs.party.size():
 				var c: Character = gs.party[i]
 				if ItemDB.can_equip(sel_id, c.cls):
 					var b2 := UIKit.button("買って %s に装備" % c.name, _buy.bind(i))
-					b2.disabled = gs.buy_price(sel_id) > gs.bank_silver
+					b2.disabled = gs.buy_price(sel_id) > gs.silver
 					shop_actions.add_child(b2)
 		elif kind == "tome":
 			for i in gs.party.size():
 				var c2: Character = gs.party[i]
 				if (it["classes"] as Array).has(c2.cls) and not c2.skills.has(String(it["teaches"])):
 					var b3 := UIKit.button("買って %s が覚える" % c2.name, _buy.bind(i))
-					b3.disabled = gs.buy_price(sel_id) > gs.bank_silver
+					b3.disabled = gs.buy_price(sel_id) > gs.silver
 					shop_actions.add_child(b3)
 	else:
 		t += "\n買い取り [b]%d銀貨[/b]    所持 %d" % [gs.sell_price(sel_id), gs.count(sel_id)]
@@ -641,8 +641,8 @@ func _buy(member: int) -> void:
 
 ## 市場で、まとめて買う
 func _buy_n(n: int) -> void:
-	if gs.buy_price(sel_id) * n > gs.bank_silver:
-		_say("銀貨が足りない", UIKit.BAD)
+	if gs.buy_price(sel_id) * n > gs.silver:
+		_say("所持金が足りない(預金は坑口館で引き出せる)", UIKit.BAD)
 		return
 	for i in n:
 		gs.buy(sel_id)
@@ -694,13 +694,13 @@ func _content_temple() -> void:
 			any = true
 			var cost := _revive_cost(c)
 			var b := UIKit.button("%s を蘇らせる(寄進 %d銀貨)" % [c.name, cost], _revive.bind(c))
-			b.disabled = cost > gs.bank_silver
+			b.disabled = cost > gs.silver
 			content.add_child(b)
 	if not any:
 		content.add_child(UIKit.label("倒れている仲間はいない。", 15, UIKit.DIM))
 	content.add_child(UIKit.label("祈り", 18, UIKit.ACCENT))
 	var bless := UIKit.button("加護を願う(寄進 100銀貨)  次に潜るとき、しばらく受けるダメージが減る", _bless)
-	bless.disabled = gs.bank_silver < 100 or gs.blessed
+	bless.disabled = gs.silver < 100 or gs.blessed
 	content.add_child(bless)
 	if gs.blessed:
 		content.add_child(UIKit.label("すでに加護を授かっている。", 14, UIKit.GOOD))
@@ -708,9 +708,9 @@ func _content_temple() -> void:
 
 func _revive(c: Character) -> void:
 	var cost := _revive_cost(c)
-	if gs.bank_silver < cost:
+	if gs.silver < cost:
 		return
-	gs.bank_silver -= cost
+	gs.silver -= cost
 	c.hp = maxf(1.0, c.max_hp() * 0.5)
 	_say("%sは目を開けた。「……夜が、明けたのですね。」" % c.name, UIKit.GOOD)
 	_cue("t_revive")
@@ -719,9 +719,9 @@ func _revive(c: Character) -> void:
 	call_deferred("_refocus_content")
 
 func _bless() -> void:
-	if gs.bank_silver < 100 or gs.blessed:
+	if gs.silver < 100 or gs.blessed:
 		return
-	gs.bank_silver -= 100
+	gs.silver -= 100
 	gs.blessed = true
 	_say("神官が、燐晶の粉を額に置いた。「灯が、あなたと共に在りますように。」", UIKit.GOOD)
 	TownFx.play(self, "bless")
@@ -754,6 +754,7 @@ func _content_guild() -> void:
 	_guild_insurance(lc)
 	_guild_house(lc)
 	_guild_report(lc)
+	_guild_bank(rc)
 	_guild_board(rc)
 
 func _wrap(t: String, sz: int, col: Color = UIKit.TEXT) -> Label:
@@ -761,6 +762,40 @@ func _wrap(t: String, sz: int, col: Color = UIKit.TEXT) -> Label:
 	lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return lb
+
+## 預金課: 所持金を預ける・引き出す(100銀貨 単位。ken 10/18)。店で使えるのは所持金だけ。預金は全滅しても無事
+func _guild_bank(box: VBoxContainer) -> void:
+	box.add_child(UIKit.label("預金課  預け入れと引き出し", 18, UIKit.ACCENT))
+	box.add_child(_wrap("所持金 %d銀貨    預金 %d銀貨" % [gs.silver, gs.bank_silver], 16, UIKit.GOLD))
+	var r1 := UIKit.hbox(6)
+	for n in [100, 1000]:
+		var b := UIKit.button("%d 預ける" % n, _bank.bind(n), 104)
+		b.disabled = gs.silver < n
+		r1.add_child(b)
+	var ba := UIKit.button("全部預ける", _bank.bind(gs.silver - gs.silver % GameState.BANK_UNIT), 110)
+	ba.disabled = gs.silver < GameState.BANK_UNIT
+	r1.add_child(ba)
+	box.add_child(r1)
+	var r2 := UIKit.hbox(6)
+	for n in [100, 1000]:
+		var w := UIKit.button("%d 引き出す" % n, _bank.bind(-n), 104)
+		w.disabled = gs.bank_silver < n
+		r2.add_child(w)
+	box.add_child(r2)
+	box.add_child(_wrap("店で使えるのは所持金だけ。所持金は迷宮へも持って入るので、全滅すると失う(帰還積立が効けば半分)。預金は全滅しても無事。査定・依頼の報酬・遺品の謝礼は預金に入る。この窓口(帰還積立、家)では、預金から先に払う。", 13, UIKit.DIM))
+
+## n > 0 なら預ける、n < 0 なら引き出す
+func _bank(n: int) -> void:
+	var got := gs.deposit(n) if n > 0 else gs.withdraw(-n)
+	if got <= 0:
+		return
+	gs.save()
+	if n > 0:
+		_cue("t_write")
+		_after_guild("窓口の係が銀貨を数え、帳面に書き入れた。「%d銀貨、確かに預かった。」(所持金 → 預金)" % got, UIKit.GOOD)
+	else:
+		_cue("t_coin")
+		_after_guild("係が奥の金庫から銀貨を出して、数えて渡した。「%d銀貨。落とすなよ。」(預金 → 所持金)" % got, UIKit.GOOD)
 
 ## 遺品課: 遺品を引き取り、謝礼を出す
 func _guild_relics(box: VBoxContainer) -> void:
@@ -822,7 +857,7 @@ func _guild_insurance(box: VBoxContainer) -> void:
 		_insure_ask = true
 		_build_content()
 		call_deferred("_refocus_insure"))
-	b.disabled = gs.bank_silver < cost
+	b.disabled = gs.guild_funds() < cost
 	box.add_child(b)
 	box.add_child(_wrap("次の潜行一回ぶん。腐葉の回廊(第1〜2層)で全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。掛け金は仲間のレベルで決まる。", 13, UIKit.DIM))
 
@@ -833,7 +868,7 @@ func _guild_house(box: VBoxContainer) -> void:
 		box.add_child(_wrap("壁下区の長屋に、自分の家がある(広場の看板「我が家」)。", 14, UIKit.GOOD))
 		return
 	var b := UIKit.button("壁下区の長屋の一間を買う(%d銀貨)" % Home.HOUSE_PRICE, _buy_house)
-	b.disabled = gs.bank_silver < Home.HOUSE_PRICE
+	b.disabled = gs.guild_funds() < Home.HOUSE_PRICE
 	box.add_child(b)
 	box.add_child(_wrap("台所と寝床つき。台所では全部の料理を作れ、寝床ではただで休める。食料庫・物置・実験室は、あとから増築できる。", 13, UIKit.DIM))
 
@@ -843,7 +878,7 @@ func _buy_house() -> void:
 		_say(e, UIKit.BAD)
 		return
 	_cue("t_key")
-	_after_guild(("係が鍵を一本、窓口に置いた。「壁下区の長屋、三の路地の奥だ。前の住人は……まあ、戻らなかった。」(-%d銀貨)  " % Home.HOUSE_PRICE
+	_after_guild(("係が鍵を一本、窓口に置いた。「壁下区の長屋、三の路地の奥だ。前の住人は……まあ、戻らなかった。」(-%d銀貨。預金から先に払う)  " % Home.HOUSE_PRICE
 		+ Trophies.line(Trophies.evaluate(gs))).strip_edges(), UIKit.GOOD)
 
 func _content_home() -> void:
@@ -907,13 +942,12 @@ func _refocus_insure() -> void:
 func _insure() -> void:
 	_insure_ask = false
 	var cost := gs.insurance_cost()
-	if gs.bank_silver < cost or gs.insured:
+	if gs.insured or not gs.pay_at_guild(cost):
 		return
-	gs.bank_silver -= cost
 	gs.insured = true
 	gs.save()
 	_cue("t_write")
-	_after_guild("帰還記録課の帳面に、仲間の名を書き込んだ。「無事に戻れば、それが一番だがね。」(-%d銀貨)" % cost, UIKit.GOOD)
+	_after_guild("帰還記録課の帳面に、仲間の名を書き込んだ。「無事に戻れば、それが一番だがね。」(-%d銀貨。預金から先に払う)" % cost, UIKit.GOOD)
 
 func _accept(q: Dictionary) -> void:
 	var r := gs.accept_quest(q)
@@ -930,7 +964,7 @@ func _deliver(i: int) -> void:
 		_say("まだ数が足りない", UIKit.BAD)
 		return
 	_cue("t_coin")
-	_after_guild("%sを納めた。受付が%sからの報酬を数えて渡した。(+%d銀貨)" % [ItemDB.item_name(String(q["id"])), q["client"], got], UIKit.GOOD)
+	_after_guild("%sを納めた。受付が%sからの報酬を、預金に書き入れた。(預金 +%d銀貨)" % [ItemDB.item_name(String(q["id"])), q["client"], got], UIKit.GOOD)
 
 func _drop_quest(i: int) -> void:
 	var q: Dictionary = gs.quests[i]
@@ -943,9 +977,9 @@ func _hand_relic(id: String, n: int) -> void:
 		gs.remove_item(id)
 		got += _relic_reward(id)
 	gs.bank_silver += got
-	var line := "遺品課の係が、%sを受け取った。「……届けておく。ありがとう。」(謝礼 +%d銀貨)" % [ItemDB.item_name(id), got]
+	var line := "遺品課の係が、%sを受け取った。「……届けておく。ありがとう。」(謝礼は預金へ +%d銀貨)" % [ItemDB.item_name(id), got]
 	if id == "relic_tag":
-		line = "係は認識票の名を、帳面と見比べた。「……この人の家族に、知らせておく。」(謝礼 +%d銀貨)" % got
+		line = "係は認識票の名を、帳面と見比べた。「……この人の家族に、知らせておく。」(謝礼は預金へ +%d銀貨)" % got
 	_say(line, UIKit.GOOD)
 	gs.save()
 	_refresh_top()
@@ -975,7 +1009,7 @@ func _content_inn() -> void:
 			alive += 1
 	var cost := 30 * alive
 	var rest := UIKit.button("泊まる(%d銀貨)  生きている仲間のHPとMPが全快する" % cost, _rest.bind(cost))
-	rest.disabled = gs.bank_silver < cost or alive == 0
+	rest.disabled = gs.silver < cost or alive == 0
 	content.add_child(rest)
 	content.add_child(UIKit.button("酒場で噂を聞く(無料)", _rumor))
 	var full := gs.party.size() >= Balance.MAX_PARTY
@@ -1051,9 +1085,9 @@ func _move_member(i: int, d: int) -> void:
 	call_deferred("_refocus_content")
 
 func _rest(cost: int) -> void:
-	if gs.bank_silver < cost or busy:
+	if gs.silver < cost or busy:
 		return
-	gs.bank_silver -= cost
+	gs.silver -= cost
 	sleep_night("湯を使い、寝床で眠った。")
 
 ## 眠って一晩を過ごす(宿、我が家の寝床)。暗転して ｚｚｚｚ…… が昇り、明けると翌朝(ken 10/18)。
