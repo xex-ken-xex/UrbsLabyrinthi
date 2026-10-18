@@ -344,7 +344,7 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 			and position.distance_to(src.position) <= radius + src.radius + 40.0:
 		# 熱い体: 近くで殴ると、殴った側が火傷する
 		heat_cd = 0.8
-		(src as Hero).damage(maxf(1.0, dmg * 0.3), position, false, mon_type())
+		(src as Hero).damage(maxf(1.0, dmg * 0.3), position, false, mon_type(), "fire")
 		Sfx.cue(game_floor, src.position, "burn")
 	if amount <= 0.0:
 		flash = 0.06
@@ -360,6 +360,10 @@ func take_damage(amount: float, from_dir: Vector2, src: Body = null) -> void:
 		amount *= Balance.SUNDER_MULT
 	if src is Hero and is_instance_valid(src):
 		amount *= (src as Hero).ch.dealt_mult(mon_type())
+		var sl := 1.0 if spell else (src as Hero).ch.slay_mult(mon_type())
+		if sl != 1.0:
+			amount *= sl         # 破邪の鎚矛・竜殺しの剣
+			_note("よく効く!", Color("ffd27a"))
 	var final := maxf(0.05, amount * (1.0 - red))
 	hp -= final
 	if src is Hero and is_instance_valid(src):
@@ -1395,7 +1399,7 @@ func _cast_fire(sid: String, at: Vector2, tgt: Hero) -> void:
 				game_floor.message.emit("%sは%sに魅入られた。しばらく前後左右が逆になる" % [tgt.ch.name, display_name], "danger")
 		"heat":
 			if tgt != null and is_instance_valid(tgt) and not tgt.down:
-				tgt.damage(maxf(1.0, dmg * float(sp["mult"])), position, true, mon_type())
+				tgt.damage(maxf(1.0, dmg * float(sp["mult"])), position, true, mon_type(), "fire")
 				Sfx.cue(game_floor, tgt.position, cue)
 		"dark":
 			for h in game_floor.heroes:

@@ -68,14 +68,29 @@ func equip_item(slot: String) -> Dictionary:
 
 func equip_fx(key: String) -> float:
 	var t := 0.0
-	var acc := equip_item("acc")
-	if not acc.is_empty():
-		t += float((acc["fx"] as Dictionary).get(key, 0.0))
+	for slot in ["weapon", "armor", "acc"]:     # 装飾品のほか、魔法の武器・防具にも fx がある(陽光の剣の灯りなど)
+		var it := equip_item(slot)
+		if it.has("fx"):
+			t += float((it["fx"] as Dictionary).get(key, 0.0))
 	match key:
 		"hp_pct": t += meal_v("hp")
 		"mp_pct": t += meal_v("mp")
 		"light": t += meal_v("light")
 	return t
+
+## その種類の傷(fire など)を半分にする装備があるか(魔法の品の resist)
+func resists(elem: String) -> bool:
+	if elem == "":
+		return false
+	for slot in ["weapon", "armor", "acc"]:
+		if (equip_item(slot).get("resist", []) as Array).has(elem):
+			return true
+	return false
+
+## 魔法の武器の、魔物の種別ごとの倍率(破邪の鎚矛、竜殺しの剣)
+func slay_mult(mon_type: String) -> float:
+	var sl: Dictionary = equip_item("weapon").get("slay", {})
+	return float(sl.get(mon_type.to_lower(), 1.0))
 
 # ---------- 料理と満腹 ----------
 
@@ -166,7 +181,7 @@ func speed() -> float:
 	if has_feat("mobile"):
 		s *= 1.1
 	var a := equip_item("armor")
-	if not a.is_empty() and String(a["type"]) == "heavy":
+	if not a.is_empty() and String(a["type"]) == "heavy" and not a.get("no_slow", false):
 		s *= 0.92
 	return s
 

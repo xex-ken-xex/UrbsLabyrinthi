@@ -289,4 +289,4 @@ static func heat(main: Node, fl: FloorInstance, delta: float) -> void:
 			fl.visited_rooms["hot"] = true
 			main.log_msg("縦穴の縁が、焼けるように熱い。底で、何か大きなものが息をしている。", Color("ffb070"))
 		Sfx.cue(fl, h.position, "heat")
-		h.damage(maxf(1.0, Dice.roll(HEAT_DMG) * Balance.TRAP_DMG_SCALE * (1.0 - h.ch.skill_fx("survival"))), h.position + Vector2(0, 1), true)
+		h.damage(maxf(1.0, Dice.roll(HEAT_DMG) * Balance.TRAP_DMG_SCALE * (1.0 - h.ch.skill_fx("survival"))), h.position + Vector2(0, 1), true, "", "fire")

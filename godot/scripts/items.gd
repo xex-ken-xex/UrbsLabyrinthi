@@ -99,12 +99,66 @@ const BASE_ITEMS := {
 		"desc": "周囲の敵を怯ませて止める。"},
 }
 
+
+## 魔法の品(SRD 5.1 の魔法の品を下敷きにした。ken 10/18「魔法武器防具アイテムを増やす」)。店にはほとんど無く、
+## 遺体や宝の山からまれに、層の主からは必ず一つ出る。mlayer はその品が出はじめる層。magic は「魔法でない武器」への耐性を抜ける。
+## weapon: elem(傷の種類が火・冷気・光になる。火と光は再生を止める)、slay(魔物の種別ごとの倍率)、drain(与えた傷の割合だけ癒える)、
+##   venom(当てると毒にする確率)
+## 全部の装備: resist(その種類の傷を半分にする)、fx(装飾品と同じ効き目。regen は毎秒、最大HPの割合が戻る。feather は落ちても傷を負わない。
+##   poison_immune は毒が効かない)。armor: no_slow(重装でも足が遅くならない)
+const MAGIC_ITEMS := {
+	# --- 魔法の武器 ---
+	"magic_longbow": {"name": "魔力の長弓", "kind": "weapon", "magic": true, "mlayer": 1, "cat": "bow", "power": 3.5, "spell": 3.5, "price": 900,
+		"desc": "弦が、引くたびにかすかに鳴る長弓。並の長弓より矢が重い。"},
+	"venom_dagger": {"name": "毒蛇の短剣", "kind": "weapon", "magic": true, "mlayer": 2, "cat": "dagger", "power": 1.5, "venom": 0.3, "price": 900,
+		"desc": "刃の溝に、いつも黒い滴が溜まっている短剣。当てると、ときどき相手を毒にする。"},
+	"mace_disruption": {"name": "破邪の鎚矛", "kind": "weapon", "magic": true, "mlayer": 2, "cat": "blunt", "power": 2.5, "slay": {"undead": 1.6, "fiend": 1.6}, "price": 1200,
+		"desc": "神殿の銘が刻まれた鎚矛。亡者と悪魔によく効く。"},
+	"flame_tongue": {"name": "炎の舌", "kind": "weapon", "magic": true, "mlayer": 3, "cat": "sword", "power": 3.5, "elem": "fire", "price": 1800,
+		"desc": "振るうと刃が炎をまとう長剣。傷は火になり、魔物の再生を止める。"},
+	"life_stealer": {"name": "命吸いの剣", "kind": "weapon", "magic": true, "mlayer": 3, "cat": "sword", "power": 2.5, "drain": 0.12, "price": 1500,
+		"desc": "柄が、握る手より少しだけ温かい片手剣。与えた傷の一割あまりが、持ち主の傷を塞ぐ。"},
+	"frost_brand": {"name": "霜の刃", "kind": "weapon", "magic": true, "mlayer": 5, "cat": "sword", "power": 5.0, "elem": "cold", "resist": ["fire"], "price": 2600,
+		"desc": "鞘から抜くと、まわりの空気が白く曇る両手剣。傷は冷気になり、持ち主は火に強くなる。"},
+	"dragon_slayer": {"name": "竜殺しの剣", "kind": "weapon", "magic": true, "mlayer": 6, "cat": "sword", "power": 3.5, "slay": {"dragon": 1.8}, "price": 2400,
+		"desc": "竜の鱗で研いだという長剣。竜によく効く。"},
+	"sun_blade": {"name": "陽光の剣", "kind": "weapon", "magic": true, "mlayer": 6, "cat": "sword", "power": 3.0, "elem": "radiant", "fx": {"light": 2}, "price": 2800,
+		"desc": "柄だけに見える剣。握ると、光の刃が伸びる。傷は光になり、魔物の再生を止める。灯りの半径+2マス。"},
+	# --- 魔法の防具 ---
+	"elven_chain": {"name": "森人の鎖の胴着", "kind": "armor", "magic": true, "mlayer": 3, "type": "light", "ac": 5, "price": 1500,
+		"desc": "絹のように軽い鎖の胴着。鎖の胴着より固いのに、軽装として着られる。"},
+	"mithral_mail": {"name": "真銀の鎖帷子", "kind": "armor", "magic": true, "mlayer": 3, "type": "heavy", "ac": 7, "no_slow": true, "price": 1800,
+		"desc": "真銀を編んだ鎖帷子。重装なのに、足が遅くならない。"},
+	"fireproof_plate": {"name": "耐火の胸甲", "kind": "armor", "magic": true, "mlayer": 4, "type": "medium", "ac": 5, "resist": ["fire"], "price": 1600,
+		"desc": "赤い琺瑯を焼きつけた胸甲。火の傷が半分になる。"},
+	# --- 魔法の装飾品 ---
+	"ring_feather": {"name": "羽落ちの指輪", "kind": "acc", "magic": true, "mlayer": 1, "price": 600, "fx": {"feather": 1},
+		"desc": "羽の彫られた銀の指輪。縄梯子から手を滑らせても、落とし穴に落ちても、ふわりと降りて傷を負わない。"},
+	"ring_protection": {"name": "守りの指輪", "kind": "acc", "magic": true, "mlayer": 2, "price": 1200, "fx": {"ac": 2},
+		"desc": "防御+2。小盾より軽い。"},
+	"periapt_poison": {"name": "毒除けの護符", "kind": "acc", "magic": true, "mlayer": 2, "price": 900, "fx": {"poison_immune": 1},
+		"desc": "銀の鎖に下げた、小さな緑の石。毒が効かなくなる。"},
+	"amulet_health": {"name": "健康の首飾り", "kind": "acc", "magic": true, "mlayer": 4, "price": 1600, "fx": {"hp_pct": 0.3},
+		"desc": "赤い石の首飾り。最大HP+30%。"},
+	"ogre_gauntlets": {"name": "怪力の籠手", "kind": "acc", "magic": true, "mlayer": 4, "price": 1600, "fx": {"power_pct": 0.3},
+		"desc": "鬼の力が宿るという鉄の籠手。体当たりと武器の威力+30%。"},
+	"boots_speed": {"name": "速さの長靴", "kind": "acc", "magic": true, "mlayer": 5, "price": 1800, "fx": {"speed_pct": 0.15},
+		"desc": "踵を打ち合わせると、足が軽くなる長靴。足が15%速くなる。"},
+	"ring_regen": {"name": "再生の指輪", "kind": "acc", "magic": true, "mlayer": 5, "price": 2600, "fx": {"regen": 0.005},
+		"desc": "緑の石の指輪。迷宮の中でも、傷がじわじわ塞がる(200秒ほどで全快)。"},
+	# --- 魔法の消耗品 ---
+	"fire_bead": {"name": "火球の珠", "kind": "consumable", "magic": true, "mlayer": 1, "price": 300, "use": "fireball", "v": 8.0,
+		"desc": "火球の首飾りから外した珠。前へ投げると弾けて、まわり3マスの魔物を焼く(8d6の火)。"},
+	"fire_res_draught": {"name": "耐火の水薬", "kind": "consumable", "magic": true, "mlayer": 1, "price": 200, "use": "buff", "buff": "fire_res", "v": 0.5, "t": 120.0,
+		"desc": "120秒間、火の傷が半分になる。舌に、灰の味が残る。"},
+}
+
 ## 全品。自生物、魔物の素材、遺品(ForageData、tools/make-items.py が作る)と、市場の食材(Cooking)を足してある。燐晶ではないので、税がかからない
 static var ITEMS: Dictionary = _all_items()
 
 ## 鍛冶で作れる品(素材からだけ作れる品)と、その良品・逸品も足す(Smithing)
 static func _all_items() -> Dictionary:
-	var all: Dictionary = BASE_ITEMS.merged(ForageData.ITEMS).merged(Cooking.ingredient_items()).merged(Smithing.gear_items())
+	var all: Dictionary = BASE_ITEMS.merged(MAGIC_ITEMS).merged(ForageData.ITEMS).merged(Cooking.ingredient_items()).merged(Smithing.gear_items())
 	return all.merged(Smithing.tier_items(all))
 
 const SHOPS := {
@@ -112,7 +166,7 @@ const SHOPS := {
 		"leather", "studded", "chain_shirt", "breastplate", "chain_mail", "plate", "buckler", "power_band", "swift_boots",
 		"tetsukai", "sumi", "yumizai"],
 	"general": ["potion", "hi_potion", "ether", "lamp_oil", "return_scroll", "corpse_cart", "robe", "quarterstaff", "vital_ring", "lamp_charm"],
-	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash"],
+	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash", "fire_bead", "fire_res_draught", "ring_feather"],
 	"market": ["haimugi", "suzumame", "chikabu", "makina", "hai_imo", "sunauo", "yagi_raku", "iwadori_tamago", "shirokona",
 		"kuromugishu", "jushi", "koushin", "iwa_jio", "takigi"],
 }
@@ -121,6 +175,8 @@ const SHOPS := {
 const GUILD_ONLY := ["relic_tag", "relic_gear"]
 const RARE_WEAPONS := ["shadow_dagger", "miner_pick", "comet_spear"]
 const WEAPON_CAT_JP := {"sword": "剣", "dagger": "短剣", "blunt": "鈍器", "axe": "斧", "spear": "槍", "staff": "杖", "bow": "弓"}
+const ELEM_JP := {"fire": "火", "cold": "冷気", "lightning": "雷", "radiant": "光", "force": "力場", "poison": "毒"}
+const MON_TYPE_JP := {"undead": "亡者", "fiend": "悪魔", "dragon": "竜", "giant": "巨人", "beast": "獣"}
 const ARMOR_TYPE_JP := {"none": "布", "light": "軽装", "medium": "中装", "heavy": "重装"}
 
 static func get_item(id: String) -> Dictionary:
@@ -149,6 +205,31 @@ static func can_equip(id: String, cls: String) -> bool:
 		"acc": return true
 	return false
 
+## 魔法の品を一つ選ぶ(その層までに出はじめる品から。深い層ほど、深い層の品が出やすい)。kinds が空でなければ、その種類だけ
+static func roll_magic(layer: int, rng: RandomNumberGenerator, kinds: Array = []) -> String:
+	var pool: Array = []
+	var weights: Array = []
+	var total := 0.0
+	for id in MAGIC_ITEMS:
+		var it: Dictionary = MAGIC_ITEMS[id]
+		if int(it["mlayer"]) > layer or (not kinds.is_empty() and not kinds.has(String(it["kind"]))):
+			continue
+		var w := 1.0 + float(int(it["mlayer"])) * 0.5
+		pool.append(id)
+		weights.append(w)
+		total += w
+	if pool.is_empty():
+		return ""
+	var r := rng.randf() * total
+	for i in pool.size():
+		r -= float(weights[i])
+		if r <= 0.0:
+			return String(pool[i])
+	return String(pool[pool.size() - 1])
+
+static func is_magic(id: String) -> bool:
+	return MAGIC_ITEMS.has(id)
+
 ## 深い層ほど、良い装備が出る
 static func roll_gear(floor_no: int, rng: RandomNumberGenerator) -> String:
 	var cap := 120 + floor_no * 130
@@ -172,6 +253,8 @@ static func detail(id: String) -> String:
 		s += "\n野営の燃料になる(燃料1つで、火が1時間もつ)。"
 	if it.get("forged", false) or it.has("tier"):
 		s += "\n店には無い。自宅の鍛冶場で作る。"
+	if MAGIC_ITEMS.has(id):
+		s += "\n[魔法の品] 迷宮でまれに見つかる。層の主は必ず一つ落とす。"
 	if GUILD_ONLY.has(id):
 		s += "\n店では売れない。坑口館(冒険者ギルド)の遺品課が引き取り、謝礼を出す。"
 	match String(it["kind"]):
@@ -184,15 +267,27 @@ static func detail(id: String) -> String:
 				s += "\n武器の技: %s%s(MP%d) %s" % ["[珍品] " if it.get("rare", false) else "", Jobs.SKILLS[tid]["name"], int(Jobs.SKILLS[tid]["mp"]), Jobs.SKILLS[tid]["desc"]]
 			if it.has("spell"):
 				s += "   技の威力 +%.1f" % float(it["spell"])
+			if it.has("elem"):
+				s += "\n傷の種類: %s" % ELEM_JP.get(String(it["elem"]), String(it["elem"]))
+			for t in (it.get("slay", {}) as Dictionary):
+				s += "\n%sに ×%.1f" % [MON_TYPE_JP.get(t, t), float(it["slay"][t])]
+			if it.has("drain"):
+				s += "\n与えた傷の %d%% だけ癒える" % int(round(float(it["drain"]) * 100.0))
+			if it.has("venom"):
+				s += "\n当てると %d%% で毒にする" % int(round(float(it["venom"]) * 100.0))
 		"armor":
 			s += "\n種類: %s   防御 +%d" % [ARMOR_TYPE_JP[it["type"]], int(it["ac"])]
 			if it.get("light_mass", false):
 				s += "   軽い"
 			if it.get("rustproof", false):
 				s += "   錆びない"
+			if it.get("no_slow", false):
+				s += "   足が遅くならない"
 		"tome":
 			var names: Array = []
 			for c in it["classes"]:
 				names.append(Jobs.CLASSES[c]["name"])
 			s += "\n覚えられるクラス: " + "、".join(names)
+	for e in (it.get("resist", []) as Array):
+		s += "\n%sの傷が半分" % ELEM_JP.get(String(e), String(e))
 	return s

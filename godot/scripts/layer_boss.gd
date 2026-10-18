@@ -256,8 +256,14 @@ static func _tokens(map: FloorMap, room: Dictionary, mons: Array) -> Array:
 			out.append({"x": pick.x, "y": pick.y, "g": g})
 	return out
 
-## 倒したときの落とし物: 大きい燐晶の塊と、鍛冶の良品か逸品を一つ
+## 倒したときの落とし物: 大きい燐晶の塊と、鍛冶の良品か逸品を一つ、魔法の品(武器・防具・装飾品)を一つ
+## last_magic に、落とした魔法の品の id が入る
+static var last_magic := ""
 static func drop_loot(fl: FloorInstance, layer: int, pos: Vector2) -> String:
+	var mid := ItemDB.roll_magic(layer, Dice.rng, ["weapon", "armor", "acc"])
+	last_magic = mid
+	if mid != "":
+		fl.ground.add_item(pos, mid, 1, Vector2.from_angle(Dice.rng.randf() * TAU) * 80.0)
 	var kg := (0.5 + 0.35 * layer) * Balance.CRYSTAL_SCALE / 0.3
 	fl.ground.add_crystal(pos, Crystal.roll(fl.ground.base, Dice.rng, 0.35), kg, Vector2.from_angle(Dice.rng.randf() * TAU) * 60.0)
 	var cap := 150 + 130 * layer
