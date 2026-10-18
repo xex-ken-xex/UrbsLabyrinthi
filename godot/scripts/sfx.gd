@@ -4,7 +4,9 @@ extends Node2D
 ## 文字は擬音用のフォント(UI.cue_font)で、一文字ずつ動く。動き方は STYLE(擬音ごと)で決める:
 ##   pop 弾けて浮く / slam 大きく叩きつけて縮み、揺れる / bounce 一文字ずつ跳ねながら出る /
 ##   shake 震え続ける / stretch 一文字ずつ伸びて出る(… や ー が間延びする) / soft ふわっと出て消える /
-##   snap 横から素早く滑り込む / wave 波打つ
+##   snap 横から素早く滑り込む / wave 波打つ /
+##   drop 一文字ずつ上から落ちて、着地でつぶれる(ドスン) / roll 一文字ずつ転がってくる(ゴロゴロ) /
+##   fly 飛ぶ向きへ残像を引いて流れる(ヒュッ)。roll と fly は cue の dir の向きに動く
 
 const CUES := {
 	"door": ["ギィ…", Color(0.9, 0.85, 0.75)],
@@ -213,11 +215,11 @@ const STYLE := {
 	"door": "stretch", "door_secret": "shake", "unlock": "pop", "unlock_fail": "shake",
 	"trap": "slam", "trap_alarm": "shake", "trap_found": "soft", "disarm": "pop", "disarm_fail": "slam",
 	"corpse": "bounce", "drink": "pop", "stairs": "bounce", "search": "bounce", "rest": "bounce",
-	"crystal": "soft", "crystal_big": "slam", "stun": "wave", "sunder": "slam", "exhale": "shake", "sealed": "slam",
+	"crystal": "soft", "crystal_big": "roll", "stun": "wave", "sunder": "slam", "exhale": "shake", "sealed": "slam",
 	"charge_full": "pop", "charge_hit": "slam", "charge_miss": "snap",
-	"sizzle": "stretch", "simmer": "bounce", "burnt": "soft", "munch": "bounce", "growl": "wave", "growl_hard": "wave", "growl_rest": "wave", "shoulder": "bounce", "set_down": "soft", "cart_load": "slam", "heavy": "slam", "toss": "pop", "bellyache": "shake",
-	"click": "pop", "fuse": "stretch", "boom": "slam", "spikes": "snap", "rumble": "shake", "smash": "slam", "creak": "shake",
-	"rubble": "shake", "thud": "slam", "clang": "slam", "flame": "stretch", "dart": "snap", "grind": "shake", "crush": "slam",
+	"sizzle": "stretch", "simmer": "bounce", "burnt": "soft", "munch": "bounce", "growl": "wave", "growl_hard": "wave", "growl_rest": "wave", "shoulder": "bounce", "set_down": "soft", "cart_load": "drop", "heavy": "slam", "toss": "pop", "bellyache": "shake",
+	"click": "pop", "fuse": "stretch", "boom": "slam", "spikes": "snap", "rumble": "roll", "smash": "slam", "creak": "shake",
+	"rubble": "shake", "thud": "drop", "clang": "slam", "flame": "stretch", "dart": "fly", "grind": "shake", "crush": "slam",
 	"net": "snap", "gas": "stretch", "swing": "snap", "jet": "pop", "pit": "slam", "warp": "soft", "warp_out": "soft",
 	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
 	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
@@ -227,22 +229,22 @@ const STYLE := {
 	"t_geta": "bounce", "t_sway": "wave", "t_fortune": "soft", "t_bell": "bounce", "t_anvil": "slam", "t_door": "stretch",
 	"t_hush": "stretch", "t_chatter": "bounce", "t_pen": "bounce", "t_bustle": "bounce", "t_slide": "snap", "t_lantern": "wave",
 	"t_revive": "pop", "t_key": "pop", "t_stamp": "pop",
-	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
+	"down": "drop", "revive": "pop", "levelup": "stretch", "kill": "drop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",
 	"emerge": "soft", "sniff": "bounce", "sentry": "stretch", "jot": "stretch", "trophy": "bounce", "boss_blast": "slam", "boss_fall": "slam",
-	"glare": "shake", "splash": "slam", "drop": "pop", "shape": "wave", "web_shot": "snap", "web": "stretch",
+	"glare": "shake", "splash": "slam", "drop": "drop", "shape": "wave", "web_shot": "fly", "web": "stretch",
 	"squeeze": "stretch", "gaze": "snap", "stone": "shake", "stench": "wave",
-	"chant": "bounce", "ms_fire": "pop", "ms_lightning": "slam", "ms_missile": "snap", "ms_frost": "stretch", "ms_guide": "pop",
+	"chant": "bounce", "ms_fire": "pop", "ms_lightning": "slam", "ms_missile": "fly", "ms_frost": "stretch", "ms_guide": "pop",
 	"ms_hold": "pop", "ms_sleep": "wave", "ms_charm": "wave", "ms_vine": "stretch", "ms_heat": "shake", "ms_dark": "stretch",
 	"ms_vanish": "soft", "shrug": "slam", "burn": "pop", "mist": "stretch",
 	"sk_rush": "snap", "sk_power": "slam", "sk_wall": "slam", "sk_sweep": "snap", "sk_rage": "shake", "sk_charge": "shake",
-	"sk_roar": "slam", "sk_quake": "slam", "sk_throw": "snap", "sk_haste": "snap", "sk_smoke": "soft", "sk_stab": "pop",
+	"sk_roar": "slam", "sk_quake": "slam", "sk_throw": "fly", "sk_haste": "snap", "sk_smoke": "soft", "sk_stab": "pop",
 	"sk_bolt": "snap", "sk_fire": "slam", "sk_frost": "shake", "sk_thunder": "shake", "sk_heal": "soft", "sk_holy": "slam",
-	"sk_bless": "bounce", "sk_mass_heal": "stretch", "sk_arrow": "snap", "sk_triple": "snap", "sk_snare": "pop",
+	"sk_bless": "bounce", "sk_mass_heal": "stretch", "sk_arrow": "fly", "sk_triple": "fly", "sk_snare": "pop",
 	"sk_snipe": "slam", "sk_shield": "stretch", "sk_sleep": "wave", "sk_regen": "soft", "sk_spin": "wave", "sk_twin": "snap",
 	"sk_cleave": "slam", "sk_bonk": "slam", "sk_pierce": "snap", "sk_aim": "stretch", "sk_focus": "shake", "sk_shadow": "soft",
-	"sk_rend": "slam", "sk_comet": "snap",
+	"sk_rend": "slam", "sk_comet": "fly",
 }
 
 ## スキルを使ったときの擬音(スキルの id → CUES の id)
@@ -264,9 +266,11 @@ var style := "pop"
 var age := 0.0
 var _chars: PackedStringArray = []
 var _seed := 0.0
+var dir := Vector2.ZERO
 
-## 擬音を出す。parent は層(FloorInstance)など、pos はその中の位置
-static func cue(parent: Node, pos: Vector2, id: String) -> void:
+## 擬音を出す。parent は層(FloorInstance)など、pos はその中の位置。
+## dir は転がる・飛ぶ向き(roll / fly の擬音だけが使う。ZERO なら右へ)
+static func cue(parent: Node, pos: Vector2, id: String, dir: Vector2 = Vector2.ZERO) -> void:
 	if parent == null or not CUES.has(id):
 		return
 	var f := Sfx.new()
@@ -274,6 +278,7 @@ static func cue(parent: Node, pos: Vector2, id: String) -> void:
 	f.color = CUES[id][1]
 	f.size = float(CUES[id][2]) if (CUES[id] as Array).size() > 2 else 1.0
 	f.style = String(STYLE.get(id, "pop"))
+	f.dir = dir
 	f.position = pos + Vector2(0, -22)
 	f.z_index = 21
 	parent.add_child(f)
@@ -289,7 +294,8 @@ func life() -> float:
 	var l := LIFE * (1.0 + (size - 1.0) * 0.3)
 	match style:
 		"bounce", "stretch": l += 0.06 * _chars.size()
-		"slam", "shake", "wave": l += 0.2
+		"slam", "shake", "wave", "drop", "fly": l += 0.2
+		"roll": l += 0.3 + 0.07 * _chars.size()
 	return l
 
 func _process(delta: float) -> void:
@@ -300,4 +306,4 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	CueText.draw_word(self, _chars, style, age, life(), 14.0 * size, color, _seed, size >= 2.0)
+	CueText.draw_word(self, _chars, style, age, life(), 14.0 * size, color, _seed, size >= 2.0, Vector2.ZERO, dir)

@@ -1075,10 +1075,11 @@ func _trigger_trap(t: Dictionary, victim: Body) -> void:
 		log_msg("罠！ %s(%s)  %sが踏んだ" % [t["name"], SEVERITY_JP.get(String(t["severity"]), ""), who], Color("ff6a5a") if hero != null else Color("ffb070"))
 		log_msg(String(t["effect"]), Color(0.85, 0.7, 0.7))
 	if TrapFx.MOVING.has(fx):
+		var tf := TrapFx.make(current, t, victim)
 		var cue := String(TrapFx.START_CUE.get(fx, ""))
 		if cue != "":
-			Sfx.cue(current, pos, cue)
-		current.add_child(TrapFx.make(current, t, victim))
+			Sfx.cue(current, pos, cue, tf.dir)      # 大岩の ゴロゴロ は転がる向きへ
+		current.add_child(tf)
 		return
 	Sfx.cue(current, pos, String(TRAP_CUE.get(fx, "trap")))
 	var scale := 1.0
@@ -1754,10 +1755,11 @@ func spring_trap(t: Dictionary) -> void:
 	if TrapFx.MOVING.has(fx):
 		# 動きのある罠は、本当に動く(離れて投げれば無事。魔物を巻き込める)
 		log_msg("石を投げた。%sが動き出した" % t["name"], Color("e8dcb0"))
+		var tf := TrapFx.make(current, t, null)
 		var cue := String(TrapFx.START_CUE.get(fx, ""))
 		if cue != "":
-			Sfx.cue(current, pos, cue)
-		current.add_child(TrapFx.make(current, t, null))
+			Sfx.cue(current, pos, cue, tf.dir)
+		current.add_child(tf)
 		current.alert_radius(pos, 8.0)
 		current.queue_redraw()
 		return

@@ -314,7 +314,7 @@ func _darts(delta: float) -> void:
 	var n := 1 if kind == "bolt" else 4
 	if age >= WARN + fired * 0.12 and fired < n:
 		if fired == 0:
-			Sfx.cue(fl, start + dir * C * 0.5, "dart")
+			Sfx.cue(fl, start + dir * C * 0.5, "dart", dir)
 		fired += 1
 		var tgt := aim
 		# 狙いは、踏んだ者のいまの位置(いなければ罠のマス)

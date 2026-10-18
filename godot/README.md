@@ -451,7 +451,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/flow_sh
 - 宝箱は無い。燐晶は、床に落ちている**光る石**(純度 低・並・高・極・不明)。近づくと吸い寄せられて拾える。宝の部屋、壁ぎわの露頭、遺体、倒した魔物から手に入る。
 - 拾うと、その物の絵が拾った仲間の頭の上へ跳ね上がり、右の地図の下に絵つきで知らせが出る(続けて同じ物を拾うと、数や重さをまとめる。`pickup_pop.gd`、`hud.gd`)。
 - 施錠された扉の解錠は、成功すると錠前の弓が外れて金の光が散り、失敗すると錠前が揺れて赤く光る(`unlock_fx.gd`)。
-- 擬音はこのゲームの看板で、効果音も曲も入れない(ken 10/16、曲は 10/17)。擬音は Dela Gothic One で一文字ずつ動く。動き方は8つ(pop 弾ける / slam 叩きつけて揺れる / bounce 一文字ずつ跳ねる / shake 震える / stretch 一文字ずつ伸びる / soft ふわっと / snap 横から滑り込む / wave 波打つ)で、擬音ごとに `Sfx.STYLE` で決める(`sfx.gd`、`cue_text.gd`)。
+- 擬音はこのゲームの看板で、効果音も曲も入れない(ken 10/16、曲は 10/17)。擬音は Dela Gothic One で一文字ずつ動く。動き方は11(pop 弾ける / slam 叩きつけて揺れる / bounce 一文字ずつ跳ねる / shake 震える / stretch 一文字ずつ伸びる / soft ふわっと / snap 横から滑り込む / wave 波打つ / drop 一文字ずつ落ちて着地でつぶれる / roll 一文字ずつ転がってくる / fly 残像を引いて飛ぶ)で、擬音ごとに `Sfx.STYLE` で決める(`sfx.gd`、`cue_text.gd`)。roll と fly は大岩の転がる向き・矢や技の飛ぶ向きに動く。緩急(行き過ぎて戻る、速く出て遅く止まる)はリリックモーションの手を借りた(ken 10/18)。
   地上へ戻るとき、純度ごとに査定され、**3割が燐晶税**。
 - 茸や苔、魔物の素材、遺品は、**燐晶ではないので、税がかからない**。持ち物に入り、食べる・使う・売る。一覧は `docs/items-and-forage.md`。
 - アイテムの絵は、16列のシート(`assets/items/items_sheet.png`、`tools/make-items.py`)。プロンプトは `docs/item-prompts.md`。
