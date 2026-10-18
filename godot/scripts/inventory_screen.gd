@@ -56,7 +56,7 @@ func _on_save() -> void:
 	if not save_handler.is_valid():
 		return
 	var ok: bool = save_handler.call()
-	save_btn.text = "記録した" if ok else "記録できない"
+	save_btn.text = "保存しました。" if ok else "記録できない"
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -93,7 +93,7 @@ func _ready() -> void:
 	rest_btn.visible = false
 	tabs.add_child(rest_btn)
 	save_btn = UIKit.button("記録をつける", _on_save, 150)
-	save_btn.tooltip_text = "迷宮の中の、この場所から再開できるように記録する(タイトルの「つづきから」)"
+	save_btn.tooltip_text = "迷宮の中の、この場所から再開できるように記録して、タイトルへ戻る(タイトルの「つづきから」)"
 	save_btn.visible = false
 	tabs.add_child(save_btn)
 	row.add_child(tabs)
