@@ -49,8 +49,7 @@ var _menu_rope := Vector2i(-1, -1)
 
 func _ready() -> void:
 	Dice.rng.randomize()
-	if DisplayServer.window_is_focused():
-		StickyKeys.suppress()
+	StickyKeys.start()   # Windows の固定キーのショートカット(Shift 5回)を、前面にある間だけ止める見張り
 	_setup_input()
 	camera = Camera2D.new()
 	camera.zoom = Vector2.ONE * GameSettings.zoom()
@@ -78,14 +77,6 @@ func _ready() -> void:
 		show_title()
 	if OS.get_cmdline_user_args().has("--autotest-town"):
 		call_deferred("_autotest_town")
-
-## Windows の固定キーのショートカット(Shift 5回)は、ゲームが前面にある間だけ止める(StickyKeys)
-func _notification(what: int) -> void:
-	match what:
-		NOTIFICATION_APPLICATION_FOCUS_IN:
-			StickyKeys.suppress()
-		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_EXIT_TREE, NOTIFICATION_PREDELETE:
-			StickyKeys.restore()
 
 ## 書き出したビルドで「迷宮 → 街」を再現するための確認用(--autotest-town を付けて起動する)
 func _autotest_town() -> void:
