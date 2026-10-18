@@ -1,6 +1,6 @@
 extends SceneTree
 ## 迷宮の中身 その3(設計 §11.5):  godot --headless --path godot -s res://tests/world_test.gd
-## 地図屋の印、壁の落書き(七芒星・静印)、闇潜りの野営、日没の鐘。
+## 地図屋の印、壁の落書き(七芒星・静印)、闇潜りの野営、日没の鐘。水鏡の刻みが読める夜、空の座に座る。
 ## 小さな置き物(灯守の詰所、封鎖令の跡、オルドの杭、水鏡の刻み、空の座)と、竪坑のまわりの共有の狩場。
 
 var fails := 0
@@ -39,6 +39,8 @@ func _run() -> void:
 	for h in main.heroes:
 		h.iframes = 1e9
 	await _test_read()
+	await _test_carving()
+	await _test_seat()
 	await _test_bell()
 	print("\n==== ", "ALL PASSED" if fails == 0 else "%d FAILED" % fails)
 	quit(1 if fails > 0 else 0)
@@ -138,6 +140,84 @@ func _test_bell() -> void:
 		if _logs().any(func(t): return t == DungeonTime.BELL):
 			break
 	check(_logs().any(func(t): return t == DungeonTime.BELL), "日が落ちると、遠くで鐘が七つ鳴る(ログ)")
+
+## 水鏡の刻み: 下り階段の光が差した間の刻みだけが、一文字読める
+func _test_carving() -> void:
+	print("[水鏡の刻み]")
+	var fl: FloorInstance = null
+	var lit: Dictionary = {}
+	var dark: Dictionary = {}
+	var kagami: Array = []
+	for depth in range(1, 31):
+		var f := FloorInstance.create(FloorMap.floor_path(depth, 0, 4))
+		if f.layer_no in [5, 6]:
+			kagami.append(depth)
+		f.free()
+	for depth in kagami:
+		main.enter_floor(depth, "up")
+		await _step(2)
+		fl = main.current
+		lit = {}
+		dark = {}
+		for p in fl.world_props:
+			if String(p["kind"]) != "carving":
+				continue
+			if FloorProps.carving_lit(fl, p):
+				lit = p
+			elif dark.is_empty() and FloorProps.carving_site(fl, p) >= 0:
+				dark = p
+		if not lit.is_empty() and not dark.is_empty():
+			break
+	check(not lit.is_empty() and not dark.is_empty(), "今夜読める刻みと、読めない刻みがある")
+	if lit.is_empty() or dark.is_empty():
+		return
+	var sites := {}
+	for p in fl.world_props:
+		if String(p["kind"]) == "carving":
+			sites[FloorProps.carving_site(fl, p)] = true
+	check(sites.size() == 7 and not sites.has(-1), "刻みは七つの間に一つずつ")
+	main.place_party(fl.map.center_of(Vector2i(int(dark["x"]), int(dark["y"]))))
+	await _step(4)
+	check(_logs().any(func(t): return t.contains("今夜は暗くて読めない")), "光の差さない刻みは読めない")
+	var k := FloorProps.carving_site(fl, lit)
+	var before := Journal.stat(main.gs, "carving%d" % k)
+	main.place_party(fl.map.center_of(Vector2i(int(lit["x"]), int(lit["y"]))))
+	await _step(4)
+	var ch: String = FloorProps.CARVE[k]
+	check(_logs().any(func(t): return t.contains("今夜は読める") and t.contains("「%s」" % ch)), "階段の光が差した刻みは「%s」と読める" % ch)
+	check(_logs().any(func(t): return t.begins_with("これまでに読んだ水鏡の刻み") and t.contains(ch)), "読んだ刻みを間の順に並べる")
+	check(fl.get_children().any(func(n): return n is FloatText and String(n.text) == ch), "頭上にその文字")
+	check(Journal.stat(main.gs, "carving%d" % k) == before + 1, "読んだ間を記録する")
+	for i in 7:
+		main.gs.journal["stats"]["carving%d" % i] = 1
+	check(Trophies.met(main.gs, "carvings"), "七つ読むと実績「七つの刻み」")
+
+## 空の座: 第10層で E を押すと座る。シン… とログ、初めてなら底から歌
+func _test_seat() -> void:
+	print("[空の座]")
+	main.enter_floor(Balance.MAX_FLOOR, "up")
+	await _step(2)
+	var fl: FloorInstance = main.current
+	var seat: Dictionary = {}
+	for p in fl.world_props:
+		if String(p["kind"]) == "seat":
+			seat = p
+	check(not seat.is_empty(), "第10層に空の座がある")
+	if seat.is_empty():
+		return
+	main.place_party(fl.map.center_of(Vector2i(int(seat["x"]), int(seat["y"]))) + Vector2(Balance.CELL, 0))
+	await _step(3)
+	main._update_hint()
+	check(String(main.hud.hint).contains("空の座に座る"), "座のそばで、座れると出る (%s)" % main.hud.hint)
+	main.interact()
+	await _step(2)
+	check(fl.get_children().any(func(n): return n is Sfx and String(n.text) == "シン…"), "擬音 シン…")
+	check(_logs().any(func(t): return t.contains("空の座に腰を下ろした") and t.contains("子守唄")), "初めて座ると、底から子守唄のような歌が聞こえる")
+	check(Trophies.has(main.gs, "seat"), "実績「空座に座す」")
+	main.interact()
+	await _step(2)
+	check(_logs().filter(func(t): return t.contains("空の座に腰を下ろした")).back().contains("何も聞こえない"), "二度目は何も聞こえない")
+	check(FloorProps.sit_line("誰か", false, true).contains("温かい"), "空座の七七夜は、座がほのかに温かい")
 
 func _props_at(depth: int, night: int) -> Array:
 	var f := FloorInstance.create(FloorMap.floor_path(depth, night, 4))
