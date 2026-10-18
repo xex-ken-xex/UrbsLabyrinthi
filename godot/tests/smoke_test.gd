@@ -180,12 +180,11 @@ func _test_updater() -> void:
 	check(ps.contains("Wait-Process -Id 1234") and ps.contains("'C:\\Users\\ケン''s\\a.pck.new'") and ps.contains("-ArgumentList '--','--no-update'"), "Windows の入れ替えの命令(単引用符を重ねる)")
 
 	# 固定キーのショートカット(Shift 5回)を止める命令
-	var on := StickyKeys.script(true, "C:\\Users\\ケン's\\sticky")
-	var off := StickyKeys.script(false, "C:\\Users\\ケン's\\sticky")
+	var sk := StickyKeys.script(4321, "C:\\Users\\ケン's\\sticky", "C:\\Users\\ケン's\\sticky.log")
 	check(not StickyKeys.enabled() or OS.get_name() == "Windows", "固定キーの切り替えは Windows だけ")
-	check(on.contains("SystemParametersInfo(0x3B") and on.contains("-band (-bnot 4)") and on.contains("'C:\\Users\\ケン''s\\sticky'") and not on.contains("0x3B,8,[ref]$v,1"),
-		"前面になったら、固定キーのショートカットだけを外す(設定には保存しない)")
-	check(off.contains("Test-Path") and off.contains("-bor 4") and off.contains("Remove-Item"), "離れるときは、外したときだけ戻す")
+	check(sk.contains("$gp=4321") and sk.contains("'C:\\Users\\ケン''s\\sticky'") and sk.contains("SystemParametersInfo(0x3B,8,ref v,0)") and sk.contains("Get()&~12u"),
+		"固定キーのショートカットだけを外す(設定には保存しない)")
+	check(sk.contains("GetForegroundWindow") and sk.contains("$p.HasExited") and sk.contains("finally{if($off)"), "前面の持ち主を見張り、離れたときと終わったときに戻す")
 
 func _test_talents() -> void:
 	print("[talents]")
