@@ -1810,7 +1810,8 @@ func _test_game() -> void:
 	main._pick_cd = 0.0
 	main._pick_lock(door)
 	check(fl.get_children().filter(func(n): return n is UnlockFx).size() == nfx + 1, "解錠を試みると、錠前の演出が出る")
-	# 階段
+	# 階段(潜行許可証は黒鉄にして、全部の層を通す。等級で止まるのは permit_test)
+	main.gs.permit = Permit.NAMES.size() - 1
 	for n in range(1, Balance.MAX_FLOOR):
 		main.leader().position = main.current.map.center_of(main.current.down_cell)
 		main.interact()

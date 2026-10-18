@@ -382,6 +382,9 @@ func go_town(report: Array) -> void:
 	var won := Trophies.line(Trophies.evaluate(gs))
 	if won != "":
 		report.append(won)
+	var renewed := Permit.renew(gs)      # 層の主を倒していれば、窓口で許可証の等級が上がる
+	if renewed != "":
+		report.append(renewed)
 	gs.save()
 	var t := TownScreen.new()
 	t.setup(gs)
@@ -392,6 +395,8 @@ func go_town(report: Array) -> void:
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
 	t.arrive(report)
+	if renewed != "":
+		t._cue("t_stamp")
 	_trace("go_town 完了")
 
 func _on_dive() -> void:
@@ -1301,6 +1306,8 @@ func _update_hint() -> void:
 		h = "階段は吐息に塞がれている(夜明けまで)"
 	elif _near(current.down_cell, 1.4):
 		h = "E: 下へ降りる" if current.floor_no < Balance.MAX_FLOOR else "この先は未踏(まだ道がない)"
+		if current.floor_no < Balance.MAX_FLOOR and arena == null and not Permit.allows_floor(gs, current.floor_no + 1):
+			h = "この先は第%d層(%s等級の許可証では入れない)" % [Permit.layer_of(current.floor_no + 1), Permit.rank_name(gs)]
 	elif _near_rope().x >= 0:
 		h = "%s: 縄梯子(〈運動〉)" % Controls.hint("interact")
 	elif not FloorProps.seat_near(current, leader().position).is_empty():
@@ -1352,6 +1359,8 @@ func interact() -> void:
 	if _near(current.down_cell, 1.4):
 		if current.floor_no >= Balance.MAX_FLOOR:
 			log_msg("この先は未踏。まだ道がない。", Color(0.7, 0.7, 0.8))
+		elif _permit_refuses(current.floor_no + 1):
+			pass
 		elif not _left_behind_says():
 			enter_floor(current.floor_no + 1, "up")
 		return
@@ -1392,6 +1401,14 @@ func interact() -> void:
 		_update_hint()
 
 # ---------- 倒れた仲間を背負う(ken 10/18) ----------
+
+## 潜行許可証の外の層へは降りない(ken 10/16)。入れなければ、頭上とログに出して true
+func _permit_refuses(depth: int) -> bool:
+	if arena != null or Permit.allows_floor(gs, depth):
+		return false
+	current.spawn_text(leader().position + Vector2(0, -30), "許可証が要る", Color("ffb070"))
+	log_msg(Permit.refuse_line(gs, depth), Color("ffb070"))
+	return true
 
 ## 操作している仲間のそばで倒れていて、まだ誰も背負っていない仲間(背負えなければ null)
 func _fallen_in_reach() -> Hero:
@@ -1801,12 +1818,14 @@ func open_rope_menu(c: Vector2i) -> void:
 	if _left_behind_says():
 		return
 	var opts: Array = []
-	if current.floor_no < Balance.MAX_FLOOR:
+	if current.floor_no < Balance.MAX_FLOOR and Permit.allows_floor(gs, current.floor_no + 1):
 		var h_dn := float(Abyss.floor_info(current.floor_no).get("h_m", 5.0))
 		opts.append(["down", "下りる", "%s へ。%sm 下。一人ずつ〈運動〉 難易度 %d。外すと途中から落ち、落ちた高さ(m)×%d の傷。背負っていると不利。" % [String(Abyss.floor_info(current.floor_no + 1).get("label", "下の階")), _m(h_dn), rope_dc(h_dn), ROPE_FALL_DMG]])
 	if current.floor_no > 1:
 		var h_up := float(Abyss.floor_info(current.floor_no - 1).get("h_m", 5.0))
 		opts.append(["up", "登る", "%s へ。%sm 上。一人ずつ〈運動〉 難易度 %d。外すと滑り落ち、落ちた高さ(m)×%d の傷(仲間が引き上げる)。背負っていると不利。" % [String(Abyss.floor_info(current.floor_no - 1).get("label", "上の階")), _m(h_up), rope_dc(h_up), ROPE_FALL_DMG]])
+	if current.floor_no < Balance.MAX_FLOOR:
+		_permit_refuses(current.floor_no + 1)     # 下りられないわけを出す(登るほうは選べる)
 	if opts.is_empty():
 		return
 	_menu_rope = c
