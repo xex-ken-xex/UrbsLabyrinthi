@@ -4,7 +4,7 @@ extends RefCounted
 ## 起きている間はゆっくり、休んでいる間は速く進む。10分ごとにワンダリング・モンスターを振る。
 ## 夜になったとき起きていると、吐息に呑まれて、どこかの部屋へ放り出される(暗転はしない)。
 ## 吐く夜(層の meta.exhale)は違う。日が落ちると迷宮が魔物を大量に吐き出し、夜明けまで階段が塞がる(呑まれはしない)。
-## 休むと HP と MP が戻る(迷宮では、ほかに自然には戻らない)。6〜8時間で目を覚ますか、中断で終わる。
+## 休むと HP と MP が戻る(迷宮では、ほかに自然には戻らない。空腹なら MP は戻らず、ずっと腹が鳴る)。6〜8時間で目を覚ますか、中断で終わる。
 ## 満腹度も、ここで減らす(起きていると16時間で空。休んでいると3分の1の速さ)。空腹だと、その人の頭上で腹が鳴る。
 
 ## 日没の鐘(設計 §11.5)。街の鐘が、迷宮の中でも遠く七つ聞こえる。画面の外の出来事なのでログだけ
@@ -122,6 +122,7 @@ func stop_rest(msg: String, color: Color = Color("e8dcb0")) -> void:
 		main.log_msg(msg, color)
 
 ## dm 分ぶん、HP と MP を戻す。7時間でおよそ全快(魔力の泉は MP が 1.5 倍。寝つきの料理は 1.3 倍)
+## 空腹・腹ぺこで休むと、HP は戻るが MP は戻らない(ken 10/18)
 func _recover(dm: float) -> void:
 	var f := dm / (7.0 * 60.0)
 	for h in main.heroes:
@@ -130,7 +131,8 @@ func _recover(dm: float) -> void:
 		var c: Character = h.ch
 		var sl := maxf(1.0, c.meal_v("sleep"))
 		c.hp = minf(c.max_hp(), c.hp + c.max_hp() * f * sl)
-		c.mp = minf(c.max_mp(), c.mp + c.max_mp() * f * sl * (1.5 if c.has_feat("mana_well") else 1.0))
+		if c.hunger() == "ok" or c.hunger() == "full":
+			c.mp = minf(c.max_mp(), c.mp + c.max_mp() * f * sl * (1.5 if c.has_feat("mana_well") else 1.0))
 
 # ---------- 満腹 ----------
 
@@ -152,7 +154,16 @@ func _digest(dm: float, delta: float) -> void:
 		if not c.meal.is_empty() and not c.meal_active():
 			c.meal = {}
 			c.clamp_resources()       # 料理の効き目が切れて、最大HP・MPが下がったとき
-		if resting or h.sleep_t > 0.0 or c.hunger() == "ok" or c.hunger() == "full":
+		if c.hunger() == "ok" or c.hunger() == "full":
+			continue
+		if resting:
+			# 空腹のまま休むと、休んでいる間ずっと腹が鳴る(ken 10/18。起きているときの間引きとは別)
+			h.growl_t -= delta
+			if h.growl_t <= 0.0:
+				h.growl_t = Dice.rng.randf_range(2.2, 3.4)
+				Sfx.cue(main.current, h.position, "growl_rest")
+			continue
+		if h.sleep_t > 0.0:
 			continue
 		h.growl_t -= delta
 		if h.growl_t <= 0.0:

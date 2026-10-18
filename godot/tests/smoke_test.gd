@@ -534,6 +534,36 @@ func _test_cooking_dive() -> void:
 		if n is Sfx and (n as Sfx).text == "ぐぅ〜":
 			growl = true
 	check(growl, "空腹だと、頭上で「ぐぅ〜」と鳴る")
+	# 空腹のまま休む: HP は戻るが MP は戻らず、休んでいる間ずっと腹が鳴る(ken 10/18)
+	var hh: Hero = null
+	var hf: Hero = null
+	for x in main.heroes:
+		if x.ch.max_mp() > 0:
+			if hh == null:
+				hh = x
+			elif hf == null:
+				hf = x
+	if hf == null:
+		hf = main.heroes[0] if main.heroes[0] != hh else main.heroes[1]
+	hh.ch.belly = 20.0
+	hf.ch.belly = 90.0
+	hh.ch.hp = 1.0
+	hh.ch.mp = 0.0
+	hf.ch.mp = 0.0
+	main.dtime.resting = true
+	main.dtime.rest_end = main.dtime.minutes + 600.0
+	hh.growl_t = 0.0
+	var rests := 0
+	for i in 40:
+		main.dtime.update(0.1)
+		for n in main.current.get_children():
+			if n is Sfx and (n as Sfx).text == "ぐーきゅるきゅる" and not n.has_meta("seen"):
+				n.set_meta("seen", true)
+				rests += 1
+	main.dtime.stop_rest("")
+	check(hh.ch.max_mp() > 0 and hh.ch.hp > 1.0 and hh.ch.mp == 0.0 and (hf.ch.max_mp() == 0 or hf.ch.mp > 0.0),
+		"空腹のまま休むと、HP は戻るが MP は戻らない (HP %.0f MP %.1f / 満腹の仲間 MP %.1f)" % [hh.ch.hp, hh.ch.mp, hf.ch.mp])
+	check(rests >= 2, "休んでいる間、空腹の人の頭上で「ぐーきゅるきゅる」が続く (%d 回)" % rests)
 	main.queue_free()
 	await _step(2)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
