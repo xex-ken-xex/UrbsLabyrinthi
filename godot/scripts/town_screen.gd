@@ -5,9 +5,7 @@ extends Control
 
 signal dive
 signal open_inventory
-signal to_title
 signal arena_requested
-signal key_config
 signal recruit           # 宿屋の酒場で、仲間を一人加える
 
 const LOCATIONS := {
@@ -134,6 +132,8 @@ var shop_actions: VBoxContainer
 var log_label: Label
 var _walk_log: Array = []
 var _parting := ""                 # 別れるかを確かめている仲間の名前
+var _insure_ask := false          # 帰還積立: 入るか確かめている
+var busy := false                  # 宿で眠っている間(暗転)は、操作を受け付けない
 
 func setup(state: GameState) -> void:
 	gs = state
@@ -187,8 +187,6 @@ func _ready() -> void:
 	left.custom_minimum_size = Vector2(250, 0)
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	place_box.add_child(left)
-	back_btn = UIKit.button("◀ 広場へ戻る (Esc)", func(): _go("hub"))
-	left.add_child(back_btn)
 	place_label = UIKit.label("", 15, UIKit.GOLD)
 	place_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var lp := _glass(UIKit.panel(), 0.5)
@@ -208,12 +206,16 @@ func _ready() -> void:
 	msg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bh.add_child(msg)
-	for it in [["持ち物 (%s)" % Controls.hint("inventory"), func(): open_inventory.emit()], ["操作の設定", func(): key_config.emit()],
-			["闘技場", func(): arena_requested.emit()], ["タイトルへ", func(): to_title.emit()]]:
+	# 街のボタンは、右下にまとめる(ken 10/18)。タイトルへ・操作の設定は、持ち物(Tab)の画面から
+	for it in [["持ち物 (%s)" % Controls.hint("inventory"), func(): open_inventory.emit()], ["闘技場", func(): arena_requested.emit()]]:
 		var sb := UIKit.button(it[0], it[1])
 		sb.add_theme_font_size_override("font_size", 13)
 		sb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		bh.add_child(sb)
+	back_btn = UIKit.button("広場へ (Esc)", func(): _go("hub"), 150)
+	back_btn.name = "to_hub"
+	back_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bh.add_child(back_btn)
 	root.add_child(bottom)
 	# 広場の看板。絵の建物の上に、画面の割合で置く
 	signs = Control.new()
@@ -288,6 +290,9 @@ func _glass(p: PanelContainer, a: float = 0.62) -> PanelContainer:
 func _unhandled_input(e: InputEvent) -> void:
 	if not visible:
 		return
+	if busy:
+		get_viewport().set_input_as_handled()
+		return
 	if not e.is_echo() and e.is_action_pressed("inventory"):
 		get_viewport().set_input_as_handled()
 		open_inventory.emit()
@@ -305,13 +310,9 @@ func _unhandled_input(e: InputEvent) -> void:
 			shop_list.grab_focus()
 		else:
 			_go("hub")
-	elif location != "hub" and f == back_btn and e.is_action_pressed("ui_right"):
+	elif location != "hub" and f == back_btn and e.is_action_pressed("ui_up"):
 		if _focus_content():
 			get_viewport().set_input_as_handled()
-	elif location != "hub" and content.is_ancestor_of(f) and e.is_action_pressed("ui_left") and not (f is ItemList) \
-			and not (f.get_parent() != null and f.get_parent().has_meta("modes")):
-		get_viewport().set_input_as_handled()
-		back_btn.grab_focus()
 
 ## コントローラーで操れるよう、焦点を置く。広場では最後に入った店の看板、店の中では中身
 func focus_default() -> void:
@@ -376,6 +377,26 @@ func _say(text: String, color: Color = UIKit.GOLD) -> void:
 	msg.text = text
 	msg.add_theme_color_override("font_color", color)
 
+## 街の擬音(ken 10/18)。押したボタンの上に出す(ボタンが無ければ、下の帯の上)
+func _cue(id: String, at: Vector2 = Vector2(-1, -1)) -> void:
+	if not is_inside_tree():
+		return
+	var pos := at
+	if pos.x < 0.0:
+		var f := get_viewport().gui_get_focus_owner()
+		if f != null and is_instance_valid(f) and f.is_visible_in_tree() and is_ancestor_of(f):
+			pos = f.get_global_rect().get_center() - global_position
+		else:
+			pos = Vector2(size.x * 0.5, size.y - 120.0)
+	Sfx.cue(self, pos, id)
+	var last := get_child(get_child_count() - 1)
+	if last is Sfx:
+		last.z_index = 0      # 持ち物の画面を開いたら、その下に隠れるように
+
+## 店に入ったときの擬音(戸の鈴、炉の音、酒場のざわめき など)
+const ENTER_CUE := {"smith": "t_anvil", "general": "t_bell", "magic": "t_door", "temple": "t_hush", "inn": "t_chatter",
+	"guild": "t_pen", "market": "t_bustle", "home": "t_slide", "pleasure": "t_lantern"}
+
 func _refresh_all() -> void:
 	if gs == null or signs == null:
 		return
@@ -387,6 +408,7 @@ func _refresh_all() -> void:
 	if hs != null:
 		hs.get_parent().visible = Home.owned(gs)
 	place_box.visible = not hub
+	back_btn.visible = not hub
 	_build_content()
 	call_deferred("_refocus")
 
@@ -416,6 +438,7 @@ func _go(loc: String) -> void:
 	shop_mode = "buy"
 	sel_id = ""
 	_parting = ""
+	_insure_ask = false
 	_walk_log.clear()
 	if loc == "hub":
 		_say(TownLines.pick("leave", gs.day, LEAVE_LINES) if from != "hub" else TownLines.pick("hub", gs.day, [HUB_LINE]), UIKit.TEXT)
@@ -423,6 +446,8 @@ func _go(loc: String) -> void:
 		last_place = loc
 		_say(TownLines.pick("enter", gs.day, [String(ENTER_LINES.get(loc, ""))]), UIKit.TEXT)
 	_refresh_all()
+	if ENTER_CUE.has(loc) and from != loc:
+		_cue(String(ENTER_CUE[loc]), Vector2(size.x * 0.5, size.y * 0.42))
 	# 行き先を選んだら、そのまま中身を操れるようにする
 	call_deferred("focus_default")
 
@@ -609,6 +634,7 @@ func _buy(member: int) -> void:
 			var e := gs.equip(c, sel_id)
 			extra = "%sに装備した" % c.name if e == "" else e
 	_say("%sを買った。%s" % [ItemDB.item_name(sel_id), extra], UIKit.GOOD)
+	_cue("t_coin")
 	_refresh_top()
 	_fill_shop()
 	call_deferred("_refocus_shop")
@@ -621,6 +647,7 @@ func _buy_n(n: int) -> void:
 	for i in n:
 		gs.buy(sel_id)
 	_say("%sを%dつ買った。" % [ItemDB.item_name(sel_id), n], UIKit.GOOD)
+	_cue("t_coin")
 	_refresh_top()
 	_fill_shop()
 	call_deferred("_refocus_shop")
@@ -632,6 +659,7 @@ func _sell() -> void:
 		_say(r, UIKit.BAD)
 		return
 	_say("%sを売った(+%d銀貨)" % [name, gs.sell_price(sel_id)], UIKit.GOOD)
+	_cue("t_sell")
 	if gs.count(sel_id) <= 0:
 		sel_id = ""
 	_refresh_top()
@@ -685,6 +713,7 @@ func _revive(c: Character) -> void:
 	gs.bank_silver -= cost
 	c.hp = maxf(1.0, c.max_hp() * 0.5)
 	_say("%sは目を開けた。「……夜が、明けたのですね。」" % c.name, UIKit.GOOD)
+	_cue("t_revive")
 	_refresh_top()
 	_build_content()
 	call_deferred("_refocus_content")
@@ -695,12 +724,14 @@ func _bless() -> void:
 	gs.bank_silver -= 100
 	gs.blessed = true
 	_say("神官が、燐晶の粉を額に置いた。「灯が、あなたと共に在りますように。」", UIKit.GOOD)
+	TownFx.play(self, "bless")
 	_refresh_top()
 	_build_content()
 	call_deferred("_refocus_content")
 
 func _pray() -> void:
 	_say("膝をつき、目を閉じた。聖堂の奥で、誰も座っていない十二番目の座が、静かに光っている。", UIKit.TEXT)
+	_cue("t_pray")
 
 # ---------- 坑口館(冒険者ギルド) ----------
 
@@ -768,13 +799,32 @@ func _guild_relics(box: VBoxContainer) -> void:
 func _guild_insurance(box: VBoxContainer) -> void:
 	box.add_child(UIKit.label("帰還記録課  帰還積立", 18, UIKit.ACCENT))
 	if gs.insured:
-		box.add_child(_wrap("次の潜行は、帰還積立に入っている。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。", 14, UIKit.GOOD))
+		box.add_child(_wrap("次の潜行は、帰還積立に入っている。腐葉の回廊(第1〜2層)で全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。", 14, UIKit.GOOD))
 		return
 	var cost := gs.insurance_cost()
-	var b := UIKit.button("帰還積立に入る(%d銀貨)" % cost, _insure)
+	if _insure_ask:
+		# 確かめる(ken 10/18)
+		var ask := _glass(UIKit.panel(), 0.95)
+		var av := UIKit.vbox(6)
+		ask.add_child(av)
+		av.add_child(_wrap("帰還積立に入る? 掛け金 %d銀貨。\n効くのは次の潜行一回ぶんで、腐葉の回廊(第1〜2層)で全滅したときだけ。それより深い層では、灯手隊は拾いに行けない。" % cost, 15, UIKit.GOLD))
+		var ah := UIKit.hbox(8)
+		var yes := UIKit.button("入る", _insure, 110)
+		yes.set_meta("pref", true)
+		ah.add_child(yes)
+		ah.add_child(UIKit.button("やめる", func():
+			_insure_ask = false
+			_after_guild("「そうかい。気が変わったら、また来な。」", UIKit.TEXT), 110))
+		av.add_child(ah)
+		box.add_child(ask)
+		return
+	var b := UIKit.button("帰還積立に入る(%d銀貨)" % cost, func():
+		_insure_ask = true
+		_build_content()
+		call_deferred("_refocus_insure"))
 	b.disabled = gs.bank_silver < cost
 	box.add_child(b)
-	box.add_child(_wrap("次の潜行一回ぶん。全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。掛け金は仲間のレベルで決まる。", 13, UIKit.DIM))
+	box.add_child(_wrap("次の潜行一回ぶん。腐葉の回廊(第1〜2層)で全滅しても、灯手隊が装備と持ち物の半分を拾ってくる。掛け金は仲間のレベルで決まる。", 13, UIKit.DIM))
 
 ## 空き家の札: 壁下区の長屋の一間を買う(生産系②)
 func _guild_house(box: VBoxContainer) -> void:
@@ -792,6 +842,7 @@ func _buy_house() -> void:
 	if e != "":
 		_say(e, UIKit.BAD)
 		return
+	_cue("t_key")
 	_after_guild(("係が鍵を一本、窓口に置いた。「壁下区の長屋、三の路地の奥だ。前の住人は……まあ、戻らなかった。」(-%d銀貨)  " % Home.HOUSE_PRICE
 		+ Trophies.line(Trophies.evaluate(gs))).strip_edges(), UIKit.GOOD)
 
@@ -845,13 +896,23 @@ func _after_guild(line: String, col: Color) -> void:
 	_build_content()
 	call_deferred("_refocus_content")
 
+## 確かめる欄の「入る」に焦点を置く
+func _refocus_insure() -> void:
+	for b in content.find_children("*", "Button", true, false):
+		if (b as Button).text == "入る":
+			(b as Button).grab_focus()
+			return
+	_refocus_content()
+
 func _insure() -> void:
+	_insure_ask = false
 	var cost := gs.insurance_cost()
 	if gs.bank_silver < cost or gs.insured:
 		return
 	gs.bank_silver -= cost
 	gs.insured = true
 	gs.save()
+	_cue("t_write")
 	_after_guild("帰還記録課の帳面に、仲間の名を書き込んだ。「無事に戻れば、それが一番だがね。」(-%d銀貨)" % cost, UIKit.GOOD)
 
 func _accept(q: Dictionary) -> void:
@@ -859,6 +920,7 @@ func _accept(q: Dictionary) -> void:
 	if r != "":
 		_say(r, UIKit.BAD)
 		return
+	_cue("t_peel")
 	_after_guild("掲示板から%sの依頼書を剥がして、受付に出した。「%s ×%d。頼んだよ。」" % [q["client"], ItemDB.item_name(String(q["id"])), int(q["n"])], UIKit.TEXT)
 
 func _deliver(i: int) -> void:
@@ -867,6 +929,7 @@ func _deliver(i: int) -> void:
 	if got < 0:
 		_say("まだ数が足りない", UIKit.BAD)
 		return
+	_cue("t_coin")
 	_after_guild("%sを納めた。受付が%sからの報酬を数えて渡した。(+%d銀貨)" % [ItemDB.item_name(String(q["id"])), q["client"], got], UIKit.GOOD)
 
 func _drop_quest(i: int) -> void:
@@ -988,23 +1051,65 @@ func _move_member(i: int, d: int) -> void:
 	call_deferred("_refocus_content")
 
 func _rest(cost: int) -> void:
-	if gs.bank_silver < cost:
+	if gs.bank_silver < cost or busy:
 		return
 	gs.bank_silver -= cost
+	sleep_night("湯を使い、寝床で眠った。")
+
+## 眠って一晩を過ごす(宿、我が家の寝床)。暗転して ｚｚｚｚ…… が昇り、明けると翌朝(ken 10/18)。
+## 生きている仲間の HP と MP が全快し、日付が一つ進む。done(一行) を渡すと、明けたあとの画面はそちらで作る
+func sleep_night(line: String, done: Callable = Callable()) -> void:
+	busy = true
+	get_viewport().gui_release_focus()
+	var fx := TownFx.play(self, "sleep", _pass_night.bind(line, done))
+	fx.finished.connect(func():
+		busy = false
+		call_deferred("_refocus_content"))
+
+func _pass_night(line: String, done: Callable) -> void:
 	for c in gs.party:
 		if c.hp > 0.0:
 			c.hp = c.max_hp()
 			c.mp = c.max_mp()
-	_say("湯を使い、寝床で眠った。体が軽い。", UIKit.GOOD)
+	var rotten0 := _rotten_count()
+	gs.day += 1
+	gs.set_clock(gs.town_clock())
+	var lines: Array = [line, "翌朝、%s。体が軽い。" % ZaCalendar.label(gs.day)]
+	var pots := Home.ready_pots(gs)
+	if not pots.is_empty():
+		lines.append("実験室で、%sが仕上がっている。" % "、".join(pots))
+	var anvil := Smithing.anvil_ready(gs)
+	if anvil != "":
+		lines.append("鍛冶場で、%sが仕上がっている。" % anvil)
+	var rotten := _rotten_count() - rotten0
+	if rotten > 0:
+		lines.append("料理が%d皿、くさってしまった。" % rotten)
+	notices = []      # 掲示板は、日ごとに貼り替わる
+	gs.save()
 	_refresh_top()
-	_build_content()
-	call_deferred("_refocus_content")
+	var full := "  ".join(lines)
+	if done.is_valid():
+		done.call(full)
+	else:
+		_say(full, UIKit.GOOD)
+		_build_content()
+
+func _rotten_count() -> int:
+	var n := 0
+	for f in gs.food:
+		if Cooking.rotten(f, gs.clock):
+			n += int(f["n"])
+	return n
 
 func _rumor() -> void:
 	_say("酒場の隅で聞こえた話だ。\n" + TownLines.pick("rumors", gs.day, RUMORS), UIKit.TEXT)
+	_cue("t_whisper")
 
 func _save() -> void:
-	_say("記録をつけた。" if gs.save() else "記録に失敗した。", UIKit.GOOD)
+	var ok := gs.save()
+	_say("記録をつけた。" if ok else "記録に失敗した。", UIKit.GOOD)
+	if ok:
+		_cue("t_write")
 
 # ---------- 花街(雰囲気のみ) ----------
 
@@ -1012,9 +1117,9 @@ func _content_pleasure() -> void:
 	_head("花街「寝息通り」", "縁環区と壁下区の境に伸びる通り。迷宮の「息」に対して、人の寝息の通りと呼ばれる。")
 	content.add_child(UIKit.label("灯火の女神ルシュカの守る通り。ここでは、誰もが肩書きを脱いで歩く。", 14, UIKit.DIM))
 	var r := UIKit.hbox(8)
-	r.add_child(UIKit.button("通りを歩く", func(): _push_walk(TownLines.pick("walk", gs.day, WALK_LINES))))
-	r.add_child(UIKit.button("灯籠を見上げる", func(): _push_walk(TownLines.pick("look", gs.day, LOOK_LINES))))
-	r.add_child(UIKit.button("占い師の屋台", func(): _push_walk(TownLines.pick("fortune", gs.day, FORTUNES))))
+	r.add_child(UIKit.button("通りを歩く", func(): _push_walk(TownLines.pick("walk", gs.day, WALK_LINES)); _cue("t_geta")))
+	r.add_child(UIKit.button("灯籠を見上げる", func(): _push_walk(TownLines.pick("look", gs.day, LOOK_LINES)); _cue("t_sway")))
+	r.add_child(UIKit.button("占い師の屋台", func(): _push_walk(TownLines.pick("fortune", gs.day, FORTUNES)); _cue("t_fortune")))
 	content.add_child(r)
 	log_label = UIKit.label("", 16, Color("e8d8e8"))
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

@@ -163,7 +163,13 @@ func _setup_input() -> void:
 	Controls.setup()
 	GameSettings.load_settings()
 
-## 操作の設定(タイトルと街から開く)
+## 持ち物の画面の「タイトルへ」(街だけ)。街の記録は、街へ戻ったときと店のやりとりで書いてある
+func _town_to_title() -> void:
+	gs.save()
+	close_inventory()
+	show_title()
+
+## 操作の設定(タイトルと、持ち物の画面から開く)
 func open_key_config() -> void:
 	if key_config != null:
 		return
@@ -177,7 +183,9 @@ func close_key_config() -> void:
 	key_config.queue_free()
 	key_config = null
 	_menu_cd = 0.3
-	if screen != null and screen.has_method("focus_default"):
+	if inventory != null:
+		inventory.call_deferred("focus_default")
+	elif screen != null and screen.has_method("focus_default"):
 		screen.call("focus_default")
 
 func leader() -> Hero:
@@ -370,8 +378,6 @@ func go_town(report: Array) -> void:
 	t.dive.connect(_on_dive)
 	t.open_inventory.connect(open_inventory)
 	t.arena_requested.connect(start_arena)
-	t.to_title.connect(show_title)
-	t.key_config.connect(open_key_config)
 	t.recruit.connect(show_recruit)
 	_trace("go_town: 街の画面を作る")
 	_set_screen(t)
@@ -815,14 +821,20 @@ func _check_wipe() -> void:
 	_clear_bag()
 	DiveSave.clear()      # 全滅を、迷宮の記録で取り消せないように
 	Journal.bump(gs, "wipes")
-	# 持ち物も装備も、全部失う(ken 10/16)。帰還積立に入っていれば、装備は戻り、持ち物は半分
-	var lost_items := gs.lose_half() if dive_insured else gs.lose_everything()
+	# 持ち物も装備も、全部失う(ken 10/16)。帰還積立に入っていれば、装備は戻り、持ち物は半分。
+	# 帰還積立が効くのは、腐葉の回廊(第1〜2層)まで(ken 10/18)。それより深いと、灯手隊は拾いに行けない
+	var covered := dive_insured and GameState.insurance_covers(current.map.data["meta"])
+	var lost_items := gs.lose_half() if covered else gs.lose_everything()
+	var was_insured := dive_insured
+	dive_insured = covered      # 全滅の報告の文面も、効いたかどうかで決める
 	# 燐の流れ: 放っておいた遺体は骨亡者に。上の階で失った物は、竪坑を落ちて溜まり場へ
 	PhosFlow.end_dive(gs, floors)
 	var sunk := PhosFlow.to_sump(gs, current.floor_no, gs.last_lost, lost_bag)
 	var lost_line := "持ち物と装備(武器・防具も)%d点を、すべて失った" % lost_items
 	var rescue_line := "灯手隊が、倒れた仲間を担ぎ出してくれた。"
-	if dive_insured:
+	if was_insured and not covered:
+		rescue_line = "帰還積立は、腐葉の回廊までしか効かない。灯手隊は、ここまでは拾いに来られなかった。"
+	if covered:
 		lost_line = "持ち物 %d点を失った。装備は無事だった" % lost_items
 		rescue_line = "帰還積立のおかげで、灯手隊が装備と持ち物の半分を拾ってきてくれた。"
 	phase = "overlay"
@@ -1466,6 +1478,7 @@ func open_inventory() -> void:
 	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
 	if phase == "menu" and dtime != null:
 		inventory.set_save(Callable(self, "save_dive_to_title"))
+	inventory.set_system(Callable(self, "open_key_config"), Callable(self, "_town_to_title") if phase == "town" else Callable())
 	inventory.set_food(Callable(self, "cook_dish") if phase == "menu" and dtime != null else Callable(), Callable(self, "eat_dish"))
 
 ## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま
@@ -1954,7 +1967,7 @@ func _check_trophies() -> void:
 	if won.is_empty():
 		return
 	for id in won:
-		log_msg("パンパカパーン! 実績「%s」を取った(%s)" % [Trophies.name_of(String(id)), Trophies.desc_of(String(id))], Color("ffe08a"))
+		log_msg("パンパカパーン! 実績「%s」を解除した(%s)" % [Trophies.name_of(String(id)), Trophies.desc_of(String(id))], Color("ffe08a"))
 	var lead := leader()
 	if lead == null or current == null:
 		return

@@ -155,13 +155,13 @@ func _fill_bed() -> void:
 func _show_bed() -> void:
 	detail.text = "壁下区の長屋の一間。薄い壁の向こうで、隣の家の子どもが寝言を言っている。\n\n[color=#8a90a0]眠ると、生きている仲間の HP と MP が全快する(無料)。倒れた仲間は、神殿で。[/color]"
 	actions.add_child(UIKit.button("眠る(無料)", func():
-		for c in gs.party:
-			if c.hp > 0.0:
-				c.hp = c.max_hp()
-				c.mp = c.max_mp()
-		gs.save()
-		_after("自分の寝床で眠った。宿の寝床より、少しだけよく眠れた気がする。")))
-	actions.add_child(UIKit.button("記録をつける(セーブ)", func(): town._say("記録をつけた。" if gs.save() else "記録に失敗した。", UIKit.GOOD)))
+		if not town.busy:
+			town.sleep_night("自分の寝床で眠った。宿の寝床より、少しだけよく眠れた気がする。", func(l: String): _after(l))))
+	actions.add_child(UIKit.button("記録をつける(セーブ)", func():
+		var ok := gs.save()
+		town._say("記録をつけた。" if ok else "記録に失敗した。", UIKit.GOOD)
+		if ok:
+			town._cue("t_write")))
 
 # ---------- 食料庫 ----------
 
