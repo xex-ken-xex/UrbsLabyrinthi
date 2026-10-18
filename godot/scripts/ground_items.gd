@@ -164,6 +164,11 @@ func spawn_all() -> void:
 	_spawn_outcrops(out_kg * kg_factor)
 	_spawn_forage()
 	_spawn_corpses()
+	for p in fl.world_props:
+		if String(p["kind"]) == "blockade":        # 封鎖令の跡には、取り残された者の遺体(骨)
+			add_corpse(_free_pos(fl.map.center_of(Vector2i(int(p["x"]), int(p["y"]))) + Vector2(30, 10), 20.0), {}, "bones")
+			entries[-1]["why"] = "blockade"
+			entries[-1]["rank"] = "青銅"
 	for r in fl.map.rooms:
 		if String(r.get("kind", "")) == "sump":
 			_spawn_sump(r)
@@ -275,6 +280,7 @@ const CORPSE_WHY := {
 	"rim": "体じゅうの骨が折れている。上の階の縁から落ちてきたらしい。",
 	"dead_end": "行き止まりに追い詰められて、ここで力尽きたらしい。",
 	"shaft": "骨がばらばらに砕けている。竪坑を、上の階から落ちてきたらしい。",
+	"blockade": "手記を握っている。最後の日付は五十年前。封鎖令で取り残され、ここで待ち続けたらしい。",
 }
 const CORPSE_WHY_W := {"trap": 0.25, "nest": 0.25, "rim": 0.1, "dead_end": 0.12, "": 0.28}
 const RANKS := ["灰", "青銅", "銀", "黒鉄"]      # 潜行許可証の等級(層で決まる)

@@ -10,13 +10,28 @@ signal key_config
 var _focus: Button
 var _note: Label
 
-func set_note(text: String) -> void:
+## big: 「保存しました。」のように、目立たせたい一言
+func set_note(text: String, big: bool = false) -> void:
 	if _note != null:
 		_note.text = text
+		_note.add_theme_font_size_override("font_size", 22 if big else 14)
+		_note.add_theme_color_override("font_color", UIKit.GOLD if big else Color("a8c8e8"))
 
 func focus_default() -> void:
 	if _focus != null:
 		_focus.grab_focus()
+
+## 「つづきから」の下に出す、記録の中身(保存した日時、居場所、日付、仲間のレベル)
+static func save_info() -> String:
+	var sm := GameState.save_summary()
+	if sm.is_empty():
+		return ""
+	var names: Array = []
+	for p in sm["party"]:
+		var cls := String(p[1])
+		var cname := String(Jobs.CLASSES[cls]["name"]) if Jobs.CLASSES.has(cls) else cls
+		names.append("%s %s Lv%d" % [p[0], cname, int(p[2])])
+	return "%s 保存 ・ %s ・ %s ・ 預け金 %d銀貨\n%s" % [sm["when"], sm["where"], ZaCalendar.label(int(sm["day"])), int(sm["bank"]), " / ".join(names)]
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -64,10 +79,21 @@ func _ready() -> void:
 	var b3 := UIKit.button("クレジット", func(): show_credits.emit(), 260)
 	var b5 := UIKit.button("操作の設定", func(): key_config.emit(), 260)
 	var b4 := UIKit.button("終了", func(): get_tree().quit(), 260)
-	for b in [b1, b2, b5, b3, b4]:
+	for b in [b1, b2]:
+		v.add_child(b)
+	var info := save_info()
+	if info != "":
+		var il := UIKit.label(info, 14, Color("c8d8e8"))
+		il.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		il.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		il.add_theme_constant_override("outline_size", 4)
+		v.add_child(il)
+	for b in [b5, b3, b4]:
 		v.add_child(b)
 	_focus = b2 if not b2.disabled else b1
 	_focus.call_deferred("grab_focus")
 	_note = UIKit.label("", 14, Color("a8c8e8"))
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_note.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_note.add_theme_constant_override("outline_size", 4)
 	v.add_child(_note)

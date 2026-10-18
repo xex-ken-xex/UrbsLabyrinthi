@@ -269,13 +269,31 @@ func save_dive() -> bool:
 	var hs: Array = []
 	for h in heroes:
 		hs.append({"party": gs.party.find(h.ch), "pos": h.position, "buffs": h.buffs.duplicate(true), "rust": h.rust, "last_stand": h.last_stand})
-	var d := {"version": DiveSave.VERSION, "day": gs.day, "floor": current.floor_no, "floors": fls, "heroes": hs,
+	var d := {"version": DiveSave.VERSION, "day": gs.day, "floor": current.floor_no, "floor_label": String(current.map.data["meta"].get("floor_label", "")), "floors": fls, "heroes": hs,
 		"active": gs.party.find(leader().ch), "bag": bag_crystal.duplicate(), "light_t": light_t, "insured": dive_insured,
 		"minutes": dtime.minutes, "resting": dtime.resting, "rest_end": dtime.rest_end, "rest_from": dtime.rest_from, "fire_until": fire_until}
 	if not gs.save() or not DiveSave.write(d):
 		return false
 	log_msg("記録をつけた(%s、%s)。" % [ZaCalendar.label(gs.day), current.map.data["meta"].get("floor_label", "")], Color("9be29b"))
 	return true
+
+## 持ち物の画面の「記録をつける」。記録できたら、「保存しました。」と出してタイトルへ戻る(ken 10/18)
+func save_dive_to_title() -> bool:
+	if not save_dive():
+		return false
+	call_deferred("_to_title_saved")
+	return true
+
+func _to_title_saved() -> void:
+	if inventory != null:
+		inventory.queue_free()
+		inventory = null
+	_menu_fx.clear()
+	pending_return = false
+	_clear_bag()
+	show_title()
+	if screen is TitleScreen:
+		(screen as TitleScreen).set_note("保存しました。", true)
 
 ## 迷宮の中の記録から、その場所で再開する
 func resume_dive(d: Dictionary) -> void:
@@ -854,6 +872,10 @@ func _enter_room(pc: Vector2i) -> void:
 			log_msg(fv, Color(0.74, 0.78, 0.82))
 		if String(r.get("role", "")) == "master" and current.master_enc >= 0:
 			log_msg("この一画の主の間らしい。奥に、重い気配がある。", Color("f1d98a"))
+	if r.get("encounter") != null:
+		for e in m.data["encounters"]:
+			if int(e["id"]) == int(r["encounter"]) and e.get("shared", false):
+				log_msg("竪坑のまわりは、上と下の層の魔物が行き交う狩場らしい。見慣れない気配が混じっている。", Color("f1d98a"))
 	var feat: Variant = r.get("feature")
 	if typeof(feat) == TYPE_DICTIONARY:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))
@@ -1443,7 +1465,7 @@ func open_inventory() -> void:
 	ui_layer.add_child(inventory)
 	inventory.open(gs, Callable(self, "use_special"), Callable(self, "_rest_from_menu") if phase == "menu" and dtime != null else Callable(), Callable(self, "sync_hero_order"))
 	if phase == "menu" and dtime != null:
-		inventory.set_save(Callable(self, "save_dive"))
+		inventory.set_save(Callable(self, "save_dive_to_title"))
 	inventory.set_food(Callable(self, "cook_dish") if phase == "menu" and dtime != null else Callable(), Callable(self, "eat_dish"))
 
 ## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま

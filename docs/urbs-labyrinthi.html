@@ -203,7 +203,7 @@ const ROCK = 0, ROOM = 1, CORR = 2, DOOR = 3, VOID = 4, WATER = 5, SHALLOW = 6, 
 /* VOID 縦穴・竪坑の虚空('O'。歩けないが、見通せる)、WATER 深い水('~'。歩けない、見通せる。水の魔物は通れる)、
    SHALLOW 浅瀬('='。歩けるが遅い、見通せる)、PILLAR 柱('I'。通れず、見通せない。肋骨の柱、沈んだ列柱) */
 const SCHEMA = 'urbs-labyrinthi/0.3';                      // 書き出す JSON の形の版。項目を足したり変えたりしたら上げる
-const GENERATOR = '2.3.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
+const GENERATOR = '2.4.0';                                  // 生成器の版。同じ種から出る地図が変わったら上げる(形が同じでも)
 
 /* ---------- 乱数 ---------- */
 function xmur3(str) {
@@ -1214,8 +1214,17 @@ function generate(opts, mons) {
     if (r.id === upRoom.id) { r.role = 'entrance'; continue; }
     const boss = r === master || r.kind === 'lair';
     r.role = r === downRoom ? 'exit' : r === master ? 'master' : 'room';
-    if (r.kind === 'pit') { if (rn.chance(.3)) r.treasure = genTreasure(rn, theme, level, false); continue; }   // 穴の脇。巣はない
-    if (r.kind === 'sump') { r.treasure = genTreasure(rn, theme, level, true); continue; }                     // 溜まり場。上から落ちてきた物
+    if (r.kind === 'pit' || r.kind === 'sump') {   // 竪坑の脇と底は、上下の層の魔物が行き交う共有の狩場(巣ではない。下の層の魔物は強さ +2 レベルまで)
+      const nb = r.kind === 'pit' ? floor + 1 : floor - 1;
+      if (theme.vergha && nb >= 1 && nb <= 10 && rn.chance(r.kind === 'pit' ? .3 : .5)) {
+        const mix = pool.concat(buildPool(mons || [], THEMES[themeForFloor(nb)], Math.max(1, Math.min(20, level + (nb > floor ? 2 : 0)))));
+        const e = addEnc(genEncounter(rn, { pool: mix, level, party }, 0, r.area, false), free(r), r.id, false);   // 狩場は巣より小さい群れ(難度・低)
+        if (e) { e.shared = true; e.activity = '竪坑のそばで、上と下の層の獲物を待っている'; r.encId = e.id; }
+      }
+      if (r.kind === 'pit') { if (rn.chance(.3)) r.treasure = genTreasure(rn, theme, level, false); }
+      else r.treasure = genTreasure(rn, theme, level, true);                                                // 溜まり場。上から落ちてきた物
+      continue;
+    }
     if (r.kind === 'lair') {   // 竜の巣。眠る竜(固定。ふつうの遭遇ではない)と、燐晶の山
       const dm = (mons || []).find(m => m.i === WIRE.lair.monster);
       if (dm) { const e = { groups: [{ i: dm.i, n: 1 }], xp: dm.xp, budget: 0, diff: '危険', activity: '燐晶の山の上で眠っている', attitude: '敵対', kind: 'smart', lair: true }; addEnc(e, [I(r.cx, r.cy)], r.id, true); r.encId = e.id; }
@@ -1270,7 +1279,8 @@ function generate(opts, mons) {
       t0.id = traps.length; t0.x = k % W; t0.y = (k / W) | 0; t0.roomId = -1; traps.push(t0); trapAt.set(k, t0);
     }
     for (const k of deadEnds) if (rn.chance(.5)) addTrap(k, 'corridor', -1);
-    const far = cc.filter(k => Math.abs(k % W - stairs.up.x) + Math.abs(((k / W) | 0) - stairs.up.y) > 12 && !trapAt.has(k));
+    const far0 = cc.filter(k => Math.abs(k % W - stairs.up.x) + Math.abs(((k / W) | 0) - stairs.up.y) > 12 && !trapAt.has(k));
+    const far = far0.filter(k => fixed[k]).length ? far0.filter(k => fixed[k]) : far0;   // うろつく群れは、骨組みの通路(灯の道、主坑道、側廊)にいる
     const nW = Math.round(((exhale ? 1 : 0) + (rn.chance(.6) ? 1 : 0) + ({ L: 1, XL: 2, XXL: 4, XXXL: 6 }[o.size] > 0 && rn.chance(.5) ? ({ L: 1, XL: 2, XXL: 4, XXXL: 6 }[o.size]) : 0)) * Math.max(density, .4));
     for (let i = 0; i < nW && far.length; i++) {
       const k = rn.pick(far), near = far.filter(q => Math.abs(q % W - k % W) + Math.abs(((q / W) | 0) - ((k / W) | 0)) <= 2);
@@ -1310,6 +1320,35 @@ function generate(opts, mons) {
       const cs = order.filter(r => nestable(r) && r !== master && r.encId == null && !r.trapIds.length && r.area >= 9).sort((a, b) => b.deep - a.deep).slice(0, 3);
       const r = cs.length ? rn.pick(cs) : null, k = r ? I(r.cx, r.cy) : -1;
       if (r && !trapAt.has(k) && !stairCells.has(k)) world.push({ kind: 'camp', x: r.cx, y: r.cy, room: r.id });
+    }
+    // 灯守の詰所(腐葉): 候補地にいちばん近い灯守の灯の所。板に、芯を替えた日(何夜前か)。日が経っていれば、灯守が来ていない = 危ない
+    if (theme === THEMES.fuyou) {
+      let best = null, bd = 1e9;
+      for (const p of props) if (p.kind === 'lamp') for (const r of sites) { const d = Math.abs(p.x - r.cx) + Math.abs(p.y - r.cy); if (d < bd) { bd = d; best = p; } }
+      if (best) world.push({ kind: 'post', x: best.x, y: best.y, days: rn.int(0, 9) });
+    }
+    // 封鎖令の跡(錆鉄): 施錠扉の奥の、何もいない部屋。50年前の空振りの年に取り残された者の野営と遺体
+    if (theme === THEMES.sabi && rn.chance(.5)) {
+      const cs = [...new Set(doors.filter(d => d.type === 'locked' && d.roomId >= 0).map(d => rooms[d.roomId]))].filter(r => nestable(r) && r !== master && r.encId == null && !trapAt.has(I(r.cx, r.cy)));
+      if (cs.length) { const r = rn.pick(cs); world.push({ kind: 'blockade', x: r.cx, y: r.cy, room: r.id }); }
+    }
+    /* ここから下は骨組みの物なので、夜の乱数を使わない(どの夜も同じ所にある) */
+    const h32 = k => Math.imul((k + 1) ^ 0x9e3779b9, 2654435761) >>> 0;
+    // 鉄脚のオルドの時代の杭(腐葉): 骨組みの通路に、古い鉄の杭が4本まで(16マス以上離す)
+    if (theme === THEMES.fuyou) {
+      const cs = []; for (let k = 0; k < W * H; k++) if (fixed[k] && tiles[k] === CORR) cs.push(k);
+      cs.sort((a, b) => h32(a) - h32(b)); const got = [];
+      for (const k of cs) { if (got.length >= 4) break; if (got.some(q => cheb(q, k) < 16)) continue; got.push(k); world.push({ kind: 'stake', x: k % W, y: (k / W) | 0 }); }
+    }
+    // 水鏡の刻み(水鏡): 七つの水鏡の間の、水ぎわの床。水底に読めない文字
+    if (theme === THEMES.kagami) for (const r of sites) {
+      let k0 = -1; for (const k of r.cells) { const x = k % W, y = (k / W) | 0; let wet = false; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (tiles[I(x + dx, y + dy)] === WATER) wet = true; if (wet && (k0 < 0 || h32(k) < h32(k0))) k0 = k; }
+      if (k0 >= 0) world.push({ kind: 'carving', x: k0 % W, y: (k0 / W) | 0, room: r.id });
+    }
+    // 空の座(第10層): 骨組みの床のうち、竜の巣からいちばん遠い所に、誰も座っていない石の座
+    if (lairLayer) {
+      let k0 = -1, d0 = -1; for (let k = 0; k < W * H; k++) if (fixed[k] && open(k) && tiles[k] !== DOOR) { const d = Math.hypot(k % W - CX, ((k / W) | 0) - CY); if (d > d0) { d0 = d; k0 = k; } }
+      if (k0 >= 0) world.push({ kind: 'seat', x: k0 % W, y: (k0 / W) | 0, room: roomAt[k0] });
     }
   }
   /* 骨組みと一画の指紋。tools/check-floors.mjs が、夜をまたいで変わらないことを確かめる(扉の種類は数えない) */
@@ -1401,11 +1440,11 @@ function exportJSON(D) {
     stair_sites: D.sites,           // 階段の候補地7つ(k は候補地の番号。全階で同じ位置)
     verticals: D.verticals,         // 層をまたぐ縦の構造(竪坑の穴 hole、いちばん下は溜まり場)
     districts: D.districts,         // 一画: changed は最後に組み替わった夜、hash は通路と部屋の指紋
-    props: D.props,                 // 置き物(灯守の灯 lamp、縁の縄梯子 rope、水路の橋 bridge、地図屋の印 mark、壁の落書き sigil、闇潜りの野営 camp)。ゲームの見た目の手がかり
+    props: D.props,                 // 置き物(灯守の灯 lamp、縁の縄梯子 rope、水路の橋 bridge、地図屋の印 mark、壁の落書き sigil、闇潜りの野営 camp、灯守の詰所 post、封鎖令の跡 blockade、オルドの杭 stake、水鏡の刻み carving、空の座 seat)。ゲームの見た目の手がかり
     lair: D.lair || undefined,      // 竜の巣(第10層。縦穴の底の部屋と、眠る竜の遭遇)
     rings: D.water.length ? D.water : undefined,   // 水鏡: 環ごとの水のマスの数
     traps: D.traps.map(trapOut),
-    encounters: D.encs.map(e => ({ id: e.id, roomId: e.roomId, boss: e.boss, master: e.master || undefined, lair: e.lair || undefined, xp: e.xp, difficulty: e.diff, activity: e.activity, attitude: e.attitude, kind: e.kind, monsters: e.groups.map(g => monLine(D, g)), tokens: e.tokens })),
+    encounters: D.encs.map(e => ({ id: e.id, roomId: e.roomId, boss: e.boss, master: e.master || undefined, shared: e.shared || undefined, lair: e.lair || undefined, xp: e.xp, difficulty: e.diff, activity: e.activity, attitude: e.attitude, kind: e.kind, monsters: e.groups.map(g => monLine(D, g)), tokens: e.tokens })),
     walls: walls(D),
     license: 'Monster data: System Reference Document ' + (D.opts.edition === '2024' ? '5.2.1' : '5.1') + ' by Wizards of the Coast LLC, CC-BY-4.0'
   };

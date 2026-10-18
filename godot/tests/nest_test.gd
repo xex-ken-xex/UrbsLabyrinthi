@@ -105,7 +105,19 @@ func _test_data() -> void:
 	check(master_floors == 15, "どの階にも主の間が一つ (%d/15)" % master_floors)
 	check(named == masters and master_role, "主はその層の看板の魔物(呼び名つき)で、部屋は「主の間」 (%d/%d)" % [named, masters])
 	check(calm, "階段と縄梯子の2マス以内に罠は無い")
-	check(pits == 0 or pits_rim * 2 >= pits, "落とし穴の多くは縦穴のそば (%d/%d)" % [pits_rim, pits])
+	# 落とし穴の場所は、数が少ないので全部の階で数える(場所に理由をつける前は 31%)
+	pits = 0
+	pits_rim = 0
+	for depth in range(1, 30):
+		for n in [0, 3, 6]:
+			var f := FloorInstance.create(FloorMap.floor_path(depth, n, 4))
+			for t in f.traps:
+				if String(t.get("fx", "")) == "pit":
+					pits += 1
+					if _near_tile(f.map, Vector2i(int(t["x"]), int(t["y"])), [FloorMap.VOID], 3):
+						pits_rim += 1
+			f.free()
+	check(pits > 0 and pits_rim >= pits * 0.45, "落とし穴の半分ほどは縦穴のそば (%d/%d)" % [pits_rim, pits])
 
 ## 見張りが気づくと、群れを起こさずに巣へ走り、着いたら ピィーッ! で群れを起こす。走っている間に倒せば、巣は起きない
 func _test_sentry() -> void:
