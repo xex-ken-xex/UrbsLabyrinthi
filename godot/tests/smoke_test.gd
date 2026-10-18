@@ -367,6 +367,21 @@ func _test_dive_save() -> void:
 	check(bool(fl2.map.doors[0]["open"]) and String(fl2.traps[0]["st"]) == "revealed" and fl2.map.explored[5] == 1, "開けた扉、見つけた罠、見た範囲が戻る")
 	check(fl2.ground.entries.size() == n_ground - 1, "拾ったものは、床に戻らない")
 	check(main.floors.has(1), "通ってきた層も、記録したときの様子で戻る")
+	check(DiveSave.exists(), "つづきから再開しても、迷宮の記録は消えない")
+	# タイトルの「つづきから」に、保存した日時・居場所・レベルが出る
+	var info := TitleScreen.save_info()
+	check(info.contains("保存") and info.contains("迷宮") and info.contains("Lv%d" % main.gs.party[0].level) and info.contains(main.gs.party[0].name), "つづきからに、保存した日時・居場所・レベルが出る (%s)" % info.replace("\n", " / "))
+	# 持ち物の画面から記録をつけると、「保存しました。」と出してタイトルへ戻る
+	main.open_inventory()
+	await _step(2)
+	main.inventory._on_save()
+	await _step(3)
+	check(main.phase == "title" and main.inventory == null and main.screen is TitleScreen and main.screen._note.text == "保存しました。", "記録をつけると、「保存しました。」と出してタイトルへ戻る")
+	check(DiveSave.exists(), "タイトルへ戻っても、迷宮の記録は残る")
+	main._on_continue()
+	await _step(5)
+	fl2 = main.current
+	check(main.phase == "dungeon" and fl2 != null and fl2.floor_no == 2 and DiveSave.exists(), "もう一度つづきから再開できる")
 	# 夜が明けて街へ戻ると、迷宮の記録は消える
 	main.return_to_surface()
 	await _step(3)

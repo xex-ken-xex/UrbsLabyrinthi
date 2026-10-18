@@ -42,6 +42,34 @@ const MAX_QUESTS := 3
 static func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
+## タイトルの「つづきから」に出す、記録の中身(ken 10/18)。読み込まずに覗く。
+## {"when": 保存した日時(この PC の時刻), "day", "bank", "party": [[名前, クラス, レベル]], "where": 街 / 迷宮の層}
+static func save_summary() -> Dictionary:
+	if not has_save():
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	var day_n := int(parsed.get("day", 0))
+	var party_s: Array = []
+	for d in parsed.get("party", []):
+		if typeof(d) == TYPE_DICTIONARY:
+			party_s.append([String(d.get("name", "名無し")), String(d.get("cls", "")), int(d.get("level", 1))])
+	var t := FileAccess.get_modified_time(SAVE_PATH)
+	var where := "街"
+	var dive := DiveSave.read()
+	if not dive.is_empty() and int(dive.get("day", -1)) == day_n:
+		var fl := int(dive.get("floor", 1))
+		where = "迷宮 " + String(dive.get("floor_label", "第%d層" % fl))
+		t = maxi(t, FileAccess.get_modified_time(DiveSave.PATH))
+	return {"when": local_time_label(t), "day": day_n, "bank": int(parsed.get("bank", 0)), "party": party_s, "where": where}
+
+## 世界の時刻(UNIX 秒)を、この PC の時刻で「2026/10/18 13:25」に
+static func local_time_label(unix: int) -> String:
+	var bias := int(Time.get_time_zone_from_system().get("bias", 0))
+	var d := Time.get_datetime_dict_from_unix_time(unix + bias * 60)
+	return "%04d/%02d/%02d %02d:%02d" % [int(d["year"]), int(d["month"]), int(d["day"]), int(d["hour"]), int(d["minute"])]
+
 func new_game(chars: Array) -> void:
 	party = chars
 	inventory = {"potion": 3, "ether": 1}
