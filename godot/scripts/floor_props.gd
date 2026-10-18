@@ -8,6 +8,9 @@ const KINDS := ["mark", "sigil", "camp", "post", "blockade", "stake", "carving",
 const ROOM_KINDS := ["camp", "blockade"]     # 部屋に入ったら見る物(ほかは隣のマスまで来たら)
 const POST_STALE := 6          # 灯守の詰所の芯替えが、これより前の夜なら「灯守が来ていない」
 const READ_CELLS := 1          # 印と落書きは、隣のマスまで来たら読む
+## 水鏡の刻み: 七つの間(候補地 0〜6)の水底に一文字ずつ。その夜の下り階段の光が差す間の刻みだけが読める(GM資料 §12.3)
+const CARVE := ["底", "待", "汝", "の", "つ", "を", "王"]
+const CARVE_COLOR := Color(0.75, 0.95, 1.0)
 
 ## 書き出しの props から、この仲間の物だけを抜く
 static func pick(props: Array) -> Array:
@@ -39,13 +42,59 @@ static func line(p: Dictionary) -> String:
 		"stake":
 			return "床に古い鉄の杭が打ち込まれている。鉄脚のオルドの時代、坑口盟約のころのものだ。いまも抜けない。"
 		"carving":
-			return "水底に、文字のような刻みが並んでいる。読めない。"
+			return "水底に、文字のような刻みが並んでいる。今夜は暗くて読めない。光が差す夜なら読めるかもしれない。"
 		"seat":
 			return "誰も座っていない石の座がある。空座と呼ばれるものらしい。冷たい。"
 	return ""
 
-## 仲間の先頭が pc のマスに来た。近くの印を読み、野営の部屋ならその跡を見る(どれも一度だけ)
-static func near(fl: FloorInstance, pc: Vector2i) -> Array:
+## 水鏡の刻みが、どの間(候補地の番号)にあるか。分からなければ -1
+static func carving_site(fl: FloorInstance, p: Dictionary) -> int:
+	for s in fl.map.data.get("stair_sites", []):
+		if int(s.get("room", -1)) == int(p.get("room", -2)):
+			return int(s["k"])
+	return -1
+
+## 今夜、この刻みに下り階段の光が差しているか(読める夜か)
+static func carving_lit(fl: FloorInstance, p: Dictionary) -> bool:
+	var d := fl.down_cell
+	if d.x < 0 or not fl.map.in_bounds(d.x, d.y):
+		return false
+	return fl.map.room_at[fl.map.idx(d.x, d.y)] == int(p.get("room", -2))
+
+## これまでに読んだ刻みを、間の順に並べる(読んでいない間は「?」)
+static func carving_tally(gs: GameState, also: int = -1) -> String:
+	var out: Array = []
+	for k in CARVE.size():
+		out.append(CARVE[k] if k == also or Journal.stat(gs, "carving%d" % k) > 0 else "?")
+	return "・".join(out)
+
+const SEAT_REACH := 1.5        # 空の座に座れる距離(マス)
+
+## 空の座のそばにいれば、その置き物を返す(なければ空)
+static func seat_near(fl: FloorInstance, pos: Vector2) -> Dictionary:
+	for p in fl.world_props:
+		if String(p["kind"]) == "seat" and pos.distance_to(fl.map.center_of(Vector2i(int(p["x"]), int(p["y"])))) <= Balance.CELL * SEAT_REACH:
+			return p
+	return {}
+
+## 空の座に座ったときの一文。真相(GM資料 §2 の A/B/C)は決めないので、どれとも取れる書き方にする。
+## 初めて座ると、底から子守唄のような歌が聞こえる(教会で習った歌より息継ぎが多い。削られた三息)。
+## 空座の七七夜(大閏の空座の月 31夜目から)だけは、座がほのかに温かい
+static func sit_line(who: String, first: bool, kuuza: bool) -> String:
+	var s := "%sは、空の座に腰を下ろした。" % who
+	if kuuza:
+		s += "座が、ほのかに温かい。いましがた誰かが立ったばかりのように。"
+	else:
+		s += "石は冷たい。"
+	if first:
+		s += "…底のほうから、子守唄のような歌が聞こえた気がした。教会で習った歌より、息継ぎが多い。"
+	else:
+		s += "何も聞こえない。"
+	return s
+
+## 仲間の先頭が pc のマスに来た。近くの印を読み、野営の部屋ならその跡を見る(どれも一度だけ)。
+## 下り階段の光が差した水鏡の刻みは、一文字読める(頭上にその文字、迷宮の記録に残す)
+static func near(fl: FloorInstance, pc: Vector2i, gs: GameState = null) -> Array:
 	var said: Array = []
 	var m := fl.map
 	var rid := m.room_at[m.idx(pc.x, pc.y)] if m.in_bounds(pc.x, pc.y) else -1
@@ -60,7 +109,15 @@ static func near(fl: FloorInstance, pc: Vector2i) -> Array:
 			hit = rid >= 0 and rid == int(p.get("room", -2))
 		else:
 			hit = maxi(absi(c.x - pc.x), absi(c.y - pc.y)) <= READ_CELLS
-		if hit:
+		if hit and String(p["kind"]) == "carving" and carving_lit(fl, p) and carving_site(fl, p) >= 0:
+			fl.visited_rooms[key] = true
+			var k := carving_site(fl, p)
+			said.append("水底の刻みに、階段の光が差している。今夜は読める。「%s」と刻んである。" % CARVE[k])
+			if gs != null:
+				said.append("これまでに読んだ水鏡の刻み(間の順): %s" % carving_tally(gs, k))
+			fl.spawn_text(fl.map.center_of(c) + Vector2(0, -30), CARVE[k], CARVE_COLOR)
+			fl.stat.emit.call_deferred("carving%d" % k)      # ログの後に実績を知らせる
+		elif hit:
 			fl.visited_rooms[key] = true
 			said.append(line(p))
 	return said
@@ -89,7 +146,7 @@ static func draw(fl: FloorInstance, vr: Rect2) -> void:
 			"stake":
 				_draw_stake(fl, cen, f)
 			"carving":
-				_draw_carving(fl, cen, f)
+				_draw_carving(fl, cen, f, carving_lit(fl, p))
 			"seat":
 				_draw_seat(fl, cen, f)
 
@@ -171,8 +228,11 @@ static func _draw_stake(fl: FloorInstance, cen: Vector2, f: float) -> void:
 	fl.draw_circle(cen + Vector2(-1, -1), 2.2, _dim(Color(0.55, 0.55, 0.58), f))
 
 ## 水鏡の刻み: 床に淡く光る、読めない文字の並び
-static func _draw_carving(fl: FloorInstance, cen: Vector2, f: float) -> void:
+static func _draw_carving(fl: FloorInstance, cen: Vector2, f: float, lit: bool = false) -> void:
 	var col := _dim(Color(0.6, 0.85, 0.95, 0.7), f)
+	if lit:      # 階段の光が差した夜は、水底が明るい
+		fl.draw_circle(cen, Balance.CELL * 0.55, _dim(Color(0.7, 0.95, 1.0, 0.22), f))
+		col = _dim(Color(0.85, 1.0, 1.0, 0.95), f)
 	for i in 4:
 		var x := cen.x - 12.0 + i * 8.0
 		fl.draw_line(Vector2(x, cen.y - 6), Vector2(x + 3, cen.y + 6), col, 1.2)

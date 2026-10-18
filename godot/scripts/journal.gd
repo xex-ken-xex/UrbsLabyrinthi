@@ -6,7 +6,7 @@ extends RefCounted
 ##                 "stats": {key: 数}, "trophies": {id: 取った日}}
 ## stats の key: cook_great / cook_burnt / rotten_eaten / brew_great / forge_great / wipes / deepest(着いた最も深い層) / lair(竜の巣に着いた) /
 ##               best_return(一度に持ち帰った燐晶の最高額) / mimic_bite / deepest_floor(着いた最も深い階。通し番号) / abyss(縦穴を覗いた) /
-##               rope(縄梯子で上り下りした)
+##               rope(縄梯子で上り下りした) / carving0〜6(水鏡の刻みを読んだ間) / seat(空の座に座った)
 
 static var _cat := {}
 

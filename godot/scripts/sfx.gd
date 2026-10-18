@@ -171,6 +171,7 @@ const CUES := {
 	"wade": ["ジャブッ", Color(0.62, 0.86, 1.0)],
 	"abyss": ["ヒュウゥ…", Color(0.7, 0.78, 0.95)],
 	"rope": ["ギシ、ギシ…", Color(0.9, 0.78, 0.55)],
+	"seat": ["シン…", Color(0.78, 0.78, 0.95)],
 	"slip": ["ズルッ", Color(1.0, 0.65, 0.5)],
 	"heat": ["ジリジリ…", Color(1.0, 0.6, 0.3)],
 }
@@ -188,7 +189,7 @@ const STYLE := {
 	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
 	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
 	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce", "wade": "bounce",
-	"abyss": "stretch", "rope": "bounce", "slip": "snap", "heat": "wave",
+	"abyss": "stretch", "rope": "bounce", "seat": "soft", "slip": "snap", "heat": "wave",
 	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",

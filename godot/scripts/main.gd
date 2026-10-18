@@ -641,7 +641,7 @@ func _dungeon_frame(delta: float) -> void:
 		_refresh_view()
 		if arena == null:
 			_enter_room(pc)
-			for s in FloorProps.near(current, pc):
+			for s in FloorProps.near(current, pc, gs):
 				log_msg(s, Color(0.8, 0.78, 0.68))
 	_open_doors_near_heroes()
 	if arena == null:
@@ -1248,6 +1248,8 @@ func _update_hint() -> void:
 		h = "E: 下へ降りる" if current.floor_no < Balance.MAX_FLOOR else "この先は未踏(まだ道がない)"
 	elif _near_rope().x >= 0:
 		h = "%s: 縄梯子(〈運動〉)" % Controls.hint("interact")
+	elif not FloorProps.seat_near(current, leader().position).is_empty():
+		h = "%s: 空の座に座る" % Controls.hint("interact")
 	elif _near(current.up_cell, 1.4):
 		h = "E: 街へ戻る" if current.floor_no == 1 else "E: 上へ戻る"
 	hud.hint = h
@@ -1289,6 +1291,10 @@ func interact() -> void:
 	if rope.x >= 0 and not _near(current.up_cell, 1.4):
 		open_rope_menu(rope)
 		return
+	var seat := FloorProps.seat_near(current, leader().position)
+	if not seat.is_empty() and not _near(current.up_cell, 1.4):
+		sit_on_seat(seat)
+		return
 	if _near(current.up_cell, 1.4):
 		if current.floor_no == 1:
 			# 物理処理の最中に、仲間や層を片付けない。次の空き時間に街へ移る
@@ -1297,6 +1303,18 @@ func interact() -> void:
 			call_deferred("return_to_surface")
 		else:
 			enter_floor(current.floor_no - 1, "down")
+
+## 第10層の空の座に座る。擬音 シン…(静けさ)とログ。初めて座ったときだけ、底から歌が聞こえる(実績「空座に座す」)
+func sit_on_seat(seat: Dictionary) -> void:
+	var lead := leader()
+	var at := current.map.center_of(Vector2i(int(seat["x"]), int(seat["y"])))
+	lead.position = at
+	var d := ZaCalendar.date(gs.day)
+	var kuuza := int(d["month"]) == 12 and int(d["night"]) > 30
+	var first := Journal.stat(gs, "seat") == 0
+	Sfx.cue(current, at + Vector2(0, -20), "seat")
+	log_msg(FloorProps.sit_line(lead.ch.name, first, kuuza), Color(0.82, 0.8, 0.92))
+	current.stat.emit("seat")
 
 ## 落ちているものを拾った。燐晶は袋へ(税は持ち帰るときに)、自生物や遺品は持ち物へ(税なし)
 func _on_ground_picked(e: Dictionary, h: Hero) -> void:
