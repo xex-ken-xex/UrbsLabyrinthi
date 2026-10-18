@@ -854,6 +854,10 @@ func _enter_room(pc: Vector2i) -> void:
 			log_msg(fv, Color(0.74, 0.78, 0.82))
 		if String(r.get("role", "")) == "master" and current.master_enc >= 0:
 			log_msg("この一画の主の間らしい。奥に、重い気配がある。", Color("f1d98a"))
+	if r.get("encounter") != null:
+		for e in m.data["encounters"]:
+			if int(e["id"]) == int(r["encounter"]) and e.get("shared", false):
+				log_msg("竪坑のまわりは、上と下の層の魔物が行き交う狩場らしい。見慣れない気配が混じっている。", Color("f1d98a"))
 	var feat: Variant = r.get("feature")
 	if typeof(feat) == TYPE_DICTIONARY:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))

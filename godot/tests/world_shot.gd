@@ -1,6 +1,6 @@
 extends SceneTree
 ## 迷宮の手ざわりの見た目: xvfb-run godot --path godot --rendering-driver opengl3 -s res://tests/world_shot.gd -- 出力フォルダ
-## world_mark.png 地図屋の凧旗の印、world_sigil.png 壁の落書き、world_camp.png 闇潜りの野営
+## world_<種類>.png: 地図屋の印 mark、壁の落書き sigil、闇潜りの野営 camp、灯守の詰所 post、封鎖令の跡 blockade、オルドの杭 stake、水鏡の刻み carving、空の座 seat
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -16,7 +16,7 @@ func _hold(main: Node, n: int) -> void:
 		await physics_frame
 
 func _find(main: Node, kind: String) -> Dictionary:
-	for depth in range(1, 15):
+	for depth in range(1, 31):
 		for night in [0, 1, 2, 3]:
 			main.gs.day = night
 			main.floors.clear()
@@ -44,12 +44,12 @@ func _run() -> void:
 	for h in main.heroes:
 		h.iframes = 1e9
 	Spawner.off = true
-	for kind in ["mark", "sigil", "camp"]:
+	for kind in ["mark", "sigil", "camp", "post", "blockade", "stake", "carving", "seat"]:
 		var p := _find(main, kind)
 		if p.is_empty():
 			continue
 		var c := Vector2i(int(p["x"]), int(p["y"]))
-		main.place_party(main.current.map.center_of(c + (Vector2i(2, 2) if kind == "sigil" else Vector2i(0, 2))))
+		main.place_party(main.current.map.center_of(c + (Vector2i(2, 2) if kind in ["sigil", "post", "stake", "carving", "seat"] else Vector2i(0, 2))))
 		await _hold(main, 40)
 		main._refresh_view()
 		main.current.queue_redraw()
