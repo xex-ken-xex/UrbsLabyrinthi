@@ -34,15 +34,11 @@ func _test_table() -> void:
 		ds.append(LayerBoss.bottom_depth(int(L)))
 	check(ds == [5, 10, 14, 18, 22, 26, 27, 28, 29], "層の主の階は %s" % str(ds))
 	check(LayerBoss.layer_at(30) == 0 and LayerBoss.layer_at(4) == 0 and LayerBoss.layer_at(14) == 3, "第30階(竜の巣)と途中の階には出ない")
-	var multi := 0
 	for L in LayerBoss.layers():
 		var ms := LayerBoss.monsters(int(L), 4)
 		var u := ms.filter(func(m): return m.get("unique", false))
-		check(u.size() == (LayerBoss.def(int(L))["bosses"] as Array).size() and u.all(func(m): return String(m["size"]) == "H"),
+		check(u.size() == 1 and u.all(func(m): return String(m["size"]) == "H"),
 			"第%d層: ユニーク %d体(巨大)、お供 %d種" % [L, u.size(), ms.size() - u.size()])
-		if u.size() > 1:
-			multi += 1
-	check(multi >= 2, "1体とは限らない(複数のユニークの層が %d)" % multi)
 	check(LayerBoss.EPITHETS.size() >= 100, "二つ名は %d" % LayerBoss.EPITHETS.size())
 	var e1 := LayerBoss.epithets(5, 0, 3)
 	check(e1.size() == 3 and e1[0] != e1[1] and e1[1] != e1[2] and e1[0] != e1[2] and e1 == LayerBoss.epithets(5, 0, 3), "同じ層の主の二つ名は重ならず、戻ってくるまで同じ (%s)" % "・".join(e1))
@@ -175,16 +171,17 @@ func _test_fight() -> void:
 	fl10.spawner.spawn_pending(fl10.boss_enc)
 	await _step(2)
 	var twins: Array = fl10.enemies.filter(func(e): return e.unique)
-	check(twins.size() == 2, "第2層の主は二体(墓守の兄弟)")
+	check(twins.size() == 1, "第2層の主も1体")
 	for e in twins:
 		e.visible = true
 	fl10.alert_encounter(fl10.boss_enc)
 	await _step(4)
 	check(main.boss_fx.active, "第2層の主とも戦いが始まる")
-	if not twins.is_empty():
-		twins[0].take_damage(1e9, Vector2.ZERO, main.leader())
+	var minion: Array = fl10.enemies.filter(func(e): return not e.unique and e.enc_id == fl10.boss_enc)
+	if not minion.is_empty():
+		minion[0].take_damage(1e9, Vector2.ZERO, main.leader())
 		await _step(3)
-		check(main.boss_fx.active and fl10.boss_layer == 2, "一体倒しただけでは終わらない")
+		check(main.boss_fx.active and fl10.boss_layer == 2, "お供を倒しただけでは終わらない")
 	main.enter_floor(9, "down")
 	await _step(3)
 	check(not main.boss_fx.active, "別の階へ移ると、戦いは終わる")
