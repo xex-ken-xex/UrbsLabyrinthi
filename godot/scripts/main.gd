@@ -12,6 +12,7 @@ var camera: Camera2D
 var hud: Hud
 var ui_layer: CanvasLayer
 var hud_layer: CanvasLayer
+var credits: CreditsScreen          # クレジットとライセンスの表記(開いている間だけ)
 var screen: Control                # 開いている画面(タイトル、作成、街)
 var inventory: InventoryScreen
 var key_config: KeyConfig
@@ -202,9 +203,22 @@ func show_title() -> void:
 	var t := TitleScreen.new()
 	t.new_game.connect(show_make)
 	t.continue_game.connect(_on_continue)
-	t.show_credits.connect(func(): hud.show_credits = true)
+	t.show_credits.connect(toggle_credits)
 	t.key_config.connect(open_key_config)
 	_set_screen(t)
+
+## クレジットとライセンスの表記を開く・閉じる(タイトルの「クレジット」、F1)
+func toggle_credits() -> void:
+	if is_instance_valid(credits):
+		credits.close_screen()
+		credits = null
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 50
+	add_child(layer)
+	credits = CreditsScreen.new()
+	credits.closed.connect(layer.queue_free)
+	layer.add_child(credits)
 
 ## タイトルの下に、更新の結果を出す
 func _title_note(text: String) -> void:
@@ -621,7 +635,7 @@ func _physics_process(delta: float) -> void:
 	# ゲームの速さは迷宮の中だけ(街、メニュー、報告は等速)
 	Engine.time_scale = GameSettings.speed() if phase == "dungeon" else 1.0
 	if Input.is_action_just_pressed("credits"):
-		hud.show_credits = not hud.show_credits
+		toggle_credits()
 	if Input.is_action_just_pressed("reload_assets"):
 		Assets.clear()          # 置いた画像を読み込み直す(フォントは再起動後)
 		if current != null:

@@ -9,9 +9,6 @@ const PICKUP_LIFE := 4.0
 var overlay: Array = []             # 空でなければ全面の報告を出す(各要素は {text, color, size})
 var hint := ""
 var title_shown := 7.0
-var show_credits := false
-
-const CREDITS := "Urbs Labyrinthi (試作)\n\nThis work includes material taken from the System Reference Document 5.1 (“SRD 5.1”) by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.\n\n魔物の数値は SRD 5.1 から要点だけに縮めて使っている(ゲームに合わせて係数をかけている)。日本語名はこの企画のための仮訳で、公式の訳語ではない。\n\nフォント: M+ 1p、Shippori Mincho (SIL Open Font License 1.1)\n\nF1 で閉じる"
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -46,10 +43,6 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var size_v := get_viewport_rect().size
-	if show_credits:
-		draw_rect(Rect2(Vector2.ZERO, size_v), Color(0, 0, 0, 0.92))
-		draw_multiline_string(UI.font(), Vector2(size_v.x * 0.15, 120.0), CREDITS, HORIZONTAL_ALIGNMENT_LEFT, size_v.x * 0.7, 16, -1, Color(0.9, 0.92, 0.95))
-		return
 	if game == null or game.current == null or not ["dungeon", "overlay"].has(game.phase) or game.key_config != null:
 		return
 	var fl: FloorInstance = game.current

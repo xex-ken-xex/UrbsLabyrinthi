@@ -360,6 +360,7 @@ godot --headless --path godot -s res://tests/spawner_test.gd               # 魔
 godot --headless --path godot -s res://tests/perf_probe.gd                 # 重さの比べ(ワンダリングを30組まで出す)
 godot --headless --path godot -s res://tests/abyss_test.gd                 # 縦穴を覗く、縄梯子、溜まり場、迷宮の断面
 godot --headless --path godot -s res://tests/carry_test.gd                 # 倒れた仲間を背負う、持ち物の重さと捨てる、縄梯子の転落
+godot --headless --path godot -s res://tests/credits_test.gd               # クレジット(SRD 5.1 の帰属表示、フォント、Godot のライセンス)
 godot --headless --path godot -s res://tests/flow_test.gd                  # 燐の流れ(燐晶の量、下の層の魔物、骨亡者、溜まり場、竜の気配)
 godot --headless --path godot -s res://tests/content_test.gd               # 迷宮の中身(部屋の描写、遺体の理由と等級、水ぎわの自生物)
 godot --headless --path godot -s res://tests/nest_test.gd                  # 迷宮の中身 その2(見張り、主の間、罠の場所の理由)
@@ -411,7 +412,7 @@ xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/flow_sh
 
 ## ライセンス
 
-魔物データは SRD 5.1(CC-BY-4.0)から縮めたもの。帰属表示は F1 のクレジット画面にある(原文は `docs/srd-data-sources.md` §3)。
+魔物データは SRD 5.1(CC-BY-4.0)から縮めたもの。帰属表示は F1(タイトルの「クレジット」)の画面にある(原文は `docs/srd-data-sources.md` §3)。同じ画面に、手を加えたこと、Wizards of the Coast が認めたものではないこと、フォント3つの OFL、Godot Engine の MIT と中の部品のライセンスの全文も載せている(`credits_screen.gd`)。
 フォントは、本文が M+ 1p(Medium と Bold)、見出しとタイトルがしっぽり明朝 SemiBold、擬音が Dela Gothic One。どれも SIL OFL 1.1(`assets/fonts/OFL-MPLUS1p.txt`、`assets/fonts/OFL-ShipporiMincho.txt`、`assets/fonts/OFL-DelaGothicOne.txt`)。
 
 ## マップチップ
