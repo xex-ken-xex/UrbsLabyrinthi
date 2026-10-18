@@ -1,6 +1,7 @@
 extends SceneTree
 ## 迷宮の中身 その3(設計 §11.5):  godot --headless --path godot -s res://tests/world_test.gd
 ## 地図屋の印、壁の落書き(七芒星・静印)、闇潜りの野営、日没の鐘。
+## 小さな置き物(灯守の詰所、封鎖令の跡、オルドの杭、水鏡の刻み、空の座)と、竪坑のまわりの共有の狩場。
 
 var fails := 0
 var main: Node
@@ -21,6 +22,8 @@ func _step(n: int) -> void:
 
 func _run() -> void:
 	_test_data()
+	_test_small()
+	_test_shared()
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
@@ -135,3 +138,66 @@ func _test_bell() -> void:
 		if _logs().any(func(t): return t == DungeonTime.BELL):
 			break
 	check(_logs().any(func(t): return t == DungeonTime.BELL), "日が落ちると、遠くで鐘が七つ鳴る(ログ)")
+
+func _props_at(depth: int, night: int) -> Array:
+	var f := FloorInstance.create(FloorMap.floor_path(depth, night, 4))
+	var out: Array = f.world_props.duplicate(true)
+	f.free()
+	return out
+
+func _test_small() -> void:
+	print("[小さな置き物]")
+	var count := {}
+	for depth in range(1, 31):
+		for n in [0, 2, 5]:
+			var f := FloorInstance.create(FloorMap.floor_path(depth, n, 4))
+			for p in f.world_props:
+				var k := String(p["kind"])
+				count[k] = int(count.get(k, 0)) + 1
+				if k == "blockade":
+					var bones := f.ground.entries.filter(func(e): return String(e["kind"]) == "corpse" and String(e.get("why", "")) == "blockade")
+					check(bones.size() == 1 and GroundItems.corpse_story(bones[0]).contains("五十年前"), "封鎖令の跡には、取り残された者の遺体がある")
+					check(f.layer_no in [3, 4], "封鎖令の跡は錆鉄の層")
+				if k == "stake":
+					check(f.layer_no <= 2, "オルドの杭は腐葉の層")
+				if k == "carving":
+					check(f.layer_no in [5, 6], "水鏡の刻みは水鏡の層")
+				if k == "seat":
+					check(f.floor_no == Balance.MAX_FLOOR, "空の座は第10層(竜の巣の階)")
+			f.free()
+	print("    数 ", count)
+	for k in ["post", "blockade", "stake", "carving", "seat"]:
+		check(int(count.get(k, 0)) > 0, "「%s」がある" % k)
+	# 骨組みの物(杭・刻み・座)は、夜が変わっても同じ所にある
+	var same := true
+	for depth in [1, 21, 30]:
+		var a: Array = _props_at(depth, 0).filter(func(p): return String(p["kind"]) in ["stake", "carving", "seat"])
+		var b: Array = _props_at(depth, 4).filter(func(p): return String(p["kind"]) in ["stake", "carving", "seat"])
+		same = same and a.size() > 0 and a.size() == b.size()
+		for i in mini(a.size(), b.size()):
+			same = same and int(a[i]["x"]) == int(b[i]["x"]) and int(a[i]["y"]) == int(b[i]["y"])
+	check(same, "杭・水鏡の刻み・空の座は、夜が変わっても同じ所にある")
+	check(FloorProps.line({"kind": "post", "days": 8}).contains("灯守が来ていない"), "芯替えが古い詰所は、灯守が来ていないと分かる")
+	check(not FloorProps.line({"kind": "post", "days": 1}).contains("灯守が来ていない"), "芯替えが新しい詰所は、ふつう")
+
+func _test_shared() -> void:
+	print("[共有の狩場]")
+	var shared := 0
+	var below := 0
+	var in_pit := true
+	for depth in range(1, 27):
+		for n in [0, 3]:
+			var f := FloorInstance.create(FloorMap.floor_path(depth, n, 4))
+			var m := f.map
+			var mine := {}
+			for e in m.data["encounters"]:
+				if not e.get("shared", false):
+					if int(e["roomId"]) >= 0:
+						for mm in e["monsters"]:
+							mine[String(mm["index"])] = true
+					continue
+				shared += 1
+				var kind := String(m.room_by_id[int(e["roomId"])].get("kind", ""))
+				in_pit = in_pit and (kind == "pit" or kind == "sump")
+			f.free()
+	check(shared > 0 and in_pit, "竪坑の脇と底に、共有の狩場の群れがいる (%d)" % shared)

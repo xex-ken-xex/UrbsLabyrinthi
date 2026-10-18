@@ -1,9 +1,12 @@
 class_name FloorProps
 extends RefCounted
-## 迷宮の手ざわり(設計 §11.5): 地図屋の印、壁の落書き(七芒星・静印)、闇潜りの野営。
+## 迷宮の手ざわり(設計 §11.5): 地図屋の印、壁の落書き(七芒星・静印)、闇潜りの野営、灯守の詰所、封鎖令の跡、
+## 鉄脚のオルドの時代の杭、水鏡の刻み、空の座。
 ## 生成器の props を読んで、絵を描き、仲間が近づいたら(野営は部屋に入ったら)一度だけログに出す。読んだ印は迷宮の記録に残る(visited_rooms)。
 
-const KINDS := ["mark", "sigil", "camp"]
+const KINDS := ["mark", "sigil", "camp", "post", "blockade", "stake", "carving", "seat"]
+const ROOM_KINDS := ["camp", "blockade"]     # 部屋に入ったら見る物(ほかは隣のマスまで来たら)
+const POST_STALE := 6          # 灯守の詰所の芯替えが、これより前の夜なら「灯守が来ていない」
 const READ_CELLS := 1          # 印と落書きは、隣のマスまで来たら読む
 
 ## 書き出しの props から、この仲間の物だけを抜く
@@ -26,6 +29,19 @@ static func line(p: Dictionary) -> String:
 			return "壁に静印が描かれている。静寂派の印だ。ここより先を、眠らせておけという祈り。"
 		"camp":
 			return "焚き火の跡がある。吊るした鍋に、煮汁がこびりついている。許可証のない闇潜りが、ここで夜を越したらしい。"
+		"post":
+			var d := int(p.get("days", 0))
+			var when := "今夜" if d == 0 else "%d夜前" % d
+			var s := "灯守の詰所。板に「芯替え 済」と、%sの日付が書いてある。" % when
+			return s + ("しばらく灯守が来ていないらしい。この先の灯は、あてにならない。" if d >= POST_STALE else "")
+		"blockade":
+			return "壁に、日を数えた刻み線がびっしり並んでいる。五十年前の空振りの年、封鎖令で門を閉ざされ、取り残された者の野営の跡だ。"
+		"stake":
+			return "床に古い鉄の杭が打ち込まれている。鉄脚のオルドの時代、坑口盟約のころのものだ。いまも抜けない。"
+		"carving":
+			return "水底に、文字のような刻みが並んでいる。読めない。"
+		"seat":
+			return "誰も座っていない石の座がある。空座と呼ばれるものらしい。冷たい。"
 	return ""
 
 ## 仲間の先頭が pc のマスに来た。近くの印を読み、野営の部屋ならその跡を見る(どれも一度だけ)
@@ -40,7 +56,7 @@ static func near(fl: FloorInstance, pc: Vector2i) -> Array:
 			continue
 		var c := Vector2i(int(p["x"]), int(p["y"]))
 		var hit := false
-		if String(p["kind"]) == "camp":
+		if String(p["kind"]) in ROOM_KINDS:
 			hit = rid >= 0 and rid == int(p.get("room", -2))
 		else:
 			hit = maxi(absi(c.x - pc.x), absi(c.y - pc.y)) <= READ_CELLS
@@ -66,6 +82,16 @@ static func draw(fl: FloorInstance, vr: Rect2) -> void:
 				_draw_sigil(fl, cen + Vector2(0, -Balance.CELL * 0.62), String(p.get("sign", "")) == "seven", f)
 			"camp":
 				_draw_camp(fl, cen, f)
+			"post":
+				_draw_post(fl, cen, f)
+			"blockade":
+				_draw_blockade(fl, cen, f)
+			"stake":
+				_draw_stake(fl, cen, f)
+			"carving":
+				_draw_carving(fl, cen, f)
+			"seat":
+				_draw_seat(fl, cen, f)
 
 static func _dim(c: Color, f: float) -> Color:
 	return Color(c.r * f, c.g * f, c.b * f, c.a)
@@ -115,3 +141,47 @@ static func _draw_camp(fl: FloorInstance, cen: Vector2, f: float) -> void:
 	fl.draw_line(pot + Vector2(-8, -12), pot + Vector2(8, -12), wood, 2.0)
 	fl.draw_line(pot + Vector2(0, -12), pot + Vector2(0, -6), _dim(Color(0.55, 0.5, 0.45), f), 1.2)
 	fl.draw_circle(pot, 6.0, _dim(Color(0.22, 0.22, 0.24), f))
+
+## 灯守の詰所: 二本の脚に渡した板(芯替えの日付を書く)
+static func _draw_post(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var wood := _dim(Color(0.45, 0.32, 0.2), f)
+	fl.draw_line(cen + Vector2(-9, 10), cen + Vector2(-9, -8), wood, 2.0)
+	fl.draw_line(cen + Vector2(9, 10), cen + Vector2(9, -8), wood, 2.0)
+	fl.draw_rect(Rect2(cen + Vector2(-13, -14), Vector2(26, 11)), _dim(Color(0.62, 0.48, 0.3), f))
+	for i in 3:
+		fl.draw_line(cen + Vector2(-10, -11 + i * 3), cen + Vector2(4 - i * 3, -11 + i * 3), _dim(Color(0.25, 0.18, 0.1), f), 1.0)
+
+## 封鎖令の跡: 冷えた灰の輪と、壁ぎわの刻み線(五本ずつ束ねる)
+static func _draw_blockade(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var C := float(Balance.CELL)
+	fl.draw_circle(cen, C * 0.36, _dim(Color(0.22, 0.21, 0.2, 0.85), f))
+	fl.draw_arc(cen, C * 0.36, 0.0, TAU, 16, _dim(Color(0.42, 0.4, 0.38), f), 2.0)
+	var mark := _dim(Color(0.8, 0.78, 0.7, 0.8), f)
+	var at := cen + Vector2(-C * 0.9, -C * 0.85)
+	for g in 3:
+		for i in 4:
+			var x := at.x + g * 14.0 + i * 3.0
+			fl.draw_line(Vector2(x, at.y), Vector2(x, at.y + 9.0), mark, 1.0)
+		fl.draw_line(Vector2(at.x + g * 14.0 - 1.0, at.y + 7.0), Vector2(at.x + g * 14.0 + 11.0, at.y + 2.0), mark, 1.0)
+
+## オルドの杭: 床に打ち込まれた太い鉄の杭(錆の輪)
+static func _draw_stake(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	fl.draw_circle(cen, 7.0, _dim(Color(0.4, 0.25, 0.15, 0.6), f))
+	fl.draw_circle(cen, 4.5, _dim(Color(0.3, 0.3, 0.32), f))
+	fl.draw_circle(cen + Vector2(-1, -1), 2.2, _dim(Color(0.55, 0.55, 0.58), f))
+
+## 水鏡の刻み: 床に淡く光る、読めない文字の並び
+static func _draw_carving(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var col := _dim(Color(0.6, 0.85, 0.95, 0.7), f)
+	for i in 4:
+		var x := cen.x - 12.0 + i * 8.0
+		fl.draw_line(Vector2(x, cen.y - 6), Vector2(x + 3, cen.y + 6), col, 1.2)
+		fl.draw_line(Vector2(x - 1, cen.y - 1 + (i % 2) * 3), Vector2(x + 4, cen.y - 1 + (i % 2) * 3), col, 1.2)
+
+## 空の座: 背もたれのある石の座
+static func _draw_seat(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var stone := _dim(Color(0.55, 0.53, 0.5), f)
+	fl.draw_rect(Rect2(cen + Vector2(-12, -18), Vector2(24, 12)), stone.darkened(0.2))
+	fl.draw_rect(Rect2(cen + Vector2(-14, -6), Vector2(28, 10)), stone)
+	fl.draw_rect(Rect2(cen + Vector2(-12, 4), Vector2(6, 9)), stone.darkened(0.3))
+	fl.draw_rect(Rect2(cen + Vector2(6, 4), Vector2(6, 9)), stone.darkened(0.3))
