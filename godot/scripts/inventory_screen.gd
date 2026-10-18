@@ -284,6 +284,8 @@ func _fill_items() -> void:
 		if k == "consumable" or k == "tome" or k == "material":
 			ids.append(id)
 			item_list.add_item("%s  ×%d   %skg" % [ItemDB.item_name(id), gs.count(id), _kg(Burden.item_kg(id) * gs.count(id))], ItemIcons.texture(id))
+			if ItemDB.grade(id) != "":
+				item_list.set_item_custom_fg_color(item_list.item_count - 1, ItemDB.name_color(id, Color.WHITE))
 	if ids.is_empty():
 		item_list.add_item("(使えるものがない)")
 		item_list.set_item_disabled(0, true)
@@ -298,7 +300,7 @@ func _fill_equip() -> void:
 		l.custom_minimum_size = Vector2(44, 0)
 		r.add_child(l)
 		var cur := String(c.equip[slot[0]])
-		var l2 := UIKit.label((ItemDB.item_name(cur) + "  %skg" % _kg(Burden.item_kg(cur))) if cur != "" else "(なし)", 16, UIKit.GOLD if cur != "" else UIKit.DIM)
+		var l2 := UIKit.label((ItemDB.item_name(cur) + "  %skg" % _kg(Burden.item_kg(cur))) if cur != "" else "(なし)", 16, ItemDB.name_color(cur, UIKit.GOLD) if cur != "" else UIKit.DIM)
 		l2.custom_minimum_size = Vector2(200, 0)
 		r.add_child(l2)
 		var s: String = slot[0]
@@ -315,6 +317,8 @@ func _fill_equip() -> void:
 			item_list.add_item("%s%s  ×%d   %skg" % ["" if ok else "× ", ItemDB.item_name(id), gs.count(id), _kg(Burden.item_kg(id) * gs.count(id))])
 			if not ok:
 				item_list.set_item_custom_fg_color(item_list.item_count - 1, Color(0.5, 0.5, 0.55))
+			elif ItemDB.grade(id) != "":
+				item_list.set_item_custom_fg_color(item_list.item_count - 1, ItemDB.name_color(id, Color.WHITE))
 	if sel_id != "" and ids.has(sel_id):
 		item_list.select(ids.find(sel_id))
 
@@ -576,7 +580,7 @@ func _show_detail() -> void:
 				t = "スキルを選ぶ。戦闘中は、数字キー 1〜6 か、Ctrl で選んで右クリックで使う。"
 		_:
 			if sel_id != "" and ItemDB.ITEMS.has(sel_id):
-				t = "[b][color=#e8dcb0]%s[/color][/b]  所持 %d   重さ %skg\n%s" % [ItemDB.item_name(sel_id), gs.count(sel_id), _kg(Burden.item_kg(sel_id)), ItemDB.detail(sel_id)]
+				t = "[b][color=#%s]%s[/color][/b]  所持 %d   重さ %skg\n%s" % [ItemDB.name_color(sel_id, Color("e8dcb0")).to_html(false), ItemDB.item_name(sel_id), gs.count(sel_id), _kg(Burden.item_kg(sel_id)), ItemDB.detail(sel_id)]
 				if tab == "equip":
 					if ItemDB.can_equip(sel_id, c.cls):
 						t += "\n\n[color=#5bc0de]%s が装備すると[/color]\n%s" % [c.name, c.compare_equip(sel_id)]
