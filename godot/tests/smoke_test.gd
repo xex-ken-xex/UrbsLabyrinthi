@@ -675,7 +675,7 @@ func _test_home_town() -> void:
 	check(sleep_b != null, "寝床に「眠る」がある")
 	if sleep_b != null:
 		sleep_b.pressed.emit()
-		await _step(2)
+		await _step(60)      # 暗転しきってから、一晩が過ぎる
 	check(c.hp >= c.max_hp(), "寝床で眠ると全快する")
 	# 実験室の薬を、迷宮で使う
 	main._on_dive()
@@ -1609,6 +1609,7 @@ func _test_game() -> void:
 	main.gs.party[0].hp = 3.0
 	town._go("inn")
 	town._rest(120)
+	await _step(60)      # 暗転しきってから、一晩が過ぎる
 	check(main.gs.party[0].hp == float(main.gs.party[0].max_hp()), "宿屋で全快する")
 	town._save()
 	check(GameState.has_save(), "宿屋でセーブできる")
@@ -1791,6 +1792,7 @@ func _test_game() -> void:
 	main._clear_bag()
 	main.bag_silver = 1000
 	var bank1: int = main.gs.bank_silver
+	var day1: int = main.gs.day      # 宿に泊まると一日進むので、潜る前の日から数える
 	var perf := 0
 	for c in main.gs.party:
 		if c.hp > 0.0:
@@ -1798,7 +1800,7 @@ func _test_game() -> void:
 	main.leader().position = main.current.map.center_of(main.current.up_cell)
 	main.interact()
 	await _step(3)
-	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 + perf and main.gs.day == 1, "街へ戻ると3割が税になり、〈芸能〉で稼ぐ (+%d、うち芸 %d)" % [main.gs.bank_silver - bank1, perf])
+	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 + perf and main.gs.day == day1 + 1, "街へ戻ると3割が税になり、〈芸能〉で稼ぐ (+%d、うち芸 %d)" % [main.gs.bank_silver - bank1, perf])
 	# 全滅
 	main._on_dive()
 	await _step(3)
@@ -2411,6 +2413,7 @@ func _test_weapons(main: Node, ar: Arena) -> void:
 	c.equip["weapon"] = "mace"
 	h.cds.clear()
 	c.mp = c.max_mp()
+	en.cimm = {}      # 闘技場の魔物は選ぶたびに違う。気絶が効かない魔物(#62)に当たっても確かめられるように
 	check(h.use_skill(Character.WEAPON_SKILL) and en.stun_t > 0.0, "気絶打ちで気絶させる")
 	# 杖の魔力の溜め
 	c.equip["weapon"] = "quarterstaff"

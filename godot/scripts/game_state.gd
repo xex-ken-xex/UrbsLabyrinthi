@@ -39,6 +39,11 @@ const REQUESTS := [
 ]
 const MAX_QUESTS := 3
 
+## 帰還積立が効く層(ken 10/18: 腐葉の回廊まで)。meta は層の JSON の meta
+const INSURED_THEMES := ["fuyou"]
+static func insurance_covers(meta: Dictionary) -> bool:
+	return INSURED_THEMES.has(String(meta.get("theme", "")))
+
 static func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
