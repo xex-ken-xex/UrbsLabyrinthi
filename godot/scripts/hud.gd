@@ -84,8 +84,8 @@ func _draw() -> void:
 		y += 48.0
 	UI.text(self, Vector2(16, y + 14), ("燐晶 %s kg(見積 %d銀貨)" % [Crystal.bag_text(game.bag_crystal), game.bag_value()] if not game.bag_crystal.is_empty() else "燐晶 なし") + "    預け金 %d銀貨" % game.gs.bank_silver, 13, Color("f1d98a"))
 	UI.text(self, Vector2(16, y + 32), "治療薬 %d    魔力水 %d" % [game.gs.count("potion") + game.gs.count("hi_potion"), game.gs.count("ether")], 13, Color(0.8, 0.9, 0.8))
-	# ログ
-	var ly := size_v.y - 16.0 - (log_lines.size() - 1) * 20.0
+	# ログ(下の帯と「右クリック」の印より上に置く。ken 10/18)
+	var ly := size_v.y - 84.0 - (log_lines.size() - 1) * 20.0
 	for l in log_lines:
 		var a := clampf(1.0 - (l["age"] - 9.0) / 4.0, 0.0, 1.0)
 		var c2: Color = l["color"]
@@ -93,7 +93,7 @@ func _draw() -> void:
 		ly += 20.0
 	_draw_skillbar(size_v)
 	if hint != "":
-		UI.text_center(self, size_v.x / 2.0, size_v.y - 96.0, hint, 18, Color("ffe9a8"))
+		UI.text_center(self, size_v.x / 2.0, size_v.y - 84.0, hint, 18, Color("ffe9a8"))
 	if game.arena == null:
 		_draw_minimap(fl, size_v)
 	if game.dtime != null:
@@ -107,7 +107,7 @@ func _draw() -> void:
 		var lines := ["移動: %s%s%s%s   攻撃: %s(押し続けて溜め)   転がり: %s   スキル: %s〜%s(%sで選び、右クリックで使う)   仲間の切替: %s" % [
 				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("dodge"),
 				H.call("skill1"), H.call("skill6"), H.call("skill_next"), H.call("switch")],
-			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   ミニマップ: %s / %s(画面はホイール)   F1: クレジット(操作はタイトルか街の「操作の設定」で変えられる)" % [
+			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   ミニマップ: %s / %s(画面はホイール)   F1: クレジット(操作はタイトルか持ち物の画面の「操作の設定」で変えられる)" % [
 				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal"), H.call("rest"), H.call("zoom_in"), H.call("zoom_out")],
 			"魔物は触れると殴ってくる。敵のHPを削るほど押し込め、こちらのHPが減ると押される。戻る・閉じる: Esc"]
 		for i in lines.size():

@@ -180,12 +180,11 @@ func _test_updater() -> void:
 	check(ps.contains("Wait-Process -Id 1234") and ps.contains("'C:\\Users\\ケン''s\\a.pck.new'") and ps.contains("-ArgumentList '--','--no-update'"), "Windows の入れ替えの命令(単引用符を重ねる)")
 
 	# 固定キーのショートカット(Shift 5回)を止める命令
-	var on := StickyKeys.script(true, "C:\\Users\\ケン's\\sticky")
-	var off := StickyKeys.script(false, "C:\\Users\\ケン's\\sticky")
+	var sk := StickyKeys.script(4321, "C:\\Users\\ケン's\\sticky", "C:\\Users\\ケン's\\sticky.log")
 	check(not StickyKeys.enabled() or OS.get_name() == "Windows", "固定キーの切り替えは Windows だけ")
-	check(on.contains("SystemParametersInfo(0x3B") and on.contains("-band (-bnot 4)") and on.contains("'C:\\Users\\ケン''s\\sticky'") and not on.contains("0x3B,8,[ref]$v,1"),
-		"前面になったら、固定キーのショートカットだけを外す(設定には保存しない)")
-	check(off.contains("Test-Path") and off.contains("-bor 4") and off.contains("Remove-Item"), "離れるときは、外したときだけ戻す")
+	check(sk.contains("$gp=4321") and sk.contains("'C:\\Users\\ケン''s\\sticky'") and sk.contains("SystemParametersInfo(0x3B,8,ref v,0)") and sk.contains("Get()&~12u"),
+		"固定キーのショートカットだけを外す(設定には保存しない)")
+	check(sk.contains("GetForegroundWindow") and sk.contains("$p.HasExited") and sk.contains("finally{if($off)"), "前面の持ち主を見張り、離れたときと終わったときに戻す")
 
 func _test_talents() -> void:
 	print("[talents]")
@@ -367,6 +366,21 @@ func _test_dive_save() -> void:
 	check(bool(fl2.map.doors[0]["open"]) and String(fl2.traps[0]["st"]) == "revealed" and fl2.map.explored[5] == 1, "開けた扉、見つけた罠、見た範囲が戻る")
 	check(fl2.ground.entries.size() == n_ground - 1, "拾ったものは、床に戻らない")
 	check(main.floors.has(1), "通ってきた層も、記録したときの様子で戻る")
+	check(DiveSave.exists(), "つづきから再開しても、迷宮の記録は消えない")
+	# タイトルの「つづきから」に、保存した日時・居場所・レベルが出る
+	var info := TitleScreen.save_info()
+	check(info.contains("保存") and info.contains("迷宮") and info.contains("Lv%d" % main.gs.party[0].level) and info.contains(main.gs.party[0].name), "つづきからに、保存した日時・居場所・レベルが出る (%s)" % info.replace("\n", " / "))
+	# 持ち物の画面から記録をつけると、「保存しました。」と出してタイトルへ戻る
+	main.open_inventory()
+	await _step(2)
+	main.inventory._on_save()
+	await _step(3)
+	check(main.phase == "title" and main.inventory == null and main.screen is TitleScreen and main.screen._note.text == "保存しました。", "記録をつけると、「保存しました。」と出してタイトルへ戻る")
+	check(DiveSave.exists(), "タイトルへ戻っても、迷宮の記録は残る")
+	main._on_continue()
+	await _step(5)
+	fl2 = main.current
+	check(main.phase == "dungeon" and fl2 != null and fl2.floor_no == 2 and DiveSave.exists(), "もう一度つづきから再開できる")
 	# 夜が明けて街へ戻ると、迷宮の記録は消える
 	main.return_to_surface()
 	await _step(3)
@@ -660,7 +674,7 @@ func _test_home_town() -> void:
 	check(sleep_b != null, "寝床に「眠る」がある")
 	if sleep_b != null:
 		sleep_b.pressed.emit()
-		await _step(2)
+		await _step(60)      # 暗転しきってから、一晩が過ぎる
 	check(c.hp >= c.max_hp(), "寝床で眠ると全快する")
 	# 実験室の薬を、迷宮で使う
 	main._on_dive()
@@ -1594,6 +1608,7 @@ func _test_game() -> void:
 	main.gs.party[0].hp = 3.0
 	town._go("inn")
 	town._rest(120)
+	await _step(60)      # 暗転しきってから、一晩が過ぎる
 	check(main.gs.party[0].hp == float(main.gs.party[0].max_hp()), "宿屋で全快する")
 	town._save()
 	check(GameState.has_save(), "宿屋でセーブできる")
@@ -1776,6 +1791,7 @@ func _test_game() -> void:
 	main._clear_bag()
 	main.bag_silver = 1000
 	var bank1: int = main.gs.bank_silver
+	var day1: int = main.gs.day      # 宿に泊まると一日進むので、潜る前の日から数える
 	var perf := 0
 	for c in main.gs.party:
 		if c.hp > 0.0:
@@ -1783,7 +1799,7 @@ func _test_game() -> void:
 	main.leader().position = main.current.map.center_of(main.current.up_cell)
 	main.interact()
 	await _step(3)
-	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 + perf and main.gs.day == 1, "街へ戻ると3割が税になり、〈芸能〉で稼ぐ (+%d、うち芸 %d)" % [main.gs.bank_silver - bank1, perf])
+	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 + perf and main.gs.day == day1 + 1, "街へ戻ると3割が税になり、〈芸能〉で稼ぐ (+%d、うち芸 %d)" % [main.gs.bank_silver - bank1, perf])
 	# 全滅
 	main._on_dive()
 	await _step(3)
@@ -2396,6 +2412,7 @@ func _test_weapons(main: Node, ar: Arena) -> void:
 	c.equip["weapon"] = "mace"
 	h.cds.clear()
 	c.mp = c.max_mp()
+	en.cimm = {}      # 闘技場の魔物は選ぶたびに違う。気絶が効かない魔物(#62)に当たっても確かめられるように
 	check(h.use_skill(Character.WEAPON_SKILL) and en.stun_t > 0.0, "気絶打ちで気絶させる")
 	# 杖の魔力の溜め
 	c.equip["weapon"] = "quarterstaff"

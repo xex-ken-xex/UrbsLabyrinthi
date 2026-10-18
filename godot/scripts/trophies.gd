@@ -126,7 +126,7 @@ static func line(new_ids: Array) -> String:
 	var names: Array = []
 	for id in new_ids:
 		names.append("「%s」" % name_of(String(id)))
-	return "パンパカパーン! 実績%sを取った。" % "".join(names)
+	return "パンパカパーン! 実績%sを解除した。" % "".join(names)
 
 static func count(gs: GameState) -> int:
 	return (gs.journal.get("trophies", {}) as Dictionary).size()

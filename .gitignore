@@ -1,1 +1,4 @@
 dist/
+
+# tools/build-deploy.sh が書く版の印(ゲームの中身にだけ入る)
+godot/data/build.txt

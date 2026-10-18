@@ -32,6 +32,12 @@ var half_mode := false        # 能力値 +1 を二つに分けている途中
 var half_abil := ""           # +1 の一つ目
 var here_floor := 0           # 迷宮の中なら、いまいる階(迷宮の断面に印をつける)。街では 0
 var section_view: SectionView
+var keys_btn: Button
+var title_btn: Button
+var close_btn: Button
+var keys_handler: Callable = Callable()      # 操作の設定を開く(Main)
+var title_handler: Callable = Callable()     # 街だけ。タイトルへ戻る(Main)
+var _title_sure := false                     # タイトルへ: 一度目は確かめる
 
 func open(state: GameState, special: Callable = Callable(), rest: Callable = Callable(), reorder: Callable = Callable()) -> void:
 	gs = state
@@ -47,6 +53,28 @@ func set_save(h: Callable) -> void:
 	save_handler = h
 	save_btn.visible = h.is_valid()
 
+## 右下の「操作の設定」と「タイトルへ」(タイトルへは街だけ。迷宮では「記録をつける」でタイトルへ戻る)
+func set_system(keys: Callable, to_title: Callable) -> void:
+	keys_handler = keys
+	title_handler = to_title
+	keys_btn.visible = keys.is_valid()
+	title_btn.visible = to_title.is_valid()
+
+func _on_title() -> void:
+	if not title_handler.is_valid():
+		return
+	if not _title_sure:
+		_title_sure = true
+		title_btn.text = "本当に戻る"
+		msg.text = "タイトルへ戻る? 街での記録は、いま書いてある。もう一度押すと戻る。"
+		return
+	title_handler.call()
+
+## 操作の設定を閉じたあと、焦点を戻す
+func focus_default() -> void:
+	if tab_btns.has(tab):
+		(tab_btns[tab] as Button).grab_focus()
+
 ## 料理を食べる・作るの手続きを渡す(作るのは迷宮の中だけ)
 func set_food(cook: Callable, eat: Callable) -> void:
 	cook_handler = cook
@@ -56,7 +84,7 @@ func _on_save() -> void:
 	if not save_handler.is_valid():
 		return
 	var ok: bool = save_handler.call()
-	save_btn.text = "記録した" if ok else "記録できない"
+	save_btn.text = "保存しました。" if ok else "記録できない"
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -75,6 +103,10 @@ func _ready() -> void:
 	var head := UIKit.hbox(16)
 	head.add_child(UIKit.label("持ち物", 28, UIKit.GOLD))
 	head.add_child(UIKit.label("%s か Esc で閉じる" % Controls.hint("inventory"), 14, UIKit.DIM))
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(gap)
+	head.add_child(UIKit.label(Updater.build_text(), 13, UIKit.DIM))   # Release「test」の説明にある commit と同じ
 	root.add_child(head)
 	member_box = UIKit.hbox(8)
 	root.add_child(member_box)
@@ -93,7 +125,7 @@ func _ready() -> void:
 	rest_btn.visible = false
 	tabs.add_child(rest_btn)
 	save_btn = UIKit.button("記録をつける", _on_save, 150)
-	save_btn.tooltip_text = "迷宮の中の、この場所から再開できるように記録する(タイトルの「つづきから」)"
+	save_btn.tooltip_text = "迷宮の中の、この場所から再開できるように記録して、タイトルへ戻る(タイトルの「つづきから」)"
 	save_btn.visible = false
 	tabs.add_child(save_btn)
 	row.add_child(tabs)
@@ -121,8 +153,22 @@ func _ready() -> void:
 	action_box = UIKit.hbox(8)
 	rv.add_child(action_box)
 	row.add_child(right)
+	# 下: 一行の知らせと、右下のボタン(操作の設定、タイトルへ、閉じる)。ken 10/18
+	var foot := UIKit.hbox(8)
+	root.add_child(foot)
 	msg = UIKit.label("", 15, UIKit.GOOD)
-	root.add_child(msg)
+	msg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	foot.add_child(msg)
+	keys_btn = UIKit.button("操作の設定", func(): if keys_handler.is_valid(): keys_handler.call(), 130)
+	keys_btn.visible = false
+	foot.add_child(keys_btn)
+	title_btn = UIKit.button("タイトルへ", _on_title, 130)
+	title_btn.visible = false
+	foot.add_child(title_btn)
+	close_btn = UIKit.button("閉じる (%s / Esc)" % Controls.hint("inventory"), func(): closed.emit(), 170)
+	close_btn.name = "close"
+	foot.add_child(close_btn)
 
 func _unhandled_input(e: InputEvent) -> void:
 	if not visible or e.is_echo():
@@ -382,10 +428,10 @@ func _fill_trophies() -> void:
 
 func _trophy_detail() -> String:
 	if sel_id == "" or not Trophies.ids().has(sel_id):
-		return "[b][color=#e8dcb0]実績[/color][/b]\n\nこれまでの歩み。取ったときは「パンパカパーン!」。\n\n取った %d / %d" % [Trophies.count(gs), Trophies.ids().size()]
+		return "[b][color=#e8dcb0]実績[/color][/b]\n\nこれまでの歩み。解除したときは「パンパカパーン!」。\n\n解除した %d / %d" % [Trophies.count(gs), Trophies.ids().size()]
 	var got := Trophies.has(gs, sel_id)
 	var t := "[b][color=%s]%s %s[/color][/b]\n\n%s\n\n" % ["#e8dcb0" if got else "#8a90a0", "★" if got else "☆", Trophies.name_of(sel_id), Trophies.desc_of(sel_id)]
-	t += "%d日目に取った" % int(gs.journal["trophies"][sel_id]) if got else "まだ取っていない"
+	t += "%d日目に解除した" % int(gs.journal["trophies"][sel_id]) if got else "まだ解除していない"
 	if sel_id.begins_with(Trophies.LAYER_ALL):
 		var p := Journal.layer_progress(gs, int(sel_id.substr(Trophies.LAYER_ALL.length())))
 		t += "(倒した %d / %d種)" % [p.x, p.y]

@@ -35,6 +35,9 @@ var follow_pos := Vector2.ZERO
 var ai_t := 0.0
 var ai_target: Enemy = null
 var ai_move := Vector2.ZERO
+var _ai_last_pos := Vector2.ZERO
+var _ai_stuck := 0.0               # 動こうとしているのに進めていない秒(角に引っかかったとき)
+var _ai_detour := 0.0              # 引っかかったら、しばらく道なりにリーダーを追う(ken 10/18)
 var ai_catchup := false
 var atk_held := false          # 前のフレームで攻撃を押していたか
 var hold_t := 0.0              # 攻撃を押し続けている秒
@@ -684,6 +687,16 @@ func role() -> String:
 	return "melee"
 
 func _ai(delta: float) -> void:
+	if ai_move != Vector2.ZERO and position.distance_to(_ai_last_pos) < 0.4:
+		_ai_stuck += delta
+	else:
+		_ai_stuck = 0.0
+	_ai_last_pos = position
+	if _ai_stuck > 0.3:
+		_ai_stuck = 0.0
+		_ai_detour = 1.2
+		ai_t = 0.0
+	_ai_detour = maxf(0.0, _ai_detour - delta)
 	ai_t -= delta
 	if ai_t <= 0.0:
 		ai_t = 0.15
@@ -736,13 +749,14 @@ func _ai_think() -> void:
 					ai_move = to.normalized()
 			"support":
 				if leader != null and to_leader.length() > 80.0:
-					ai_move = to_leader.normalized()
+					ai_move = _flow_step(to_leader) if _ai_detour > 0.0 else to_leader.normalized()
 				elif dist < 60.0:
 					ai_move = to.normalized()
 	else:
 		var to_f := follow_pos - position
 		if to_f.length() > 14.0:
-			ai_move = to_f.normalized()
+			# 角や細い通路で引っかかったら、まっすぐではなく道なりに(リーダーまでの道のり)
+			ai_move = _flow_step(to_leader) if _ai_detour > 0.0 and leader != null else to_f.normalized()
 			ai_catchup = to_f.length() > 60.0
 	_ai_skills()
 
