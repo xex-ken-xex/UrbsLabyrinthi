@@ -85,6 +85,11 @@ func _test_pending() -> void:
 	var tokens := 0
 	for e in fl.map.data["encounters"]:
 		tokens += (e["tokens"] as Array).size()
+	# 縄梯子の下で待つ魔物(#74)は、書き出しの遭遇の外に足した遭遇(id は ROPE_ENC_ID から)
+	for eid in fl.enc_total:
+		if int(eid) >= FloorInstance.ROPE_ENC_ID:
+			n_enc += 1
+			tokens += int(fl.enc_total[eid])
 	check(fl.spawner.pending.size() + _spawned_encounters(fl) == n_enc, "遭遇は全部、控えか出したかのどちらか (%d)" % n_enc)
 	check(fl.enemies.size() < tokens, "入った直後は、全部は出ていない (%d / %d体)" % [fl.enemies.size(), tokens])
 	var total := 0
