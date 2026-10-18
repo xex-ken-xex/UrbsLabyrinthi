@@ -12,6 +12,7 @@ var camera: Camera2D
 var hud: Hud
 var ui_layer: CanvasLayer
 var hud_layer: CanvasLayer
+var credits: CreditsScreen          # クレジットとライセンスの表記(開いている間だけ)
 var screen: Control                # 開いている画面(タイトル、作成、街)
 var inventory: InventoryScreen
 var key_config: KeyConfig
@@ -46,6 +47,8 @@ var _shake := 0.0                  # 画面の揺れ(爆発の罠など)
 var _blind_was := false
 var rope_menu: TrapMenu = null     # 縄梯子の前で、下りるか登るかを選んでいる
 var _menu_rope := Vector2i(-1, -1)
+var _load_t := 0.0                 # 荷の重さを数え直すまでの秒(Burden)
+var _heavy_was := false            # 前に数えたとき、重すぎたか
 
 func _ready() -> void:
 	Dice.rng.randomize()
@@ -200,9 +203,22 @@ func show_title() -> void:
 	var t := TitleScreen.new()
 	t.new_game.connect(show_make)
 	t.continue_game.connect(_on_continue)
-	t.show_credits.connect(func(): hud.show_credits = true)
+	t.show_credits.connect(toggle_credits)
 	t.key_config.connect(open_key_config)
 	_set_screen(t)
+
+## クレジットとライセンスの表記を開く・閉じる(タイトルの「クレジット」、F1)
+func toggle_credits() -> void:
+	if is_instance_valid(credits):
+		credits.close_screen()
+		credits = null
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 50
+	add_child(layer)
+	credits = CreditsScreen.new()
+	credits.closed.connect(layer.queue_free)
+	layer.add_child(credits)
 
 ## タイトルの下に、更新の結果を出す
 func _title_note(text: String) -> void:
@@ -619,7 +635,7 @@ func _physics_process(delta: float) -> void:
 	# ゲームの速さは迷宮の中だけ(街、メニュー、報告は等速)
 	Engine.time_scale = GameSettings.speed() if phase == "dungeon" else 1.0
 	if Input.is_action_just_pressed("credits"):
-		hud.show_credits = not hud.show_credits
+		toggle_credits()
 	if Input.is_action_just_pressed("reload_assets"):
 		Assets.clear()          # 置いた画像を読み込み直す(フォントは再起動後)
 		if current != null:
@@ -659,6 +675,7 @@ func _dungeon_frame(delta: float) -> void:
 			for s in FloorProps.near(current, pc, gs):
 				log_msg(s, Color(0.8, 0.78, 0.68))
 	_open_doors_near_heroes()
+	_update_carry_and_load(delta)
 	if arena == null:
 		_check_traps()
 		if dtime != null:
@@ -1255,7 +1272,10 @@ const CORPSE_REACH := 30.0     # 遺体を調べられる距離(画素)
 
 func _update_hint() -> void:
 	var h := ""
-	if _nearest_locked_door() != null:
+	var fallen := _fallen_in_reach()
+	if fallen != null:
+		h = "%s: %sを背負う(足と攻撃が半分になる)" % [Controls.hint("interact"), fallen.ch.name]
+	elif _nearest_locked_door() != null:
 		h = "E: 解錠を試みる"
 	elif _nearest_trap_to_disarm() != null:
 		h = "%s: 罠をどうする?" % Controls.hint("interact")
@@ -1273,10 +1293,18 @@ func _update_hint() -> void:
 		h = "%s: 空の座に座る" % Controls.hint("interact")
 	elif _near(current.up_cell, 1.4):
 		h = "E: 街へ戻る" if current.floor_no == 1 else "E: 上へ戻る"
+	if h == "" and leader().carrying != null:
+		h = "%s: %sを下ろす" % [Controls.hint("interact"), leader().carrying.ch.name]
 	hud.hint = h
 
 func interact() -> void:
 	if phase != "dungeon" or leader().down:
+		return
+	var fallen := _fallen_in_reach()
+	if fallen != null:
+		if leader().carry(fallen):
+			log_msg("%sは、倒れた%sを背負った。足と攻撃が半分になる。" % [leader().ch.name, fallen.ch.name], Color("e8dcb0"))
+		_update_hint()
 		return
 	var door: Variant = _nearest_locked_door()
 	if door != null:
@@ -1305,7 +1333,7 @@ func interact() -> void:
 	if _near(current.down_cell, 1.4):
 		if current.floor_no >= Balance.MAX_FLOOR:
 			log_msg("この先は未踏。まだ道がない。", Color(0.7, 0.7, 0.8))
-		else:
+		elif not _left_behind_says():
 			enter_floor(current.floor_no + 1, "up")
 		return
 	var rope := _near_rope()
@@ -1317,6 +1345,8 @@ func interact() -> void:
 		sit_on_seat(seat)
 		return
 	if _near(current.up_cell, 1.4):
+		if _left_behind_says():
+			return
 		if current.floor_no == 1:
 			# 物理処理の最中に、仲間や層を片付けない。次の空き時間に街へ移る
 			phase = "transition"
@@ -1324,6 +1354,101 @@ func interact() -> void:
 			call_deferred("return_to_surface")
 		else:
 			enter_floor(current.floor_no - 1, "down")
+		return
+	var lead := leader()
+	if lead.carrying != null:
+		var who := lead.carrying.ch.name
+		lead.set_down()
+		Sfx.cue(current, lead.position + Vector2(-lead.facing.x * 14.0, -10.0), "set_down")
+		log_msg("%sを下ろした。" % who, Color(0.8, 0.8, 0.85))
+		_update_hint()
+
+# ---------- 倒れた仲間を背負う(ken 10/18) ----------
+
+## 操作している仲間のそばで倒れていて、まだ誰も背負っていない仲間(背負えなければ null)
+func _fallen_in_reach() -> Hero:
+	if current == null or arena != null:
+		return null
+	var lead := leader()
+	if lead.down or lead.carrying != null:
+		return null
+	for h in heroes:
+		if h != lead and h.down and h.carried_by == null and h.position.distance_to(lead.position) <= Hero.CARRY_REACH:
+			return h
+	return null
+
+## 背負われずに倒れている仲間
+func _left_behind() -> Array:
+	var out: Array = []
+	for h in heroes:
+		if h.down and h.carried_by == null:
+			out.append(h)
+	return out
+
+## 倒れた仲間を置いたままでは、階を移れない。置いていく仲間がいれば、ログに出して true
+func _left_behind_says() -> bool:
+	var lb := _left_behind()
+	if lb.is_empty() or lb.size() == heroes.size():
+		return false
+	var names: Array = []
+	for h in lb:
+		names.append(h.ch.name)
+	log_msg("倒れた%sを置いていけない。そばで %s を押して背負う。" % ["、".join(names), Controls.hint("interact")], Color("ffb070"))
+	return true
+
+## 背負われている体を背中に載せ、荷の重さを数え直す(0.5秒ごと)
+func _update_carry_and_load(delta: float) -> void:
+	for h in heroes:
+		h.ride()
+	if arena != null:
+		Burden.speed_mult = 1.0
+		return
+	_load_t -= delta
+	if _load_t > 0.0:
+		return
+	_load_t = 0.5
+	var lc := load_now()
+	Burden.speed_mult = Burden.mult_for(lc[0], lc[1])
+	var heavy := Burden.speed_mult < 1.0
+	if heavy and not _heavy_was:
+		Sfx.cue(current, leader().position + Vector2(0, -24), "heavy")
+		log_msg("荷が重すぎる。足が遅くなった(%s)。持ち物の画面で捨てられる。" % Burden.label(lc[0], lc[1]), Color("ffb070"))
+	elif not heavy and _heavy_was:
+		log_msg("荷が軽くなった。", Color(0.8, 0.85, 0.8))
+	_heavy_was = heavy
+
+## [一行の荷の重さ, 持てる重さ](立っている仲間の装備 + 持ち物 + 料理 + 燐晶。背負った仲間は数えない)
+func load_now() -> Array:
+	var standing: Array = []
+	if heroes.is_empty():
+		standing = gs.party.filter(func(c): return c.hp > 0.0)
+	else:
+		for h in heroes:
+			if not h.down:
+				standing.append(h.ch)
+	return [Burden.party_kg(gs, standing, bag_crystal if phase != "town" else {}), Burden.cap_kg(standing.size())]
+
+func burden_text() -> String:
+	var lc := load_now()
+	return Burden.label(lc[0], lc[1])
+
+## 持ち物を捨てる(ken 10/18)。迷宮では足もとに置く(また拾える。離れるまでは拾わない)。街では捨てる
+func drop_item(id: String) -> String:
+	if not gs.remove_item(id, 1):
+		return ""
+	var nm := ItemDB.item_name(id)
+	if phase == "town" or current == null or heroes.is_empty():
+		return "%sを捨てた" % nm
+	var lead := leader()
+	var at := lead.position + lead.facing * 16.0
+	current.ground.add_item(at, id, 1)
+	current.ground.entries[-1]["hold"] = true
+	if inventory != null:
+		_menu_fx.append(["toss", lead, lead.facing * 16.0 + Vector2(0, -12)])     # 持ち物を閉じたら ポイ
+	else:
+		Sfx.cue(current, at + Vector2(0, -12), "toss")
+	_load_t = 0.0
+	return "%sを足もとに置いた" % nm
 
 ## 第10層の空の座に座る。擬音 シン…(静けさ)とログ。初めて座ったときだけ、底から歌が聞こえる(実績「空座に座す」)
 func sit_on_seat(seat: Dictionary) -> void:
@@ -1489,6 +1614,7 @@ func open_inventory() -> void:
 		inventory.set_save(Callable(self, "save_dive_to_title"))
 	inventory.set_system(Callable(self, "open_key_config"), Callable(self, "_town_to_title") if phase == "town" else Callable())
 	inventory.set_food(Callable(self, "cook_dish") if phase == "menu" and dtime != null else Callable(), Callable(self, "eat_dish"))
+	inventory.set_burden(Callable(self, "drop_item"), Callable(self, "burden_text"), phase == "menu" and dtime != null)
 
 ## 隊列(gs.party の順)を入れ替えたら、迷宮の仲間の並びも合わせる。操作している仲間は、そのまま
 func sync_hero_order() -> void:
@@ -1610,9 +1736,22 @@ func _near_rope() -> Vector2i:
 			return c
 	return Vector2i(-1, -1)
 
-## 縄梯子の難しさ: 階の高さ(m)で決まる。5m で 10、15m で 14
+## 縄梯子の難しさ: 階の高さ(m)で決まる。5m で 12、15m で 16(ken 10/18: 滑り落ちやすく)
 static func rope_dc(h_m: float) -> int:
-	return 8 + int(round(h_m / 2.5))
+	return 10 + int(round(h_m / 2.5))
+
+const ROPE_FALL_DMG := 6         # 落ちた高さ 1m あたりの傷(ken 10/18。15m 落ちれば 90)
+const ROPE_MON_CELLS := 12.0     # この距離(マス)に魔物がいると、縄梯子を使えない
+
+## 縄梯子を使えなくする魔物(近くで生きていて、中立でない)。いなければ null
+func _monster_near_rope() -> Enemy:
+	var lp := leader().position
+	for e in current.enemies:
+		if e.dead or e.state == "neutral" or e.asleep:
+			continue
+		if e.position.distance_to(lp) < ROPE_MON_CELLS * Balance.CELL:
+			return e
+	return null
 
 func open_rope_menu(c: Vector2i) -> void:
 	if rope_menu != null or phase != "dungeon":
@@ -1621,13 +1760,20 @@ func open_rope_menu(c: Vector2i) -> void:
 		Sfx.cue(current, leader().position, "sealed")
 		log_msg("縦穴を吐息が吹き上げていて、縄梯子に取りつけない。夜明けを待つしかない。", Color("c9b6ff"))
 		return
+	var mon := _monster_near_rope()
+	if mon != null:
+		current.spawn_text(leader().position + Vector2(0, -30), "魔物がいる", Color("ff9a7a"))
+		log_msg("%sがいて、縄梯子に取りつけない。片づけてからにしよう。" % mon.display_name, Color("ffb070"))
+		return
+	if _left_behind_says():
+		return
 	var opts: Array = []
 	if current.floor_no < Balance.MAX_FLOOR:
 		var h_dn := float(Abyss.floor_info(current.floor_no).get("h_m", 5.0))
-		opts.append(["down", "下りる", "%s へ。%sm 下。一人ずつ〈運動〉 難易度 %d。外すと途中から落ちる。" % [String(Abyss.floor_info(current.floor_no + 1).get("label", "下の階")), _m(h_dn), rope_dc(h_dn)]])
+		opts.append(["down", "下りる", "%s へ。%sm 下。一人ずつ〈運動〉 難易度 %d。外すと途中から落ち、落ちた高さ(m)×%d の傷。背負っていると不利。" % [String(Abyss.floor_info(current.floor_no + 1).get("label", "下の階")), _m(h_dn), rope_dc(h_dn), ROPE_FALL_DMG]])
 	if current.floor_no > 1:
 		var h_up := float(Abyss.floor_info(current.floor_no - 1).get("h_m", 5.0))
-		opts.append(["up", "登る", "%s へ。%sm 上。一人ずつ〈運動〉 難易度 %d。外すと滑って傷を負う(仲間が引き上げる)。" % [String(Abyss.floor_info(current.floor_no - 1).get("label", "上の階")), _m(h_up), rope_dc(h_up)]])
+		opts.append(["up", "登る", "%s へ。%sm 上。一人ずつ〈運動〉 難易度 %d。外すと滑り落ち、落ちた高さ(m)×%d の傷(仲間が引き上げる)。背負っていると不利。" % [String(Abyss.floor_info(current.floor_no - 1).get("label", "上の階")), _m(h_up), rope_dc(h_up), ROPE_FALL_DMG]])
 	if opts.is_empty():
 		return
 	_menu_rope = c
@@ -1669,6 +1815,8 @@ func climb_rope(dir: int, c: Vector2i) -> void:
 		if h.down:
 			continue
 		var roll: int = h.ch.roll_d20()
+		if h.carrying != null:
+			roll = mini(roll, h.ch.roll_d20())     # 倒れた仲間を背負っていると、不利(二度振って低いほう)
 		var b: int = h.ch.skill_bonus("athletics")
 		rolls.append([h, roll, b, roll == 20 or (roll != 1 and roll + b >= dc)])
 	log_msg("縄梯子を%s(〈運動〉 難易度 %d)" % ["下りる" if dir > 0 else "登る", dc], Color("e8dcb0"))
@@ -1678,12 +1826,17 @@ func climb_rope(dir: int, c: Vector2i) -> void:
 		var h: Hero = r[0]
 		if bool(r[3]):
 			continue
-		# 外した: 途中から落ちる(出目1は上から下まで)。3m ごとに 1d6
-		var fall := h_m * (1.0 if int(r[1]) == 1 else Dice.rng.randf_range(0.3, 0.6))
-		var dice := maxi(1, int(round(fall / 3.0)))
+		# 外した: 途中から落ちる(出目1は上から下まで)。登るときは、少し滑り落ちて仲間に引き上げられる。
+		# 傷は落ちた高さ(m)× 6(ken 10/18。高い層ではまず助からない)
+		var fall := rope_fall_m(h_m, int(r[1]), dir)
 		Sfx.cue(current, h.position + Vector2(0, -10), "slip")
-		log_msg("%sは %d%+d で手を滑らせ、%sm 落ちた" % [h.ch.name, int(r[1]), int(r[2]), _m(snappedf(fall, 0.5))], Color("ff9a7a"))
-		h.damage(maxf(1.0, Dice.roll("%dd6" % dice) * Balance.TRAP_DMG_SCALE), h.position + Vector2(0, 1), true)
+		log_msg("%sは %d%+d で手を滑らせ、%sm 落ちた" % [h.ch.name, int(r[1]), int(r[2]), _m(fall)], Color("ff9a7a"))
+		h.damage(maxf(1.0, fall * ROPE_FALL_DMG), h.position + Vector2(0, 1), true)
+
+## 縄梯子で手を滑らせたときに落ちる高さ(m。0.5m 刻み)。下りは途中から下まで(出目1は上から下まで)、登りは少し滑り落ちる
+static func rope_fall_m(h_m: float, roll: int, dir: int) -> float:
+	var f := 1.0 if roll == 1 and dir > 0 else (Dice.rng.randf_range(0.3, 0.9) if dir > 0 else Dice.rng.randf_range(0.1, 0.35))
+	return maxf(0.5, snappedf(h_m * f, 0.5))
 
 ## 落とし穴: 一行ごと下の階へ落ちる。階は同じ世界座標で重なっている(縦穴の中心が原点)ので、
 ## 真下に近い床へ落ちる。真下が岩なら、いちばん近い床。いちばん下の階では、浅い穴で済む

@@ -164,6 +164,7 @@ func spawn_all() -> void:
 	_spawn_outcrops(out_kg * kg_factor)
 	_spawn_forage()
 	_spawn_corpses()
+	_spawn_rope_corpses()
 	for p in fl.world_props:
 		if String(p["kind"]) == "blockade":        # 封鎖令の跡には、取り残された者の遺体(骨)
 			add_corpse(_free_pos(fl.map.center_of(Vector2i(int(p["x"]), int(p["y"]))) + Vector2(30, 10), 20.0), {}, "bones")
@@ -280,6 +281,7 @@ const CORPSE_WHY := {
 	"rim": "体じゅうの骨が折れている。上の階の縁から落ちてきたらしい。",
 	"dead_end": "行き止まりに追い詰められて、ここで力尽きたらしい。",
 	"shaft": "骨がばらばらに砕けている。竪坑を、上の階から落ちてきたらしい。",
+	"rope": "縄でこすれた手の皮がむけている。縄梯子から落ちたらしい。",
 	"blockade": "手記を握っている。最後の日付は五十年前。封鎖令で取り残され、ここで待ち続けたらしい。",
 }
 const CORPSE_WHY_W := {"trap": 0.25, "nest": 0.25, "rim": 0.1, "dead_end": 0.12, "": 0.28}
@@ -330,6 +332,22 @@ func _spawn_corpses() -> void:
 			e["nest"] = nest_id
 		if theme == "hone" and Dice.rng.randf() < EXPEDITION_P:
 			e["expedition"] = true
+
+## 縄梯子の下は、落ちた者の遺体が溜まる(ken 10/18: 縄梯子の近くは魔物も遺品も多い)。縄梯子ごとに 1〜2体、骨になって
+const ROPE_CORPSES := [1, 2]
+func _spawn_rope_corpses() -> void:
+	if fl.floor_no <= 1:
+		return
+	for rc in fl.ropes:
+		for k in Dice.rng.randi_range(ROPE_CORPSES[0], ROPE_CORPSES[1]):
+			var c := fl.map.nearest_walkable(rc + Vector2i(Dice.rng.randi_range(-2, 2), Dice.rng.randi_range(-2, 2)), 3)
+			if c.x < 0:
+				continue
+			var p := _jitter_in_cell(c)
+			add_corpse(p, _corpse_cause(p), "bones")
+			var e: Dictionary = entries[-1]
+			e["why"] = "rope"
+			e["rank"] = rank_of(fl.layer_no)
 
 func _roll_why(traps: Array, nests: Array, rim: Array) -> String:
 	var ok := {"trap": not traps.is_empty(), "nest": not nests.is_empty(), "rim": not rim.is_empty(), "dead_end": not _dead_ends.is_empty(), "": true}
@@ -423,6 +441,12 @@ func update(delta: float) -> void:
 				nd = dd
 				near = h
 		var done := false
+		if e.get("hold", false):
+			# 捨てたばかりの品: 仲間が一度離れるまでは拾わない
+			if near != null and nd < HOLD_R * HOLD_R:
+				near = null
+			else:
+				e.erase("hold")
 		if near != null and float(e["t"]) > POP_DELAY:
 			var d := sqrt(nd)
 			if String(e["kind"]) == "corpse":
@@ -436,6 +460,8 @@ func update(delta: float) -> void:
 		if done:
 			entries.remove_at(i)
 		i -= 1
+
+const HOLD_R := 40.0      # 捨てた品は、仲間がこれより離れるまで拾わない
 
 ## 遺体を調べる。持ち物が散らばり、遺体をこうした魔物が湧く。湧いた魔物を返す
 func search_corpse(e: Dictionary) -> Array:

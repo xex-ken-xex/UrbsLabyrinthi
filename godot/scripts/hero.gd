@@ -65,6 +65,11 @@ var fear_t := 0.0             # 怯えて攻撃できない
 var confuse_t := 0.0          # 前後左右が逆になる
 var heat_t := 0.0             # 熱い縁(竜の気配)で、次に焼けるまでの秒(PhosFlow.heat)
 var rust := 0                 # 錆びた鎧。この潜行の間、守りが下がる(1につき防御1点)
+# 倒れた仲間を背負う(ken 10/18)。背負っている間は、足の速さと攻撃力が半分
+var carrying: Hero = null     # 背負っている、倒れた仲間
+var carried_by: Hero = null   # 倒れていて、背負われている
+const CARRY_MULT := 0.5
+const CARRY_REACH := 30.0     # 倒れた仲間を背負える距離(画素)
 
 func setup(fl: FloorInstance, character: Character) -> void:
 	game_floor = fl
@@ -89,6 +94,8 @@ func buff(key: String, default: float = 1.0) -> float:
 	match key:
 		"power", "guard", "speed", "spell":
 			v *= ch.food_mult(key)     # 料理の効き目と、腹ぺこ
+			if carrying != null and (key == "power" or key == "speed"):
+				v *= CARRY_MULT        # 倒れた仲間を背負っている
 		"chill":
 			if v < 1.0 and ch.meal_v("chill") > 0.0:
 				v = 1.0 - (1.0 - v) * ch.meal_v("chill")     # 寒さ除け
@@ -107,6 +114,8 @@ func body_speed() -> float:
 
 func _speed_now() -> float:
 	var s := ch.speed() * buff("speed") * buff("mire") * buff("chill")
+	if game_floor != null and not game_floor.arena:
+		s *= Burden.speed_mult     # 荷が重すぎる(Burden)
 	if charging():
 		s *= Balance.CHARGE_SPEED
 	return s
@@ -155,6 +164,7 @@ func damage(amount: float, from_pos: Vector2, ignore_armor: bool = false, src_ty
 		poison_t = 0.0
 		stuck_t = 0.0
 		cancel_charge()
+		set_down(null)
 		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
 		Sfx.cue(game_floor, position + Vector2(0, 14), "down")
 		downed.emit(self)
@@ -201,6 +211,7 @@ func _lose_hp(n: float, col: Color) -> void:
 		buffs.clear()
 		poison_t = 0.0
 		stuck_t = 0.0
+		set_down(null)
 		game_floor.spawn_text(position + Vector2(0, -radius - 18), "倒れた", Color("ff6a5a"))
 		Sfx.cue(game_floor, position + Vector2(0, 14), "down")
 		downed.emit(self)
@@ -216,6 +227,32 @@ func _struggle(delta: float) -> void:
 	atk_held = a
 	hold_t = 0.0
 
+## 倒れた仲間を背負う(擬音 よいしょ)。背負えたら true
+func carry(o: Hero) -> bool:
+	if down or carrying != null or o == null or o == self or not o.down or o.carried_by != null:
+		return false
+	carrying = o
+	o.carried_by = self
+	o.z_index = z_index + 1
+	Sfx.cue(game_floor, position + Vector2(0, -22), "shoulder")
+	return true
+
+## 背負っている仲間を下ろす(at が null なら、その場に)。倒れたときも下ろす
+func set_down(at: Variant = null) -> void:
+	if carrying == null:
+		return
+	var o := carrying
+	carrying = null
+	o.carried_by = null
+	o.z_index = 0
+	if is_instance_valid(o):
+		o.position = at if at != null else position + Vector2(-facing.x * 14.0, 6.0)
+
+## 背負われている体を、背中に載せる(Main が毎コマ、仲間が動いたあとに呼ぶ)
+func ride() -> void:
+	if carried_by != null and is_instance_valid(carried_by):
+		position = carried_by.position + Vector2(-carried_by.facing.x * 5.0, -9.0)
+
 func heal(n: float) -> void:
 	if down:
 		return
@@ -223,6 +260,8 @@ func heal(n: float) -> void:
 	game_floor.spawn_text(position + Vector2(0, -radius - 12), "+%d" % int(round(n)), Color("7be08a"))
 
 func revive(frac: float) -> void:
+	if carried_by != null:
+		carried_by.set_down(null)
 	down = false
 	ch.hp = maxf(1.0, ch.max_hp() * frac)
 	iframes = 1.0
@@ -736,6 +775,13 @@ func _ai_think() -> void:
 		# 離れすぎたら、リーダーのそばへ(敵が見えていても)。道なりに戻る
 		ai_move = _flow_step(to_leader)
 		ai_catchup = true
+	elif ai_target == null and carrying == null and _fallen_near() != null:
+		# 魔物が見えないうちに、倒れた仲間を背負いに行く(ken 10/18: 背負って運ばないといけない)
+		var body := _fallen_near()
+		if position.distance_to(body.position) <= CARRY_REACH:
+			carry(body)
+		else:
+			ai_move = (body.position - position).normalized()
 	elif ai_target != null:
 		var to := ai_target.position - position
 		var dist := to.length()
@@ -759,6 +805,18 @@ func _ai_think() -> void:
 			ai_move = _flow_step(to_leader) if _ai_detour > 0.0 and leader != null else to_f.normalized()
 			ai_catchup = to_f.length() > 60.0
 	_ai_skills()
+
+## 近く(8マス)で倒れていて、まだ誰も背負っていない仲間
+func _fallen_near() -> Hero:
+	var best: Hero = null
+	var bd := 8.0 * Balance.CELL
+	for h in game_floor.heroes:
+		if h != self and is_instance_valid(h) and h.down and h.carried_by == null:
+			var d := position.distance_to(h.position)
+			if d < bd:
+				bd = d
+				best = h
+	return best
 
 ## リーダーまでの道のり(マス)。遠すぎるか、たどれなければ -1
 func _flow_dist() -> int:
