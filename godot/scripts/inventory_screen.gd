@@ -462,6 +462,7 @@ func _trophy_detail() -> String:
 ## 迷宮の断面: 階の一覧(着いていない階は ？？？)。右に断面図
 func _fill_section() -> void:
 	var known := maxi(Journal.stat(gs, "deepest_floor"), here_floor)
+	section_view.slain = {}
 	slot_box.add_child(UIKit.label("着いた最も深い階: %s" % (String(Abyss.floor_info(known).get("label", "")) if known > 0 else "まだ迷宮に入っていない"), 15, UIKit.GOLD))
 	for f in Abyss.data().get("floors", []):
 		var depth := int(f["depth"])
@@ -470,6 +471,10 @@ func _fill_section() -> void:
 		var txt := "%s  %s  %d〜%dm" % [String(f["label"]), String(f["short"]) if reached else "？？？", int(round(float(f["top_m"]))), int(round(float(f["top_m"]) + float(f["h_m"])))]
 		if depth == here_floor:
 			txt += "   ← いま"
+		var slain := LayerBoss.slain_label(gs, LayerBoss.layer_at(depth))
+		if slain != "":
+			txt += "   " + slain
+			section_view.slain[depth] = slain
 		item_list.add_item(txt)
 		if depth == here_floor:
 			item_list.set_item_custom_fg_color(item_list.item_count - 1, UIKit.GOLD)
@@ -494,8 +499,12 @@ func _section_detail() -> String:
 	if depth > known:
 		return "[b][color=#8a90a0]%s ？？？[/color][/b]
 まだ着いていない。深さ %sm〜。" % [String(f["label"]), _m(float(f["top_m"]))]
+	var boss := LayerBoss.layer_at(depth)
+	var boss_t := ""
+	if boss > 0:
+		boss_t = "\n" + (LayerBoss.slain_label(gs, boss) if LayerBoss.kills(gs, boss) > 0 else "第%d層の主の階(まだ倒していない)" % boss)
 	return "[b][color=#e8dcb0]%s %s[/color][/b]
-深さ %s〜%sm(階の高さ %sm)。横 %dマス(%dm)。%s" % [String(f["label"]), String(f["short"]), _m(float(f["top_m"])), _m(float(f["top_m"]) + float(f["h_m"])), _m(float(f["h_m"])), int(f["w"]), int(round(float(f["w"]) * 1.524)), "縦穴の底。竜の巣がある。" if bool(f.get("lair", false)) else "縦穴の縁に縄梯子がある。"]
+深さ %s〜%sm(階の高さ %sm)。横 %dマス(%dm)。%s" % [String(f["label"]), String(f["short"]), _m(float(f["top_m"])), _m(float(f["top_m"]) + float(f["h_m"])), _m(float(f["h_m"])), int(f["w"]), int(round(float(f["w"]) * 1.524)), "縦穴の底。竜の巣がある。" if bool(f.get("lair", false)) else "縦穴の縁に縄梯子がある。"] + boss_t
 
 static func _m(v: float) -> String:
 	return ("%.1f" % v).trim_suffix(".0")

@@ -73,6 +73,6 @@ func pop_update(delta: float) -> void:
 	pop_t -= delta
 	if pop_t <= 0.0:
 		if pop_amount >= 0.5:
-			game_floor.spawn_text(position + Vector2(0, -radius - 8), str(int(round(pop_amount))), pop_color)
+			game_floor.spawn_damage(position + Vector2(0, -radius - 8), str(int(round(pop_amount))), pop_color)
 		pop_amount = 0.0
 		pop_t = 0.3

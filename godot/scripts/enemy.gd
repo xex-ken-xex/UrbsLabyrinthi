@@ -122,6 +122,12 @@ var heat_cd := 0.0
 # 眠らせる(Spawner)
 var dormant := false          # 仲間から遠いので、動きも描画も止めている
 var light := false            # ワンダリング・モンスターの軽い歩き方(位置だけ Spawner が進める)
+var unique := false           # 層の主(LayerBoss)。名前が黄色。HP 20倍、巨大、逃げない
+var epithet := ""             # 層の主の二つ名(「疾風の」)と、魔物の名(HUD の HP の棒の上に出す)
+var base_name := ""
+var blast := false            # 吹き飛ばしの一撃を持つ(層の主)
+var blast_cd := 3.0
+var blast_t := 0.0            # 吹き飛ばしの構え(残りの秒)
 
 func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> void:
 	game_floor = fl
@@ -161,6 +167,8 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	dmods = dm["mult"]
 	cimm = dm["ci"]
 	legend = 3 if traits.has("legend") else 0
+	if m.get("unique", false):
+		_make_unique(m)
 	if traits.has("caster"):
 		spells = MonSpells.kit_for(m, mon_type())
 		for sid in spells:
@@ -168,13 +176,28 @@ func setup(fl: FloorInstance, m: Dictionary, e: Dictionary, pos: Vector2) -> voi
 	# 出た瞬間から、見えるかを決めておく(暗がりに出た魔物が、最初のコマだけ見えないように)
 	var vc := fl.map.cell_of(pos)
 	visible = fl.map.in_bounds(vc.x, vc.y) and fl.map.visible[fl.map.idx(vc.x, vc.y)] == 1
-	if state == "idle" and not disguised:
+	if state == "idle" and not disguised and not unique:
 		if has_trait("shape"):
 			_set_shape()
 		elif has_trait("climb"):
 			lurk = "ceiling"
 		elif has_trait("aquatic") or has_trait("amphib"):
 			lurk = "water"
+
+## 層の主にする: 名前、HP 20倍(ken 10/18)、攻撃 1.5倍、伝説的な抵抗。物のふりや潜んで待つことはしない
+func _make_unique(m: Dictionary) -> void:
+	unique = true
+	display_name = String(m.get("unique_name", display_name))
+	epithet = String(m.get("epithet", ""))
+	base_name = String(m.get("base_name", display_name))
+	max_hp = maxi(1, int(round(float(m.get("hp", 5)) * Balance.ENEMY_HP_SCALE * LayerBoss.HP_MULT)))
+	hp = float(max_hp)
+	dmg_mult *= LayerBoss.DMG_MULT
+	legend = maxi(legend, 3)
+	blast = bool(m.get("blast", false))
+	blast_cd = randf_range(2.5, 4.0)
+	disguised = false
+	asleep = false
 
 ## 化ける: 小さな魔物は鼠に、ほかは迷い込んだ冒険者に化けて待つ
 func _set_shape() -> void:
@@ -439,7 +462,7 @@ func _die() -> void:
 	queue_free()
 
 func _check_flee(by: Hero = null) -> void:
-	if fled or state == "flee" or kind == "mindless":
+	if fled or state == "flee" or kind == "mindless" or unique:
 		return
 	# 〈威圧〉: 傷つけた相手が怖いほど、早く逃げ出す
 	var scare := by.ch.skill_fx("intimidation") if by != null else 0.0
@@ -571,6 +594,7 @@ func _physics_process(delta: float) -> void:
 	slow_t = maxf(0.0, slow_t - delta)
 	stun_t = maxf(0.0, stun_t - delta)
 	sunder_t = maxf(0.0, sunder_t - delta)
+	blast_cd = maxf(0.0, blast_cd - delta)
 	_tick_traits(delta)
 	if poison_t > 0.0:
 		poison_t -= delta
@@ -699,8 +723,15 @@ func _chase(delta: float) -> void:
 	var to_t := target.position - position
 	var dist := to_t.length()
 	var seen := dist < 260.0 and (traits.has("ghost") or map.los(mc.x, mc.y, tc.x, tc.y))      # 遠くは、見えていても使わない(直進は220px、射撃は200pxまで)
+	if blast_t > 0.0:
+		_blast_step(delta)
+		return
 	if windup_t > 0.0 or charge_t > 0.0:
 		_charge_step(delta)
+		return
+	if blast and blast_cd <= 0.0 and dist <= radius + target.radius + LayerBoss.BLAST_REACH * 0.8:
+		blast_t = LayerBoss.BLAST_WINDUP
+		shown_alert = blast_t
 		return
 	if squeeze_t > 0.0:
 		_squeeze_step(delta)
@@ -786,6 +817,14 @@ func _draw() -> void:
 		off += Vector2(0, -radius - 18.0)
 		sc = 0.7
 		base_tint = Color(0.5, 0.5, 0.56)
+	if unique:
+		# 層の主: 足もとに金の輪。吹き飛ばしの構えの間は、届く所まで輪が広がる
+		draw_set_transform(Vector2.ZERO)
+		draw_arc(Vector2.ZERO, radius + 4.0, 0.0, TAU, 36, Color(1.0, 0.85, 0.3, 0.7), 2.5)
+		if blast_t > 0.0:
+			var reach := radius + LayerBoss.BLAST_REACH
+			draw_circle(Vector2.ZERO, reach * blast_frac(), Color(1.0, 0.3, 0.2, 0.18))
+			draw_arc(Vector2.ZERO, reach, 0.0, TAU, 48, Color(1.0, 0.4, 0.3, 0.8), 2.0)
 	if traits.has("glow") and not hidden_form():
 		var tm := Time.get_ticks_msec() / 1000.0
 		draw_set_transform(Vector2.ZERO)
@@ -868,7 +907,10 @@ func _draw_overlays(dy: float = 0.0) -> void:
 		UI.text_center(self, 0.0, -radius - 14.0 + dy, "!", 18, Color("ff5a4a"))
 	if state == "neutral":
 		UI.text_center(self, 0.0, -radius - 12.0 + dy, "…", 14, Color("c8d8ff"))
-	UI.text_center(self, 0.0, radius + 14.0, display_name, 11, Color(1, 1, 1, 0.8))
+	if unique:
+		UI.text_center(self, 0.0, radius + 16.0, display_name, 14, LayerBoss.NAME_COLOR)
+	else:
+		UI.text_center(self, 0.0, radius + 14.0, display_name, 11, Color(1, 1, 1, 0.8))
 
 # ---------- SRD の特徴(MonTraits) ----------
 
@@ -1042,6 +1084,32 @@ func on_hit_hero(h: Hero) -> void:
 			game_floor.message.emit("%sの鎧が錆びた。この潜行の間、守りが %d 下がる" % [h.ch.name, h.rust], "danger")
 	if traits.has("flyby"):
 		flyby_t = 0.7
+
+## 吹き飛ばしの一撃(層の主。ken 10/18): 足もとに輪が広がる間に構え、まわりの仲間をまとめて薙ぎ払って吹き飛ばす。転がってかわせる
+func _blast_step(delta: float) -> void:
+	blast_t -= delta
+	if blast_t > 0.0:
+		return
+	blast_t = 0.0
+	blast_cd = randf_range(LayerBoss.BLAST_CD[0], LayerBoss.BLAST_CD[1])
+	var hit := false
+	for h in game_floor.heroes:
+		if h.down or h.position.distance_to(position) > radius + h.radius + LayerBoss.BLAST_REACH:
+			continue
+		var was: float = h.ch.hp
+		h.damage(dmg * 1.3, position)
+		if h.ch.hp < was:
+			hit = true
+			var away: Vector2 = (h.position - position).normalized()
+			if away == Vector2.ZERO:
+				away = Vector2.from_angle(randf() * TAU)
+			h.knock = away * LayerBoss.BLAST_KNOCK / maxf(0.5, h.ch.mass())
+	Sfx.cue(game_floor, position + Vector2(0, radius * 0.5), "boss_blast")
+	if hit:
+		game_floor.shake.emit(0.35)
+
+func blast_frac() -> float:
+	return 1.0 - blast_t / LayerBoss.BLAST_WINDUP if blast_t > 0.0 else 0.0
 
 ## 突進・跳びかかり: 構えて(「!」と擬音)、まっすぐ突っ込む。転がってかわせる
 func _start_charge(to_t: Vector2) -> void:

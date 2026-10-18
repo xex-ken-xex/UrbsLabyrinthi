@@ -49,6 +49,7 @@ var rope_menu: TrapMenu = null     # 縄梯子の前で、下りるか登るか�
 var _menu_rope := Vector2i(-1, -1)
 var _load_t := 0.0                 # 荷の重さを数え直すまでの秒(Burden)
 var _heavy_was := false            # 前に数えたとき、重すぎたか
+var boss_fx: BossFx                # 層の主との戦いの演出(咆哮、モノクロ)
 
 func _ready() -> void:
 	Dice.rng.randomize()
@@ -62,6 +63,8 @@ func _ready() -> void:
 	ui_layer = CanvasLayer.new()
 	ui_layer.layer = 5
 	add_child(ui_layer)
+	boss_fx = BossFx.new()
+	add_child(boss_fx)
 	hud_layer = CanvasLayer.new()
 	hud_layer.layer = 10
 	add_child(hud_layer)
@@ -403,6 +406,7 @@ func _on_dive() -> void:
 
 func _clear_dungeon() -> void:
 	_trace("_clear_dungeon 層%d 仲間%d" % [floors.size(), heroes.size()])
+	boss_fx.stop()
 	for f in floors.values():
 		f.queue_free()
 	floors.clear()
@@ -539,6 +543,8 @@ func _make_floor(n: int) -> FloorInstance:
 	fl.stat.connect(_on_floor_stat)
 	fl.darkened.connect(_refresh_view)
 	fl.ground_picked.connect(_on_ground_picked)
+	fl.boss_fallen.connect(_on_boss_fallen)
+	LayerBoss.setup_floor(fl, gs)
 	floors[n] = fl
 	return fl
 
@@ -547,6 +553,7 @@ func enter_floor(n: int, arrive: String, at: Vector2i = Vector2i.ZERO) -> void:
 	var fl := _make_floor(n)
 	if fl == null:
 		return
+	boss_fx.stop()           # 別の階へ移ると、層の主との戦いは終わる(ken 10/18)
 	if current != null and current.get_parent() == self:
 		remove_child(current)
 	current = fl
@@ -675,6 +682,7 @@ func _dungeon_frame(delta: float) -> void:
 			for s in FloorProps.near(current, pc, gs):
 				log_msg(s, Color(0.8, 0.78, 0.68))
 	_open_doors_near_heroes()
+	_check_boss_fight()
 	_update_carry_and_load(delta)
 	if arena == null:
 		_check_traps()
@@ -894,7 +902,9 @@ func _enter_room(pc: Vector2i) -> void:
 		var fv := room_flavor(current, r)
 		if fv != "":
 			log_msg(fv, Color(0.74, 0.78, 0.82))
-		if String(r.get("role", "")) == "master" and current.master_enc >= 0:
+		if r.has("boss") and current.boss_layer > 0:
+			log_msg("第%d層の主の間だ。%s" % [current.boss_layer, LayerBoss.def(current.boss_layer)["intro"]], LayerBoss.NAME_COLOR)
+		elif String(r.get("role", "")) == "master" and current.master_enc >= 0:
 			log_msg("この一画の主の間らしい。奥に、重い気配がある。", Color("f1d98a"))
 	if r.get("encounter") != null:
 		for e in m.data["encounters"]:
@@ -2126,12 +2136,51 @@ func _on_enemy_killed(en: Enemy) -> void:
 			Sfx.cue(h.game_floor, h.position + Vector2(0, 16), "levelup")
 	_check_trophies()
 
+## 層の主が、仲間に気づいて動き出したら戦いが始まる: 咆哮と、モノクロの画面(ken 10/18)
+func _check_boss_fight() -> void:
+	if boss_fx.active or arena != null or current.boss_layer <= 0:
+		return
+	for en in current.enemies:
+		if en.unique and not en.dead and en.state == "chase" and en.visible:
+			var L := current.boss_layer
+			boss_fx.start(current, String(LayerBoss.def(L)["roar"]))
+			_shake = maxf(_shake, 0.6)
+			log_msg("第%d層の主、%sが咆えた!" % [L, "・".join(boss_names())], LayerBoss.NAME_COLOR)
+			return
+
+## いまの階の、生きている層の主の名前
+func boss_names() -> Array:
+	var out: Array = []
+	for en in current.enemies:
+		if en.unique and not en.dead:
+			out.append(en.display_name)
+	return out
+
+## 層の主のユニークが、みな倒れた: 擬音、落とし物、実績。戦いの演出を戻す
+func _on_boss_fallen(layer: int, pos: Vector2) -> void:
+	if arena != null:
+		return
+	boss_fx.stop()
+	LayerBoss.defeated(gs, layer)
+	var fl := current if current != null else null
+	if fl == null:
+		return
+	var gid := LayerBoss.drop_loot(fl, layer, pos)
+	Sfx.cue(fl, pos, "boss_fall")
+	_shake = maxf(_shake, 0.5)
+	log_msg(String(LayerBoss.def(layer)["fall"]), LayerBoss.NAME_COLOR)
+	var what := "大きな燐晶の塊"
+	if gid != "":
+		what += "と%s" % String(ItemDB.ITEMS[gid]["name"])
+	log_msg("第%d層の主を倒した。%sが転がり出た。" % [layer, what], Color("ffe9a8"))
+	_check_trophies()
+
 ## 魔物が初めて見えた(冒険日記帳)。初めて見た種類なら、日記帳に書き足す
 func _on_enemy_seen(en: Enemy) -> void:
 	if arena != null or current == null:
 		return
 	if Journal.see(gs, String(en.mon.get("index", "")), current.layer_no):
-		log_msg("冒険日記帳に、%sを書き足した" % en.display_name, Color(0.8, 0.85, 0.9))
+		log_msg("冒険日記帳に、%sを書き足した" % (en.base_name if en.unique else en.display_name), Color(0.8, 0.85, 0.9))
 		var now := Time.get_ticks_msec()
 		if now - _jot_cue_ms > 1500 and leader() != null:
 			_jot_cue_ms = now

@@ -9,6 +9,7 @@ signal ground_picked(entry: Dictionary, hero: Hero)   # 落ちているものを
 signal shake(strength: float)                         # 画面を揺らす(爆発の罠など)
 signal enemy_seen(enemy: Enemy)                       # 魔物が初めて見えた(冒険日記帳)
 signal stat(key: String)                              # 実績に数える出来事(Journal.bump)
+signal boss_fallen(layer: int, pos: Vector2)                # 層の主(ユニーク)が、みな倒れた(LayerBoss)
 signal darkened()                                     # 魔物の「闇」の呪文で、仲間の見える範囲が狭まった
 
 var map: FloorMap
@@ -42,6 +43,9 @@ var world_props: Array = []    # 地図屋の印、壁の落書き、闇潜り�
 var master_enc := -1           # 主の間の主(遭遇の id)。倒すと、まわりの控えの巣が散る
 const MASTER_REACH := 36.0         # 主の間からこのマス数までの巣は、みな散る
 const MASTER_SCATTER_ELSE := 0.25  # それより遠い巣が散る割合
+var boss_layer := 0             # 層の主の階なら、その層(LayerBoss.setup_floor)。倒すと 0
+var boss_enc := -1              # 層の主の遭遇の id
+var fx_overlay: Node2D = null   # 層の主との戦いの間、ダメージの数字を描く所(モノクロの上。BossFx)
 var spawner := Spawner.new(self)   # 魔物を近づいたときに出し、遠くでは眠らせる
 var ropes: Array = []         # 縦穴の縁の縄梯子(Vector2i。縁の角のマス)。下の階の同じ所へ下りられる
 var abyss: Abyss = null       # 縦穴を覗いたときの、下の階の重なり
@@ -257,8 +261,25 @@ func _on_enemy_died(en: Enemy) -> void:
 	enc_dead[en.enc_id] = int(enc_dead.get(en.enc_id, 0)) + 1
 	enemies.erase(en)
 	enemy_killed.emit(en)
+	if en.unique and en.enc_id == boss_enc and boss_layer > 0 and not _unique_left():
+		var L := boss_layer
+		boss_layer = 0
+		boss_enc = -1
+		boss_fallen.emit(L, en.position)
+		if master_enc >= 0:
+			_master_fallen()
+		return
 	if en.enc_id == master_enc and group_dead_fraction(master_enc) >= 1.0:
 		_master_fallen()
+
+## 層の主のユニークが、まだ残っているか(出ていないものも数える)
+func _unique_left() -> bool:
+	if spawner.pending.has(boss_enc):
+		return true
+	for e in enemies:
+		if is_instance_valid(e) and e.unique and not e.dead and e.enc_id == boss_enc:
+			return true
+	return false
 
 func room_center(rid: int) -> Vector2i:
 	var c: Array = map.room_by_id[rid]["center"]
@@ -307,6 +328,17 @@ func alert_radius(pos: Vector2, cells: float) -> void:
 func group_dead_fraction(eid: int) -> float:
 	var total: int = enc_total.get(eid, 1)
 	return float(enc_dead.get(eid, 0)) / float(maxi(1, total))
+
+## ダメージの数字。層の主との戦いの間は、モノクロの上に赤で描く(ken 10/18)
+func spawn_damage(pos: Vector2, s: String, c: Color) -> void:
+	if fx_overlay == null or not is_instance_valid(fx_overlay):
+		spawn_text(pos, s, c)
+		return
+	var ft := FloatText.new()
+	ft.text = s
+	ft.color = Color("ff2a2a")
+	ft.position = pos + position
+	fx_overlay.add_child(ft)
 
 func spawn_text(pos: Vector2, s: String, c: Color) -> void:
 	var ft := FloatText.new()

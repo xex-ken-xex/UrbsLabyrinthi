@@ -121,6 +121,9 @@ const CUES := {
 	# 冒険日記帳と実績
 	"jot": ["サラサラ", Color(0.85, 0.85, 0.75), 0.85],
 	"trophy": ["パンパカパーン!", Color(1.0, 0.85, 0.35), 1.3],
+	# 層の主(LayerBoss。咆哮は BossFx が画面いっぱいに描く)
+	"boss_blast": ["ズドォン!", Color(1.0, 0.5, 0.35), 1.8],
+	"boss_fall": ["ズズーン…", Color(1.0, 0.85, 0.4), 2.2],
 	# 迷宮で使う道具
 	"glass": ["パリン", Color(0.85, 0.95, 1.0)],
 	"ignite": ["ボッ", Color(1.0, 0.8, 0.4)],
@@ -224,7 +227,7 @@ const STYLE := {
 	"down": "slam", "revive": "pop", "levelup": "stretch", "kill": "pop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
 	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",
-	"emerge": "soft", "sniff": "bounce", "sentry": "stretch", "jot": "stretch", "trophy": "bounce",
+	"emerge": "soft", "sniff": "bounce", "sentry": "stretch", "jot": "stretch", "trophy": "bounce", "boss_blast": "slam", "boss_fall": "slam",
 	"glare": "shake", "splash": "slam", "drop": "pop", "shape": "wave", "web_shot": "snap", "web": "stretch",
 	"squeeze": "stretch", "gaze": "snap", "stone": "shake", "stench": "wave",
 	"chant": "bounce", "ms_fire": "pop", "ms_lightning": "slam", "ms_missile": "snap", "ms_frost": "stretch", "ms_guide": "pop",
