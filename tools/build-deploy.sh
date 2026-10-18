@@ -12,6 +12,10 @@ GODOT="${GODOT:-godot}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$ROOT/Deploy/linux" "$ROOT/Deploy/windows"
 
+# 版の印を、ゲームの中身に入れる(持ち物の画面の隅に出る。Deploy/VERSION と同じ commit と時刻)
+BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+printf "commit: %s\nbuilt:  %s\n" "$COMMIT" "$BUILT" > "$ROOT/godot/data/build.txt"
 "$GODOT" --headless --path "$ROOT/godot" --import >/dev/null 2>&1 || true
 "$GODOT" --headless --path "$ROOT/godot" --export-release "Linux" "$ROOT/Deploy/linux/UrbsLabyrinthi.x86_64" 2>&1 | grep -i "error" || true
 "$GODOT" --headless --path "$ROOT/godot" --export-release "Windows Desktop" "$ROOT/Deploy/windows/UrbsLabyrinthi.exe" 2>&1 | grep -i "error" || true
@@ -51,8 +55,8 @@ if command -v xvfb-run >/dev/null 2>&1; then
   echo "ビルドの確認: 迷宮→街→全滅→帰還の札→つづきから→闘技場 が通った"
 fi
 {
-  echo "commit: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  echo "built:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "commit: $COMMIT"
+  echo "built:  $BUILT"
   echo "godot:  $("$GODOT" --version 2>/dev/null | head -1)"
 } > "$ROOT/Deploy/VERSION"
 ls -la "$ROOT/Deploy/linux" "$ROOT/Deploy/windows"

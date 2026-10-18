@@ -70,6 +70,21 @@ func _sha_async(path: String) -> String:
 	WorkerThreadPool.wait_for_task_completion(id)
 	return out[0]
 
+## この版のビルドの印(tools/build-deploy.sh が書き出しの前に data/build.txt に書く)。
+## 持ち物の画面の隅に出す。エディタから動かしているときは「開発中」
+static func build_text() -> String:
+	var f := FileAccess.open("res://data/build.txt", FileAccess.READ)
+	if f == null:
+		return "版: 開発中(書き出す前)"
+	var kv := {}
+	for line in f.get_as_text().split("\n"):
+		var i := line.find(":")
+		if i > 0:
+			kv[line.left(i).strip_edges()] = line.substr(i + 1).strip_edges()
+	var built := String(kv.get("built", ""))
+	var when := "%s/%s %s" % [built.substr(5, 2).to_int(), built.substr(8, 2).to_int(), built.substr(11, 5)] if built.length() >= 16 else built
+	return "版: %s(%s UTC のビルド)" % [kv.get("commit", "?"), when]
+
 static func _trace(msg: String) -> void:
 	print("[urbs] 更新: ", msg)
 

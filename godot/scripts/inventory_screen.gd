@@ -75,6 +75,10 @@ func _ready() -> void:
 	var head := UIKit.hbox(16)
 	head.add_child(UIKit.label("持ち物", 28, UIKit.GOLD))
 	head.add_child(UIKit.label("%s か Esc で閉じる" % Controls.hint("inventory"), 14, UIKit.DIM))
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(gap)
+	head.add_child(UIKit.label(Updater.build_text(), 13, UIKit.DIM))   # Release「test」の説明にある commit と同じ
 	root.add_child(head)
 	member_box = UIKit.hbox(8)
 	root.add_child(member_box)
