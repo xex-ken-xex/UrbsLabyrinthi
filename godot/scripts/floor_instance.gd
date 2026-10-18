@@ -147,6 +147,7 @@ func setup(m: FloorMap) -> void:
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
+	_spawn_rope_haunts()
 	_spawn_webs()
 	abyss = Abyss.new()
 	abyss.setup(self)
@@ -162,6 +163,31 @@ func _spawn_enemies() -> void:
 		spawner.pending[eid] = e
 		if e.get("master", false):
 			master_enc = eid
+
+## 縄梯子の下には、落ちてくる者を待つ魔物がいる(ken 10/18)。縄梯子ごとに、その階の遭遇から一種を1〜2体。
+## 層の遭遇と同じく控えておき、近づいたら出す(遭遇の id は ROPE_ENC_ID から)
+const ROPE_ENC_ID := 9000
+func _spawn_rope_haunts() -> void:
+	var src: Array = (map.data["encounters"] as Array).filter(func(e): return not e.get("boss", false) and not e.get("master", false) and not (e.get("monsters", []) as Array).is_empty())
+	if src.is_empty() or String(map.data["meta"].get("floor_label", "")) == "闘技場":
+		return
+	for i in ropes.size():
+		var e: Dictionary = src[Dice.rng.randi_range(0, src.size() - 1)]
+		var line: Dictionary = (e["monsters"][0] as Dictionary).duplicate()
+		var rc: Vector2i = ropes[i]
+		var tokens: Array = []
+		for k in Dice.rng.randi_range(1, 2):
+			var c := map.nearest_walkable(rc + Vector2i(Dice.rng.randi_range(-3, 3), Dice.rng.randi_range(-3, 3)), 4)
+			if c.x >= 0:
+				tokens.append({"x": c.x, "y": c.y, "g": 0})
+		if tokens.is_empty():
+			continue
+		var eid := ROPE_ENC_ID + i
+		var enc := {"id": eid, "roomId": -1, "boss": false, "kind": String(e.get("kind", "")), "attitude": "敵対",
+			"activity": "縄梯子の下で、落ちてくる者を待っている", "tokens": tokens, "monsters": [line]}
+		enc_total[eid] = tokens.size()
+		enc_dead[eid] = 0
+		spawner.pending[eid] = enc
 
 ## 控えていた遭遇の魔物を、書き出しの位置に出す
 func spawn_tokens(e: Dictionary) -> void:

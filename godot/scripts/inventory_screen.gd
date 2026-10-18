@@ -38,6 +38,11 @@ var close_btn: Button
 var keys_handler: Callable = Callable()      # 操作の設定を開く(Main)
 var title_handler: Callable = Callable()     # 街だけ。タイトルへ戻る(Main)
 var _title_sure := false                     # タイトルへ: 一度目は確かめる
+var drop_handler: Callable = Callable()      # 持ち物を捨てる (id) -> 知らせ(Main.drop_item。迷宮では足もとに置く)
+var load_handler: Callable = Callable()      # 荷の重さの一行 () -> String(Main.burden_text)
+var in_dungeon := false                      # 迷宮の中(捨てた品は足もとに置く。街では消える)
+var weight_lbl: Label
+var _drop_sure := ""                         # 街で捨てる: 一度目は確かめる(品の id)
 
 func open(state: GameState, special: Callable = Callable(), rest: Callable = Callable(), reorder: Callable = Callable()) -> void:
 	gs = state
@@ -47,6 +52,19 @@ func open(state: GameState, special: Callable = Callable(), rest: Callable = Cal
 	rest_btn.visible = rest.is_valid()
 	member = clampi(member, 0, gs.party.size() - 1)
 	_refresh()
+
+## 持ち物を捨てる・荷の重さを出す(Main)。dungeon: 迷宮の中なら true
+func set_burden(drop: Callable, load_text: Callable, dungeon: bool) -> void:
+	drop_handler = drop
+	load_handler = load_text
+	in_dungeon = dungeon
+	_refresh_weight()
+
+func _refresh_weight() -> void:
+	if weight_lbl == null:
+		return
+	weight_lbl.text = String(load_handler.call()) if load_handler.is_valid() else ""
+	weight_lbl.add_theme_color_override("font_color", UIKit.BAD if weight_lbl.text.contains("重すぎる") else UIKit.DIM)
 
 ## 迷宮の中で、記録をつけられるようにする
 func set_save(h: Callable) -> void:
@@ -106,6 +124,8 @@ func _ready() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(gap)
+	weight_lbl = UIKit.label("", 14, UIKit.DIM)      # 荷の重さ(Burden)
+	head.add_child(weight_lbl)
 	head.add_child(UIKit.label(Updater.build_text(), 13, UIKit.DIM))   # Release「test」の説明にある commit と同じ
 	root.add_child(head)
 	member_box = UIKit.hbox(8)
@@ -215,6 +235,7 @@ func _end_pick() -> void:
 func _refresh() -> void:
 	if gs == null:
 		return
+	_refresh_weight()
 	UIKit.clear(member_box)
 	for i in gs.party.size():
 		var c: Character = gs.party[i]
@@ -486,6 +507,7 @@ func _on_pick(i: int) -> void:
 	if i >= ids.size():
 		return
 	sel_id = String(ids[i])
+	_drop_sure = ""
 	if tab == "talent":
 		if sel_id.begins_with("pend:"):
 			pick_key = sel_id.substr(5)
@@ -544,7 +566,7 @@ func _show_detail() -> void:
 				t = "スキルを選ぶ。戦闘中は、数字キー 1〜6 か、Ctrl で選んで右クリックで使う。"
 		_:
 			if sel_id != "" and ItemDB.ITEMS.has(sel_id):
-				t = "[b][color=#e8dcb0]%s[/color][/b]  所持 %d\n%s" % [ItemDB.item_name(sel_id), gs.count(sel_id), ItemDB.detail(sel_id)]
+				t = "[b][color=#e8dcb0]%s[/color][/b]  所持 %d   重さ %skg\n%s" % [ItemDB.item_name(sel_id), gs.count(sel_id), _kg(Burden.item_kg(sel_id)), ItemDB.detail(sel_id)]
 				if tab == "equip":
 					if ItemDB.can_equip(sel_id, c.cls):
 						t += "\n\n[color=#5bc0de]%s が装備すると[/color]\n%s" % [c.name, c.compare_equip(sel_id)]
@@ -553,6 +575,9 @@ func _show_detail() -> void:
 						t += "\n\n[color=#ff8a7a]%s は装備できない[/color]" % Jobs.CLASSES[c.cls]["name"]
 				else:
 					action_box.add_child(UIKit.button("%sに使う" % c.name, _use_sel))
+				if drop_handler.is_valid():
+					var lab := "足もとに置く" if in_dungeon else ("本当に捨てる" if _drop_sure == sel_id else "捨てる")
+					action_box.add_child(UIKit.button(lab, _drop_sel))
 			else:
 				t = "[color=#8a90a0]左の一覧から選ぶ。[/color]"
 	detail.text = t
@@ -800,6 +825,27 @@ func _use_sel() -> void:
 		r = gs.use_item(sel_id, c)
 	msg.text = r if r != "" else "いまは使えない"
 	msg.add_theme_color_override("font_color", UIKit.GOOD if r != "" else UIKit.BAD)
+	if gs.count(sel_id) <= 0:
+		sel_id = ""
+	_refresh()
+
+static func _kg(v: float) -> String:
+	return ("%.1f" % v).trim_suffix(".0")
+
+## 選んだ品を一つ捨てる(迷宮では足もとに置く。街では二度押しで確かめる)
+func _drop_sel() -> void:
+	if sel_id == "" or not drop_handler.is_valid():
+		return
+	if not in_dungeon and _drop_sure != sel_id:
+		_drop_sure = sel_id
+		msg.text = "%sを捨てる?もう一度押すと捨てる(売れば銀貨になる)。" % ItemDB.item_name(sel_id)
+		msg.add_theme_color_override("font_color", UIKit.BAD)
+		_show_detail()
+		return
+	_drop_sure = ""
+	var r := String(drop_handler.call(sel_id))
+	msg.text = r
+	msg.add_theme_color_override("font_color", UIKit.GOOD)
 	if gs.count(sel_id) <= 0:
 		sel_id = ""
 	_refresh()
