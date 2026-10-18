@@ -982,9 +982,9 @@ func _trait_look(c: Vector2i) -> void:
 		a = minf(a, 0.4)        # 霧
 	modulate.a = a
 
-func _cue_seen(id: String) -> void:
+func _cue_seen(id: String, dir: Vector2 = Vector2.ZERO) -> void:
 	if visible:
-		Sfx.cue(game_floor, position, id)
+		Sfx.cue(game_floor, position, id, dir)
 
 ## 群れで囲む: 同じ相手に、ほかの魔物が触れているか
 func _ally_on_target() -> bool:
@@ -1252,7 +1252,7 @@ func _shoot_web(h: Hero) -> void:
 	p.setup_enemy(game_floor, position, (h.position - position).normalized(), 0.0, Color(0.92, 0.92, 0.88), mon_type())
 	p.web = true
 	game_floor.add_child(p)
-	_cue_seen("web_shot")
+	_cue_seen("web_shot", h.position - position)
 
 ## 不定形: 行く手の閉じた扉(鍵が掛かっていても)の下を、くぐり抜ける
 func _try_squeeze(mc: Vector2i) -> bool:
@@ -1377,7 +1377,7 @@ func _cast_fire(sid: String, at: Vector2, tgt: Hero) -> void:
 				p.spell = true
 				p.chill = float(sp.get("chill", 0.0))
 				game_floor.add_child(p)
-			_cue_seen(cue)
+			_cue_seen(cue, base)
 		"hold":
 			if tgt != null and is_instance_valid(tgt) and not tgt.down and not tgt.is_rolling():
 				tgt.hold("hold", float(sp["secs"]))

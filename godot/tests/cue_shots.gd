@@ -1,11 +1,14 @@
 extends SceneTree
 ## 擬音の動き方を、時間を追って並べた写真にする(見た目の確かめ用)
 ##   xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- 出力先
-## 動き方ごとに1列。上から下へ、出てから 0.04 / 0.12 / 0.25 / 0.5 秒
+## 動き方ごとに1行。左から右へ、出てから 0.04 / 0.1 / 0.18 / 0.3 / 0.55 秒
 
 const SAMPLES := [["pop", "revive"], ["slam", "sk_fire"], ["bounce", "munch"], ["shake", "sk_thunder"],
-	["stretch", "levelup"], ["soft", "sk_heal"], ["snap", "sk_arrow"], ["wave", "growl_hard"]]
-const TIMES := [0.04, 0.12, 0.25, 0.5]
+	["stretch", "levelup"], ["soft", "sk_heal"], ["snap", "dodge"], ["wave", "growl_hard"],
+	["drop", "thud"], ["roll", "rumble"], ["fly", "dart"]]
+const TIMES := [0.04, 0.1, 0.18, 0.3, 0.55]
+const ROW := 60.0
+const COL := 240.0
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -23,14 +26,13 @@ func _run() -> void:
 	var layer := Node2D.new()
 	layer.scale = Vector2(2, 2)     # 迷宮の画面の拡大(×2)くらいで見る
 	root.add_child(layer)
-	var cells: Array = []
 	for c in SAMPLES.size():
 		var lab := Label.new()
 		lab.text = SAMPLES[c][0]
-		lab.position = Vector2(40 + c * 155, 12)
+		lab.position = Vector2(12, 22 + c * ROW)
 		root.add_child(lab)
 		for r in TIMES.size():
-			Sfx.cue(layer, Vector2(40 + c * 77.5, 70 + r * 85), SAMPLES[c][1])
+			Sfx.cue(layer, Vector2(150 + r * COL, 80 + c * ROW) / 2.0, SAMPLES[c][1])
 			var f: Sfx = layer.get_child(layer.get_child_count() - 1)
 			f.set_process(false)
 			f.age = TIMES[r]

@@ -671,9 +671,11 @@ func use_skill(id: String) -> bool:
 		# 技の擬音: 攻める技は正面に、自分や仲間にかける技は体の上に
 		if Sfx.SKILL_CUE.has(id):
 			var at := position + Vector2(0, 18)
+			var to := Vector2.ZERO
 			if kind in ["projectile", "burst_ahead", "rush", "strike"]:
 				at = position + aim * 34.0 + Vector2(0, 14)
-			Sfx.cue(game_floor, at, String(Sfx.SKILL_CUE[id]))
+				to = aim
+			Sfx.cue(game_floor, at, String(Sfx.SKILL_CUE[id]), to)
 	return ok
 
 ## スキルの威力。杖の技「魔力の溜め」の間は、呪文が強まる
