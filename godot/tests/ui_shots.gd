@@ -84,7 +84,8 @@ func _run() -> void:
 	await shot("market")
 	# 自宅(生産系②)
 	var gsh: GameState = main.gs
-	gsh.bank_silver += 8000
+	gsh.silver += 8000
+	gsh.bank_silver += 3000
 	Home.buy_house(gsh)
 	for rid in ["pantry", "storage", "lab"]:
 		Home.build(gsh, rid)
@@ -113,7 +114,7 @@ func _run() -> void:
 	hpn.sel = "forge"
 	hpn._fill()
 	await shot("home_build")
-	gsh.bank_silver += 2000
+	gsh.silver += 2000
 	Home.build(gsh, "forge")
 	for id in ["tetsukai", "sumi", "kemono_kawa", "uroko", "tetsukuzu"]:
 		gsh.add_item(id, 6)

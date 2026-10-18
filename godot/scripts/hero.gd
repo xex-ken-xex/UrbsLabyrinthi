@@ -70,6 +70,12 @@ var carrying: Hero = null     # 背負っている、倒れた仲間
 var carried_by: Hero = null   # 倒れていて、背負われている
 const CARRY_MULT := 0.5
 const CARRY_REACH := 30.0     # 倒れた仲間を背負える距離(画素)
+# 遺体カート(大八車。ken 10/18)。一行が持っていれば、倒れた仲間は背負わずにカートに載せる。引いても足は落ちない
+static var has_cart := false  # Main が毎コマ決める(持ち物に corpse_cart があるか)
+var cart_load: Array = []     # 引いているカートに載せた、倒れた仲間(空なら引いていない)
+var cart_pos := Vector2.ZERO  # カートの位置(引き手の後ろを、綱でつながったように追う)
+var on_cart := false          # 倒れていて、カートに載っている
+const CART_ROPE := 20.0       # 引き手とカートの間
 
 func setup(fl: FloorInstance, character: Character) -> void:
 	game_floor = fl
@@ -227,9 +233,21 @@ func _struggle(delta: float) -> void:
 	atk_held = a
 	hold_t = 0.0
 
-## 倒れた仲間を背負う(擬音 よいしょ)。背負えたら true
+## 倒れた仲間を背負う(擬音 よいしょ)。遺体カートがあれば、カートに載せる(擬音 ゴトン)。できたら true
 func carry(o: Hero) -> bool:
-	if down or carrying != null or o == null or o == self or not o.down or o.carried_by != null:
+	if down or o == null or o == self or not o.down or o.carried_by != null:
+		return false
+	if has_cart:
+		# カートは一台。誰かが引いていれば、そのカートに載せる。まだなら、自分が引き手になる
+		var puller: Hero = self
+		for h in game_floor.heroes:
+			if is_instance_valid(h) and h.pulling() and not h.down:
+				puller = h
+		if puller == self and carrying != null:
+			return false
+		puller.load_cart(o)
+		return true
+	if carrying != null:
 		return false
 	carrying = o
 	o.carried_by = self
@@ -237,8 +255,50 @@ func carry(o: Hero) -> bool:
 	Sfx.cue(game_floor, position + Vector2(0, -22), "shoulder")
 	return true
 
-## 背負っている仲間を下ろす(at が null なら、その場に)。倒れたときも下ろす
+func pulling() -> bool:
+	return not cart_load.is_empty()
+
+## 倒れた仲間を、引いているカートに載せる
+func load_cart(o: Hero) -> void:
+	if cart_load.is_empty():
+		cart_pos = position - facing * CART_ROPE
+	cart_load.append(o)
+	o.carried_by = self
+	o.on_cart = true
+	o.z_index = z_index + 1
+	Sfx.cue(game_floor, cart_pos + Vector2(0, -16), "cart_load")
+
+## カートを、引き手の後ろへ引きずる(Main が毎コマ、仲間が動いたあとに呼ぶ)
+func tow_cart() -> void:
+	if cart_load.is_empty():
+		return
+	var d := position - cart_pos
+	if d.length() > CART_ROPE:
+		cart_pos = position - d.normalized() * CART_ROPE
+
+## 一人だけ下ろす(立ち上がったとき)
+func release(o: Hero) -> void:
+	if carrying == o:
+		set_down(null)
+		return
+	if cart_load.has(o):
+		cart_load.erase(o)
+		o.carried_by = null
+		o.on_cart = false
+		o.z_index = 0
+
+## 背負っている仲間・カートの仲間を下ろす(at が null なら、その場に)。倒れたときも下ろす
 func set_down(at: Variant = null) -> void:
+	if not cart_load.is_empty():
+		var i := 0
+		for o: Hero in cart_load:
+			o.carried_by = null
+			o.on_cart = false
+			o.z_index = 0
+			if is_instance_valid(o):
+				o.position = cart_pos + Vector2(-10.0 + 20.0 * (i % 2), 8.0 * floorf(i / 2.0))
+			i += 1
+		cart_load.clear()
 	if carrying == null:
 		return
 	var o := carrying
@@ -251,7 +311,11 @@ func set_down(at: Variant = null) -> void:
 ## 背負われている体を、背中に載せる(Main が毎コマ、仲間が動いたあとに呼ぶ)
 func ride() -> void:
 	if carried_by != null and is_instance_valid(carried_by):
-		position = carried_by.position + Vector2(-carried_by.facing.x * 5.0, -9.0)
+		if on_cart:
+			var i := carried_by.cart_load.find(self)
+			position = carried_by.cart_pos + Vector2(-6.0 + 12.0 * (i % 2), -4.0 - 5.0 * floorf(i / 2.0))
+		else:
+			position = carried_by.position + Vector2(-carried_by.facing.x * 5.0, -9.0)
 
 func heal(n: float) -> void:
 	if down:
@@ -261,7 +325,7 @@ func heal(n: float) -> void:
 
 func revive(frac: float) -> void:
 	if carried_by != null:
-		carried_by.set_down(null)
+		carried_by.release(self)
 	down = false
 	ch.hp = maxf(1.0, ch.max_hp() * frac)
 	iframes = 1.0
@@ -1000,8 +1064,36 @@ func _draw_status() -> void:
 	elif blind_t > 0.0:
 		UI.text_center(self, 0.0, y, "眩", 10, Color(1.0, 1.0, 0.8))
 
+const HP_BAR_W := 24.0
+## 頭の上の赤い HP の棒(仲間だけ。ken 10/18)。減った分は暗く残す
+func _draw_hp_bar(y: float) -> void:
+	draw_set_transform(Vector2.ZERO)
+	var f := clampf(ch.hp / maxf(1.0, float(ch.max_hp())), 0.0, 1.0)
+	var r := Rect2(-HP_BAR_W / 2.0, y - 4.0, HP_BAR_W, 4.0)
+	draw_rect(r.grow(1.0), Color(0, 0, 0, 0.75))
+	draw_rect(r, Color(0.3, 0.06, 0.06, 0.9))
+	draw_rect(Rect2(r.position, Vector2(HP_BAR_W * f, 4.0)), Color("e8352b"))
+	draw_set_transform(lunge)
+
+## 引いている遺体カート(大八車): 荷台と車輪と、引き手へ伸びる梶棒
+func _draw_cart() -> void:
+	if cart_load.is_empty():
+		return
+	draw_set_transform(Vector2.ZERO)
+	var c := cart_pos - position
+	var ax := (-c).normalized() if c.length() > 0.1 else facing
+	var side := Vector2(-ax.y, ax.x)
+	var bed := PackedVector2Array([c + ax * 10 + side * 8, c + ax * 10 - side * 8, c - ax * 10 - side * 8, c - ax * 10 + side * 8])
+	draw_colored_polygon(bed, Color(0.45, 0.32, 0.2))
+	draw_polyline(bed + PackedVector2Array([bed[0]]), Color(0.22, 0.15, 0.08), 2.0)
+	for sg in [1.0, -1.0]:
+		draw_line(c + side * 9.0 * sg - ax * 4.0, c + side * 9.0 * sg + ax * 4.0, Color(0.15, 0.12, 0.1), 4.0)   # 車輪
+		draw_line(c + ax * 10 + side * 5.0 * sg, ax * 4.0 + side * 4.0 * sg, Color(0.35, 0.25, 0.15), 2.0)      # 梶棒
+	draw_set_transform(lunge)
+
 func _draw() -> void:
 	draw_set_transform(lunge)
+	_draw_cart()
 	var col := Jobs.class_color(ch.cls)
 	var tex := _sprite()
 	if tex != null:
@@ -1019,8 +1111,9 @@ func _draw() -> void:
 		if roll_t > 0.0:
 			tint.a = 0.55
 		_draw_sprite(tex, tint, facing.x)
+		_draw_hp_bar(-radius - (28.0 if _is_sheet else 12.0))
 		if controlled:
-			var my := -radius - (30.0 if _is_sheet else 14.0)
+			var my := -radius - (34.0 if _is_sheet else 18.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(0, my), Vector2(5, my - 8), Vector2(-5, my - 8)]), Color("ffe9a8"))
 		_draw_sleep()
 		_draw_status()
@@ -1041,8 +1134,9 @@ func _draw() -> void:
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0, 0, 0, 0.8), 2.0)
 	draw_line(Vector2.ZERO, facing * (radius + 5.0), Color("5bc0de"), 3.0)
 	UI.text_center(self, 0.0, 4.0, Jobs.class_initial(ch.cls), 11, Color(0.05, 0.05, 0.08), false)
+	_draw_hp_bar(-radius - 7.0)
 	if controlled:
-		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 12), Vector2(5, -radius - 20), Vector2(-5, -radius - 20)]), Color("ffe9a8"))
+		draw_colored_polygon(PackedVector2Array([Vector2(0, -radius - 13), Vector2(5, -radius - 21), Vector2(-5, -radius - 21)]), Color("ffe9a8"))
 	_draw_sleep()
 	_draw_status()
 	_draw_attack()

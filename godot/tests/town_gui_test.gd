@@ -75,19 +75,19 @@ func _run() -> void:
 	var c: Character = main.gs.party[0]
 	c.hp = 1.0
 	var day0: int = main.gs.day
-	var silver0: int = main.gs.bank_silver
+	var silver0: int = main.gs.silver
 	town._rest(60)
 	await _frames(2)
 	check(town.busy and town.find_children("*", "TownFx", false, false).size() == 1, "泊まると暗転の演出が始まる")
 	await _secs(1.0)
-	check(main.gs.day == day0 + 1 and absf(c.hp - c.max_hp()) < 0.01 and main.gs.bank_silver == silver0 - 60, "暗くなると、一日が過ぎて全快する (日 %d → %d)" % [day0, main.gs.day])
+	check(main.gs.day == day0 + 1 and absf(c.hp - c.max_hp()) < 0.01 and main.gs.silver == silver0 - 60, "暗くなると、一日が過ぎて全快する (日 %d → %d)" % [day0, main.gs.day])
 	await _secs(3.2)
 	check(not town.busy and town.find_children("*", "TownFx", false, false).is_empty(), "明けると演出が消えて、また操作できる")
 	check(town.msg.text.contains("翌朝"), "下の帯に「翌朝」の一行 (%s)" % town.msg.text)
 	# 加護を願う
 	town._go("temple")
 	await _frames(2)
-	main.gs.bank_silver = 500
+	main.gs.silver = 500
 	town._bless()
 	await _frames(2)
 	check(main.gs.blessed and town.find_children("*", "TownFx", false, false).size() == 1, "加護を願うと キラキラ フワァ〜〜〜 が出る")

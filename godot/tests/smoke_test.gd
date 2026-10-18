@@ -586,16 +586,17 @@ func _test_home_state() -> void:
 			bad.append("icon:" + String(r["out"]))
 	check(Home.alchemy().size() >= 12 and bad.is_empty(), "魔法実験のレシピの材料・できるもの・絵が全部ある %s" % str(bad))
 	gs.bank_silver = 100
+	gs.silver = 0
 	check(Home.buy_house(gs) != "" and not Home.owned(gs), "銀貨が足りないと、家は買えない")
 	gs.bank_silver = 5000
 	check(Home.buy_house(gs) == "" and Home.owned(gs) and gs.bank_silver == 3000, "家を買える(-2000)")
 	check(Home.has_room(gs, "kitchen") and Home.has_room(gs, "bed") and not Home.has_room(gs, "lab"), "はじめは台所と寝床だけ")
-	gs.bank_silver = 1000
-	check(Home.build(gs, "forge") != "" and not Home.has_room(gs, "forge"), "銀貨が足りないと、増築できない")
-	gs.bank_silver = 3000
+	gs.silver = 1000
+	check(Home.build(gs, "forge") != "" and not Home.has_room(gs, "forge"), "所持金が足りないと、増築できない")
+	gs.silver = 3000
 	for id in ["pantry", "storage", "lab"]:
 		check(Home.build(gs, id) == "", "%sを増築できる" % Home.ROOMS[id]["name"])
-	check(gs.bank_silver == 3000 - 600 - 400 - 1500, "増築の代金を払う")
+	check(gs.silver == 3000 - 600 - 400 - 1500, "増築の代金を所持金で払う")
 	# 台所では、台所の料理も作れる
 	var hr := Cooking.recipe("haimugi_pan")
 	for k in hr["in"]:
@@ -764,6 +765,7 @@ func _test_smithing() -> void:
 	gs.add_item("sumi", 10)
 	check(not bool(Smithing.smelt(gs)["ok"]), "鍛冶場が無いと、溶かせない")
 	gs.bank_silver = 99999
+	gs.silver = 99999
 	Home.buy_house(gs)
 	check(Home.build(gs, "forge") == "", "鍛冶場を増築できる")
 	check(bool(Smithing.smelt(gs)["ok"]) and gs.count("tetsukai") == 1 and gs.count("tetsukuzu") == 3 and gs.count("sumi") == 9, "鉄屑3つと炭1つで、鉄塊1つ")
@@ -834,16 +836,16 @@ func _test_state() -> void:
 	for cls in ["fighter", "cleric", "wizard", "rogue"]:
 		party.append(Character.create(cls, "human", cls, Jobs.auto_stats(cls)))
 	gs.new_game(party)
-	var silver0 := gs.bank_silver
+	var silver0 := gs.silver
 	var ls_price := gs.buy_price("longsword")
 	check(ls_price <= 220 and ls_price >= int(220 * 0.7), "〈説得〉で値段が下がる(長剣 220 → %d)" % ls_price)
-	check(gs.buy("longsword") == "" and gs.count("longsword") == 1 and gs.bank_silver == silver0 - ls_price, "買える")
+	check(gs.buy("longsword") == "" and gs.count("longsword") == 1 and gs.silver == silver0 - ls_price, "買える")
 	check(gs.equip(party[0], "longsword") == "" and party[0].equip["weapon"] == "longsword" and gs.count("shortsword") == 1, "装備すると、古い武器が持ち物へ戻る")
 	check(gs.equip(party[2], "plate") != "", "着られない鎧は装備できない")
-	var sell0 := gs.bank_silver
+	var sell0 := gs.silver
 	var ss_price := gs.sell_price("shortsword")
 	check(ss_price >= ItemDB.sell_price("shortsword"), "〈ペテン〉で買い取りが上がる(%d → %d)" % [ItemDB.sell_price("shortsword"), ss_price])
-	check(gs.sell("shortsword") == "" and gs.bank_silver == sell0 + ss_price, "売れる (+%d)" % ss_price)
+	check(gs.sell("shortsword") == "" and gs.silver == sell0 + ss_price, "売れる (+%d)" % ss_price)
 	party[1].hp = 5.0
 	check(gs.use_item("potion", party[1]) != "" and party[1].hp > 5.0, "治療薬でHPが回復する")
 	check(gs.use_item("potion", party[1]) == "" or party[1].hp >= party[1].max_hp() - 0.01 or true, "満タンのとき薬を無駄にしない")
@@ -1597,13 +1599,13 @@ func _test_game() -> void:
 	town._move_member(1, -1)
 	check(main.gs.party[0] == p0, "元に戻す")
 	# 店
-	var bank0: int = main.gs.bank_silver
+	var bank0: int = main.gs.silver
 	var ls_cost: int = main.gs.buy_price("longsword")
 	town._go("smith")
 	town.sel_id = "longsword"
 	town._fill_shop()
 	town._buy(0)
-	check(main.gs.party[0].equip["weapon"] == "longsword" and main.gs.bank_silver == bank0 - ls_cost, "鍛冶屋で買って装備する")
+	check(main.gs.party[0].equip["weapon"] == "longsword" and main.gs.silver == bank0 - ls_cost, "鍛冶屋で買って装備する(所持金で)")
 	town._go("general")
 	town.sel_id = "potion"
 	town._fill_shop()
@@ -1613,7 +1615,7 @@ func _test_game() -> void:
 	town._go("magic")
 	town.sel_id = "tome_sleep"
 	town._fill_shop()
-	main.gs.bank_silver = 2000
+	main.gs.silver = 2000
 	var caster := -1
 	for i in main.gs.party.size():
 		if (ItemDB.ITEMS["tome_sleep"]["classes"] as Array).has(main.gs.party[i].cls):
@@ -1623,16 +1625,16 @@ func _test_game() -> void:
 	town.shop_mode = "sell"
 	town.sel_id = "shortsword"
 	town._fill_shop()
-	var s0: int = main.gs.bank_silver
+	var s0: int = main.gs.silver
 	town._sell()
-	check(main.gs.bank_silver > s0, "売却できる")
+	check(main.gs.silver > s0, "売却できる(所持金に入る)")
 	# 神殿、宿、花街
 	var dead: Character = main.gs.party[1]
 	dead.hp = 0.0
 	town._go("temple")
-	var s1: int = main.gs.bank_silver
+	var s1: int = main.gs.silver
 	town._revive(dead)
-	check(dead.hp > 0.0 and main.gs.bank_silver < s1, "神殿で蘇生できる")
+	check(dead.hp > 0.0 and main.gs.silver < s1, "神殿で蘇生できる")
 	town._bless()
 	check(main.gs.blessed, "神殿で加護を授かる")
 	main.gs.party[0].hp = 3.0
@@ -1821,6 +1823,7 @@ func _test_game() -> void:
 	main._clear_bag()
 	main.bag_silver = 1000
 	var bank1: int = main.gs.bank_silver
+	var purse1: int = main.gs.silver
 	var day1: int = main.gs.day      # 宿に泊まると一日進むので、潜る前の日から数える
 	var perf := 0
 	for c in main.gs.party:
@@ -1829,7 +1832,7 @@ func _test_game() -> void:
 	main.leader().position = main.current.map.center_of(main.current.up_cell)
 	main.interact()
 	await _step(3)
-	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 + perf and main.gs.day == day1 + 1, "街へ戻ると3割が税になり、〈芸能〉で稼ぐ (+%d、うち芸 %d)" % [main.gs.bank_silver - bank1, perf])
+	check(main.phase == "town" and main.gs.bank_silver == bank1 + 700 and main.gs.silver == purse1 + perf and main.gs.day == day1 + 1, "街へ戻ると3割が税になって預金へ、〈芸能〉の稼ぎは所持金へ (+%d、芸 %d)" % [main.gs.bank_silver - bank1, perf])
 	# 全滅
 	main._on_dive()
 	await _step(3)

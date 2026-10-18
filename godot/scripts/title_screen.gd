@@ -31,7 +31,7 @@ static func save_info() -> String:
 		var cls := String(p[1])
 		var cname := String(Jobs.CLASSES[cls]["name"]) if Jobs.CLASSES.has(cls) else cls
 		names.append("%s %s Lv%d" % [p[0], cname, int(p[2])])
-	return "%s 保存 ・ %s ・ %s ・ 預け金 %d銀貨\n%s" % [sm["when"], sm["where"], ZaCalendar.label(int(sm["day"])), int(sm["bank"]), " / ".join(names)]
+	return "%s 保存 ・ %s ・ %s ・ 所持金 %d銀貨 ・ 預金 %d銀貨\n%s" % [sm["when"], sm["where"], ZaCalendar.label(int(sm["day"])), int(sm["silver"]), int(sm["bank"]), " / ".join(names)]
 
 func _ready() -> void:
 	theme = UIKit.theme()

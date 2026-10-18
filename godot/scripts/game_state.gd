@@ -1,12 +1,14 @@
 class_name GameState
 extends RefCounted
-## 冒険の進み具合。パーティ、持ち物、預け金、日数。セーブはこれを JSON にする。
+## 冒険の進み具合。パーティ、持ち物、所持金と預金、日数。セーブはこれを JSON にする。
 
 const SAVE_PATH := "user://save.json"
 
 var party: Array = []              # Character
 var inventory := {}                # アイテムid → 個数
-var bank_silver := 300
+var silver := 300           # 所持金。店で使えるのはこれだけ。迷宮へも持って入る(全滅で失う)
+var bank_silver := 0        # 預金(坑口館の預金課。ken 10/18)。査定・依頼・遺品の謝礼はここへ入る。全滅しても無事
+const BANK_UNIT := 100      # 預ける・引き出すのは 100銀貨 単位
 var day := 0
 var visited_town := false
 var blessed := false           # 神殿の加護。次に潜るとき一度だけ効く
@@ -48,7 +50,7 @@ static func has_save() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
 ## タイトルの「つづきから」に出す、記録の中身(ken 10/18)。読み込まずに覗く。
-## {"when": 保存した日時(この PC の時刻), "day", "bank", "party": [[名前, クラス, レベル]], "where": 街 / 迷宮の層}
+## {"when": 保存した日時(この PC の時刻), "day", "bank"(預金), "silver"(所持金), "party": [[名前, クラス, レベル]], "where": 街 / 迷宮の層}
 static func save_summary() -> Dictionary:
 	if not has_save():
 		return {}
@@ -67,7 +69,7 @@ static func save_summary() -> Dictionary:
 		var fl := int(dive.get("floor", 1))
 		where = "迷宮 " + String(dive.get("floor_label", "第%d層" % fl))
 		t = maxi(t, FileAccess.get_modified_time(DiveSave.PATH))
-	return {"when": local_time_label(t), "day": day_n, "bank": int(parsed.get("bank", 0)), "party": party_s, "where": where}
+	return {"when": local_time_label(t), "day": day_n, "bank": int(parsed.get("bank", 0)), "silver": int(parsed.get("silver", 0)), "party": party_s, "where": where}
 
 ## 世界の時刻(UNIX 秒)を、この PC の時刻で「2026/10/18 13:25」に
 static func local_time_label(unix: int) -> String:
@@ -78,7 +80,8 @@ static func local_time_label(unix: int) -> String:
 func new_game(chars: Array) -> void:
 	party = chars
 	inventory = {"potion": 3, "ether": 1}
-	bank_silver = 300
+	silver = 300
+	bank_silver = 0
 	day = 0
 	visited_town = false
 	blessed = false
@@ -367,9 +370,9 @@ func sell_price(id: String) -> int:
 
 func buy(id: String) -> String:
 	var price := buy_price(id)
-	if bank_silver < price:
-		return "銀貨が足りない"
-	bank_silver -= price
+	if silver < price:
+		return "所持金が足りない"
+	silver -= price
 	add_item(id)
 	return ""
 
@@ -377,8 +380,40 @@ func sell(id: String) -> String:
 	if count(id) <= 0:
 		return "持っていない"
 	remove_item(id)
-	bank_silver += sell_price(id)
+	silver += sell_price(id)
 	return ""
+
+## 預金課: 所持金を預ける(100銀貨 単位)。預けた額を返す(預けられなければ 0)
+func deposit(n: int) -> int:
+	n = mini(n, silver)
+	n -= n % BANK_UNIT
+	if n <= 0:
+		return 0
+	silver -= n
+	bank_silver += n
+	return n
+
+## 坑口館の窓口で払う(帰還積立、家): 預金から払い、足りない分は所持金から。払えたら true
+func pay_at_guild(cost: int) -> bool:
+	if bank_silver + silver < cost:
+		return false
+	var from_bank := mini(cost, bank_silver)
+	bank_silver -= from_bank
+	silver -= cost - from_bank
+	return true
+
+func guild_funds() -> int:
+	return bank_silver + silver
+
+## 預金課: 預金を引き出す(100銀貨 単位)。引き出した額を返す
+func withdraw(n: int) -> int:
+	n = mini(n, bank_silver)
+	n -= n % BANK_UNIT
+	if n <= 0:
+		return 0
+	bank_silver -= n
+	silver += n
+	return n
 
 # ---------- 休息など ----------
 
@@ -396,7 +431,7 @@ func to_dict() -> Dictionary:
 	var chars: Array = []
 	for c in party:
 		chars.append(c.to_dict())
-	return {"version": 1, "party": chars, "inventory": inventory, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
+	return {"version": 1, "party": chars, "inventory": inventory, "silver": silver, "bank": bank_silver, "day": day, "visited_town": visited_town, "blessed": blessed, "insured": insured, "quests": quests,
 		"food": food, "clock": clock, "home": home, "journal": journal, "flow": flow}
 
 func save() -> bool:
@@ -425,6 +460,7 @@ func load_save() -> bool:
 		if ItemDB.ITEMS.has(String(k)):
 			inventory[String(k)] = int(parsed["inventory"][k])
 	bank_silver = int(parsed.get("bank", 0))
+	silver = int(parsed.get("silver", 0))       # 所持金の無い記録(預け金だけの頃)は、全部が預金
 	day = int(parsed.get("day", 0))
 	visited_town = bool(parsed.get("visited_town", true))
 	blessed = bool(parsed.get("blessed", false))

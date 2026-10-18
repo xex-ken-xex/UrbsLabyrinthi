@@ -20,6 +20,8 @@ const BASE_ITEMS := {
 		"desc": "倒れた仲間を、HP40%で立ち上がらせる。"},
 	"lamp_oil": {"name": "燐晶の灯油", "kind": "consumable", "price": 40, "use": "light", "v": 2.0,
 		"desc": "180秒間、灯りの届く半径が2マス広がる。"},
+	"corpse_cart": {"name": "遺体カート", "kind": "material", "price": 250, "kg": 2.0,
+		"desc": "灯手隊のお下がりの大八車。持っていると、倒れた仲間を背負わずに載せて引ける(足も攻撃も落ちない)。空なら畳んで2kg。調べる(E)で載せ、もう一度で下ろす。一台で足りる。"},
 	"return_scroll": {"name": "帰還の札", "kind": "consumable", "price": 150, "use": "return", "v": 0.0,
 		"desc": "迷宮の中から、荷物を持ったまま地上へ戻る。"},
 	# --- 魔法実験で作る薬(店には無い。data/alchemy.json) ---
@@ -109,7 +111,7 @@ const SHOPS := {
 	"smith": ["dagger", "shortsword", "longsword", "greatsword", "mace", "warhammer", "handaxe", "greataxe", "spear", "shortbow", "longbow",
 		"leather", "studded", "chain_shirt", "breastplate", "chain_mail", "plate", "buckler", "power_band", "swift_boots",
 		"tetsukai", "sumi", "yumizai"],
-	"general": ["potion", "hi_potion", "ether", "lamp_oil", "return_scroll", "robe", "quarterstaff", "vital_ring", "lamp_charm"],
+	"general": ["potion", "hi_potion", "ether", "lamp_oil", "return_scroll", "corpse_cart", "robe", "quarterstaff", "vital_ring", "lamp_charm"],
 	"magic": ["ether", "crystal_staff", "mana_ring", "tome_mana_shield", "tome_sleep", "tome_regen", "tome_flash"],
 	"market": ["haimugi", "suzumame", "chikabu", "makina", "hai_imo", "sunauo", "yagi_raku", "iwadori_tamago", "shirokona",
 		"kuromugishu", "jushi", "koushin", "iwa_jio", "takigi"],

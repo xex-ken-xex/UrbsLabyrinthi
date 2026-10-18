@@ -31,9 +31,8 @@ static func has_room(gs: GameState, id: String) -> bool:
 static func buy_house(gs: GameState) -> String:
 	if owned(gs):
 		return "もう家がある"
-	if gs.bank_silver < HOUSE_PRICE:
+	if not gs.pay_at_guild(HOUSE_PRICE):     # 坑口館の窓口なので、預金から(足りない分は所持金から)
 		return "銀貨が足りない"
-	gs.bank_silver -= HOUSE_PRICE
 	gs.home = {"rooms": ["kitchen", "bed"], "pantry": [], "storage": {}, "pots": [], "lab_closed": -1, "anvil": {}}
 	gs.save()
 	return ""
@@ -46,9 +45,9 @@ static func build(gs: GameState, id: String) -> String:
 	if ROOMS[id].get("soon", false):
 		return "まだ作れない"
 	var price := int(ROOMS[id]["price"])
-	if gs.bank_silver < price:
-		return "銀貨が足りない"
-	gs.bank_silver -= price
+	if gs.silver < price:
+		return "所持金が足りない"     # 大家に払うのは所持金
+	gs.silver -= price
 	(gs.home["rooms"] as Array).append(id)
 	gs.save()
 	return ""
