@@ -22,6 +22,7 @@
     g: { label: "残像の番号", f: (v, nd, c) => c.g || 0 },
     jrev: { label: "文字番号(右向きなら逆順)", f: (v, nd, c) => (c.dx >= 0 ? c.n - 1 - c.i : c.i) },
     big: { label: "大きいとき / ふつう", ins: ["yes", "no"], f: (v, nd, c) => (c.big ? v.yes : v.no) },
+    life: { label: "寿命(秒。消えるまで)", f: (v, nd, c) => c.life },
     // 時間
     delay: { label: "字ごとの遅れ", ins: ["x", "per", "idx"], f: (v, nd, c) => v.x - (nd.idx === undefined ? c.i : v.idx) * v.per },
     ramp: { label: "0→1(dur 秒で)", ins: ["x", "dur"], f: (v) => clampf(v.x / v.dur, 0, 1) },
@@ -354,6 +355,49 @@
       src: "KTE",
       nodes: { tp: { type: "pause", x: T, at: 0.08, len: 0.2 }, c: { type: "curve", x: "tp", dur: 0.6, p1: 0.1, p2: 1.0 } },
       props: { y: { type: "mul", a: "c", b: { type: "mul", a: "px", b: -1.5 } }, sx: { type: "mix", k: "c", from: 1.3, to: 1 }, sy: { type: "mix", k: "c", from: 0.7, to: 1 }, alpha: { type: "fadeend", x: T } },
+    },
+    // ---- ゲーム・映像・SNS の用例から(RESEARCH.md の 6 章) ----
+    // JoJo の「ゴゴゴゴ」(KnowYourMeme「Menacing」/ Japanese with Anime): 字がばらばらの高さに散って、ゆっくり漂い、消えない。緊張の持続
+    ex_menacing: {
+      src: "JoJo / KYM",
+      nodes: { jy: { type: "jitter", x: 0, f: 1, amp: { type: "mul", a: "px", b: 0.9 } }, jx: { type: "jitter", x: 0.5, f: 1, amp: { type: "mul", a: "px", b: 0.25 } }, jr: { type: "jitter", x: 1.5, f: 1, amp: 0.25 } },
+      props: {
+        x: "jx", y: { type: "add", a: "jy", b: { type: "mul", a: T, b: { type: "mul", a: "px", b: -0.25 } } }, rot: "jr",
+        sx: { type: "mix", k: { type: "ramp", x: T, dur: 0.6 }, from: 0.8, to: 1.05 }, sy: { type: "mix", k: { type: "ramp", x: T, dur: 0.6 }, from: 0.8, to: 1.05 },
+        alpha: { type: "mul", a: { type: "ramp", x: T, dur: 0.6 }, b: { type: "fadeend", x: T } },
+      },
+    },
+    // ペルソナ5 の総攻撃・スプラトゥーンの UI(gameanimation.info「文字演出」): 一字ずつ大きく叩き込まれ、少し傾いて、行き過ぎてから戻る
+    ex_persona: {
+      src: "P5 / Splatoon",
+      nodes: { ti: { type: "delay", x: T, per: 0.04 }, k: { type: "back", x: "ti", dur: 0.2, over: 2.2 } },
+      props: {
+        sx: { type: "mix", k: "k", from: 3, to: 1 }, sy: { type: "mix", k: "k", from: 3, to: 1 },
+        rot: { type: "alt", by: "char", a: { type: "mix", k: "k", from: -0.4, to: -0.12 }, b: { type: "mix", k: "k", from: 0.4, to: 0.12 } },
+        y: { type: "mul", a: { type: "sub", a: 1, b: "k" }, b: { type: "mul", a: "px", b: -0.5 } },
+        alpha: { type: "mul", a: { type: "step", x: "ti", at: 0, before: 0, after: 1 }, b: { type: "fadeend", x: T } },
+      },
+    },
+    // Undertale の震える台詞・Godot の [shake]・2ch の「ガクブル」: 字が細かく震え続ける。震えは時間とともに強くなる
+    ex_shaky: {
+      src: "Undertale / 2ch",
+      nodes: { amp: { type: "mul", a: "px", b: { type: "mix", k: { type: "ramp", x: T, dur: 1.0 }, from: 0.04, to: 0.14 } } },
+      props: { x: { type: "jitter", x: T, f: 30, amp: "amp" }, y: { type: "add", a: { type: "jitter", x: { type: "add", a: T, b: 0.37 }, f: 30, amp: "amp" }, b: { type: "mul", a: T, b: -4 } }, alpha: { type: "fadeend", x: T } },
+    },
+    // ニコニコ動画の流れるコメント(弾幕): 右から左へ一定の速さで流れる。消えない、揺れない
+    ex_danmaku: {
+      src: "ニコニコ / bilibili",
+      props: { x: { type: "mix", k: { type: "ramp", x: T, dur: 1.0 }, from: { type: "mul", a: "px", b: 10 }, to: { type: "mul", a: "px", b: -10 } }, alpha: { type: "step", x: T, at: 0, before: 0, after: 1 } },
+    },
+    // テレビ・動画のテロップ(鄭 2016 / video-knowledge): 左から滑り込んで止まり、読む間だけ置いて、下へ抜ける
+    ex_telop: {
+      src: "テロップ",
+      nodes: { kin: { type: "pace", x: T, dur: 0.25 }, kout: { type: "pace", x: { type: "sub", a: T, b: { type: "sub", a: "life", b: 0.25 } }, dur: 0.25 } },
+      props: {
+        x: { type: "mul", a: { type: "sub", a: 1, b: "kin" }, b: { type: "mul", a: "px", b: -4 } },
+        y: { type: "mul", a: "kout", b: { type: "mul", a: "px", b: 1.5 } },
+        alpha: { type: "mul", a: "kin", b: { type: "sub", a: 1, b: "kout" } },
+      },
     },
   };
   for (const k of Object.keys(EXAMPLES)) GRAPHS[k] = EXAMPLES[k];

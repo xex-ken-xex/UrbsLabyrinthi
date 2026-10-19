@@ -1,4 +1,4 @@
-// tools/cue-lab/gen.py が sfx.gd から作る。手で直さない。
+// tools/onomatopoeia/gen.py が sfx.gd から作る。手で直さない。
 window.CUE_DATA = {
  "cues": [
   {

@@ -146,6 +146,32 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
     </section>
 
     <section class="panel">
+      <h2>書き出し(リール向けの試作)</h2>
+      <div class="row">
+        <label class="narrow">大きさ <select id="exPreset"><option value="1080,1920">縦 1080×1920(リール)</option><option value="1080,1080">正方 1080×1080</option><option value="1920,1080">横 1920×1080</option><option value="540,960">縦 540×960(軽い)</option><option value="">自由</option></select></label>
+        <label class="narrow">幅 <input type="number" id="exW" value="1080" min="16" max="4096" step="1"></label>
+        <label class="narrow">高さ <input type="number" id="exH" value="1920" min="16" max="4096" step="1"></label>
+        <label class="narrow">拡大 <input type="number" id="exK" value="6" min="1" max="20" step="0.5" title="ゲームは ×2。1080 幅なら 6 くらい"></label>
+        <label class="narrow">fps <select id="exFps"><option value="30">30</option><option value="60">60</option><option value="24">24</option><option value="15">15</option></select></label>
+      </div>
+      <div class="row">
+        <label class="narrow">背景 <select id="exBg"><option value="">透過</option><option value="#00ff00">緑(クロマキー)</option><option value="#0000ff">青(クロマキー)</option><option value="#000000">黒</option><option value="#ffffff">白</option><option value="#1c1a24">舞台と同じ</option><option value="custom">色を選ぶ</option></select></label>
+        <input type="color" id="exBgColor" value="#00ff00" aria-label="背景の色" style="display:none">
+        <label class="narrow">前後の間 <input type="number" id="exPad" value="0.2" min="0" max="3" step="0.1" title="最初と最後に足す無音の秒数"></label>
+        <label class="narrow"><input type="checkbox" id="exCenter" checked> 発生点をまとめて中央に</label>
+      </div>
+      <div class="row">
+        <button id="exApng" class="primary">APNG(透過のアニメ画像)</button>
+        <button id="exZip">PNG 連番(zip)</button>
+        <button id="exWebm">WebM(動画。透過なし)</button>
+        <button id="exPreview">1コマ見る</button>
+        <span id="exStatus" class="status"></span>
+      </div>
+      <p class="hint">透過が要るなら APNG か PNG 連番(どちらも背景「透過」で)。動画の編集ソフトに入れるなら PNG 連番が確実。WebM は背景を緑にしてクロマキーで抜く。拡大は「ゲームの ×2」と同じ尺度で、1080 幅に 14px の字を ×6 で 84px。Instagram のリールは 1080×1920・最大 30fps 推奨(出す側で変換される)。</p>
+      <div id="exPreviewWrap" style="display:none; margin-top:8px"><img id="exPreviewImg" alt="書き出しの1コマ" style="max-height:240px; border:1px solid var(--line); background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0/16px 16px"></div>
+    </section>
+
+    <section class="panel">
       <h2>帳面: <span id="noteFor">(擬音を選ぶと、その擬音の帳面)</span></h2>
       <textarea id="note" placeholder="この擬音の動きについて、気づいたこと・直したいこと"></textarea>
       <div class="row" style="margin-top:6px">
@@ -163,6 +189,7 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
 <script src="cues.js"></script>
 <script src="cue_lab.js"></script>
 <script src="cue_nodes.js"></script>
+<script src="cue_export.js"></script>
 <script>
 (function () {
   "use strict";
@@ -312,6 +339,74 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
     }
   }
   for (const id of ["alt", "altBy", "grapheme", "engine"]) $(id).addEventListener("input", () => { $("altV").textContent = $("alt").value; if (!playing) draw(); });
+
+
+  // ---- 書き出し(リール向け) ----
+  const X = window.CueExport;
+  $("exPreset").addEventListener("input", () => { const v = $("exPreset").value; if (v) { const [w, h] = v.split(","); $("exW").value = w; $("exH").value = h; } });
+  $("exBg").addEventListener("input", () => { $("exBgColor").style.display = $("exBg").value === "custom" ? "" : "none"; });
+  function exBg() { const v = $("exBg").value; return v === "custom" ? $("exBgColor").value : v; }
+  function exSetup() {
+    const W = parseInt($("exW").value, 10), H = parseInt($("exH").value, 10), K = parseFloat($("exK").value);
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    // 発生点の重心を書き出しの中央へ(まとめない時は舞台の中央を中央へ)
+    let cx = stage.width / 2 / SCALE, cy = stage.height / 2 / SCALE;
+    if ($("exCenter").checked && emitters.length) { cx = emitters.reduce((s, e) => s + e.x, 0) / emitters.length; cy = emitters.reduce((s, e) => s + e.y, 0) / emitters.length - 22; }
+    const pad = parseFloat($("exPad").value) || 0, dur = totalLife() + pad * 2;
+    const bg = exBg();
+    const opts = { alt: parseFloat($("alt").value), altBy: $("altBy").value };
+    const split = $("grapheme").checked ? L.splitGrapheme : L.splitPlain;
+    function drawAt(tt) {
+      const g = c.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+      if (bg) { g.fillStyle = bg; g.fillRect(0, 0, W, H); }
+      g.translate(W / 2, H / 2); g.scale(K, K); g.translate(-cx, -cy);
+      for (const em of emitters) {
+        const t = tt - pad - em.delay; const chars = split(em.text); const lf = L.life(em.style, em.size, chars.length);
+        if (t >= 0 && t < lf) drawOne(g, $("engine").value, chars, em, t, lf, opts);
+      }
+    }
+    return { c, W, H, dur, drawAt };
+  }
+  function exName(ext) { const t = emitters.map((e) => e.text).join("_").replace(/[\\/:*?"<>|\s]/g, "") || "cue"; return "cue_" + t.slice(0, 20) + "_" + $("exW").value + "x" + $("exH").value + "." + ext; }
+  async function exFrames(onProgress) {
+    const s = exSetup(), fps = parseInt($("exFps").value, 10), n = Math.max(1, Math.ceil(s.dur * fps));
+    const frames = [];
+    for (let i = 0; i < n; i++) { s.drawAt(i / fps); frames.push(await X.toPNG(s.c)); if (onProgress && i % 5 === 0) onProgress(i / n); }
+    return { frames, fps, s };
+  }
+  $("exPreview").addEventListener("click", () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    const s = exSetup(); s.drawAt(tNow + (parseFloat($("exPad").value) || 0));
+    $("exPreviewWrap").style.display = ""; $("exPreviewImg").src = s.c.toDataURL("image/png"); setStatus("exStatus", "いまの時刻の1コマ(" + s.W + "×" + s.H + ")", "ok");
+  });
+  $("exApng").addEventListener("click", async () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    try {
+      const { frames, fps } = await exFrames((p) => setStatus("exStatus", "描いている… " + Math.round(p * 100) + "%", ""));
+      const blob = X.apng(frames, fps); X.download(blob, exName("png"));
+      setStatus("exStatus", "APNG " + frames.length + " コマ / " + (blob.size / 1024 / 1024).toFixed(1) + " MB(拡張子は .png のまま。ブラウザや編集ソフトで動く)", "ok");
+    } catch (e) { setStatus("exStatus", "失敗: " + e.message, "warn"); }
+  });
+  $("exZip").addEventListener("click", async () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    try {
+      const { frames, fps } = await exFrames((p) => setStatus("exStatus", "描いている… " + Math.round(p * 100) + "%", ""));
+      const entries = frames.map((f, i) => ({ name: "cue_" + String(i + 1).padStart(4, "0") + ".png", data: f }));
+      entries.push({ name: "README.txt", data: new TextEncoder().encode(fps + " fps の連番。擬音の実験室から書き出した。\n") });
+      const blob = X.zip(entries); X.download(blob, exName("zip"));
+      setStatus("exStatus", "PNG 連番 " + frames.length + " 枚 / " + (blob.size / 1024 / 1024).toFixed(1) + " MB", "ok");
+    } catch (e) { setStatus("exStatus", "失敗: " + e.message, "warn"); }
+  });
+  $("exWebm").addEventListener("click", async () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    if (!exBg()) setStatus("exStatus", "背景が透過のままなので黒になる(緑にしてクロマキーで抜くのがおすすめ)", "warn");
+    try {
+      const s = exSetup(), fps = parseInt($("exFps").value, 10);
+      const blob = await X.webm(s.c, s.drawAt, s.dur, fps, (p) => setStatus("exStatus", "録っている… " + Math.round(p * 100) + "%", ""));
+      X.download(blob, exName("webm"));
+      setStatus("exStatus", "WebM " + s.dur.toFixed(1) + " 秒 / " + (blob.size / 1024 / 1024).toFixed(1) + " MB(mp4 が要るなら編集ソフトで変換)", "ok");
+    } catch (e) { setStatus("exStatus", "失敗: " + e.message, "warn"); }
+  });
 
   // ---- ノードのグラフ ----
   const N = window.CueNodes;

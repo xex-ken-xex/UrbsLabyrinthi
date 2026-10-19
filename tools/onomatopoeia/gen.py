@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""擬音の実験室(tools/cue-lab)のデータを、ゲームの sfx.gd から書き出す。
-  python3 tools/cue-lab/gen.py      # tools/cue-lab/cues.js を作り直す
+"""擬音の実験室(tools/onomatopoeia)のデータを、ゲームの sfx.gd から書き出す。
+  python3 tools/onomatopoeia/gen.py      # tools/onomatopoeia/cues.js を作り直す
 CUES の文字・色・大きさ、STYLE の動き方、sfx.gd の「# 見出し」のまとまりを拾う。
 層の主の咆哮(layer_boss.gd の roar)も、まとまり「層の主の咆哮」として足す。
 実験室の HTML(index.html)と描き方(cue_lab.js)は手で書く。cues.js は作り直すので手で直さない。"""
@@ -63,7 +63,7 @@ def main() -> None:
                     "color": [1.0, 0.45, 0.4], "size": 3.0, "style": "slam",
                 })
     with open(OUT, "w", encoding="utf-8") as f:
-        f.write("// tools/cue-lab/gen.py が sfx.gd から作る。手で直さない。\n")
+        f.write("// tools/onomatopoeia/gen.py が sfx.gd から作る。手で直さない。\n")
         f.write("window.CUE_DATA = ")
         json.dump({"cues": cues, "styles": sorted(set(styles.values()))}, f, ensure_ascii=False, indent=1)
         f.write(";\n")
