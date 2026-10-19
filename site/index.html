@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urbs Labyrinthi — 迷宮都市ヴェルガ・ノクス</title>
+<meta name="description" content="燐晶を持ち帰れ。通路は毎夜、変わる。迷宮都市ヴェルガ・ノクスを舞台にした、体当たりで押し合うアクションRPG(実験中)。">
+<meta property="og:title" content="Urbs Labyrinthi — 迷宮都市ヴェルガ・ノクス">
+<meta property="og:description" content="燐晶を持ち帰れ。通路は毎夜、変わる。">
+<meta property="og:image" content="img/title.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+1p:wght@400;700&family=Shippori+Mincho:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d16;
+    --bg2: #111626;
+    --panel: #161c2e;
+    --line: #3a3324;
+    --gold: #e8d6a4;
+    --amber: #f0b44a;
+    --text: #d9dbe4;
+    --muted: #9aa0b4;
+    --cue: #ff5a3c;
+    --blue: #7fc8e8;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "M PLUS 1p", system-ui, sans-serif;
+    line-height: 1.85;
+    font-size: 16px;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--blue); }
+
+  /* 見出し */
+  .hero {
+    position: relative;
+    min-height: 92vh;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 64px 16px;
+    background: var(--bg);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  /* 背景はタイトル画面。画面の文字と重ならないよう、ぼかして暗くする */
+  .hero::before, .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+  }
+  .hero::before {
+    inset: -24px;
+    background: url("img/title.png") center / cover no-repeat;
+    filter: blur(18px) brightness(.7);
+  }
+  .hero::after {
+    background: linear-gradient(to bottom, rgba(10,13,22,.1), rgba(10,13,22,.45) 60%, var(--bg));
+  }
+  .hero h1 {
+    font-family: "Shippori Mincho", serif;
+    font-weight: 800;
+    font-size: clamp(42px, 9vw, 96px);
+    color: var(--gold);
+    margin: 0;
+    letter-spacing: .02em;
+    text-shadow: 0 2px 24px rgba(0,0,0,.8);
+  }
+  .hero .sub {
+    color: #b9c9e8;
+    font-size: clamp(16px, 2.6vw, 22px);
+    margin: 4px 0 28px;
+  }
+  .hero .tag {
+    font-family: "Shippori Mincho", serif;
+    font-weight: 600;
+    color: #f4de8c;
+    font-size: clamp(20px, 3.6vw, 32px);
+    margin: 0;
+    word-break: keep-all;
+    text-shadow: 0 2px 16px rgba(0,0,0,.9);
+  }
+  .hero .note {
+    margin-top: 36px;
+    display: inline-block;
+    font-size: 13px;
+    color: var(--muted);
+    border: 1px solid #2c3550;
+    background: rgba(10,13,22,.7);
+    padding: 6px 14px;
+    border-radius: 4px;
+  }
+  .scroll {
+    position: absolute;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--muted);
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  /* 擬音 */
+  .cue {
+    font-family: "Dela Gothic One", sans-serif;
+    color: var(--cue);
+    -webkit-text-stroke: 2px #1a0d0a;
+    paint-order: stroke fill;
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .hero .cue {
+    position: absolute;
+    font-size: clamp(22px, 4vw, 40px);
+    opacity: 0;
+    animation: cue 7s infinite;
+  }
+  .hero .c1 { top: 16%; left: 8%;  color: #ffd166; animation-delay: .4s; }
+  .hero .c2 { top: 68%; right: 9%; animation-delay: 2.6s; }
+  .hero .c3 { top: 74%; left: 12%; color: #9ee6ff; animation-delay: 4.8s; }
+  @keyframes cue {
+    0%   { opacity: 0; transform: scale(2.2) rotate(-6deg); }
+    4%   { opacity: 1; transform: scale(.92) rotate(-3deg); }
+    7%   { transform: scale(1.05) rotate(-4deg); }
+    22%  { opacity: 1; transform: scale(1) rotate(-4deg); }
+    30%  { opacity: 0; transform: scale(1) translateY(-14px) rotate(-4deg); }
+    100% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero .cue { animation: none; opacity: .9; }
+  }
+
+  /* 本文 */
+  main { max-width: 1040px; margin: 0 auto; padding: 0 16px 80px; }
+  section { margin: 96px 0; }
+  h2 {
+    font-family: "Shippori Mincho", serif;
+    font-weight: 800;
+    color: var(--gold);
+    font-size: clamp(26px, 4vw, 36px);
+    margin: 0 0 8px;
+  }
+  .lead { color: var(--muted); margin: 0 0 28px; }
+  .intro p { font-size: 17px; max-width: 46em; }
+
+  .loop {
+    list-style: none;
+    padding: 0;
+    margin: 32px 0 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    counter-reset: n;
+  }
+  .loop li {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px;
+    counter-increment: n;
+  }
+  .loop li::before {
+    content: counter(n);
+    display: block;
+    font-family: "Shippori Mincho", serif;
+    font-weight: 800;
+    color: var(--amber);
+    font-size: 22px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .loop b { color: var(--gold); display: block; }
+  .loop span { color: var(--muted); font-size: 14px; }
+
+  .feature {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 32px;
+    align-items: center;
+    margin: 56px 0;
+  }
+  .feature.flip { grid-template-columns: 1fr 1.35fr; }
+  .feature.flip figure { order: 2; }
+  figure { margin: 0; }
+  figure img {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    width: 100%;
+    height: auto;
+  }
+  .feature h3 {
+    font-family: "Shippori Mincho", serif;
+    font-weight: 800;
+    color: var(--gold);
+    font-size: 24px;
+    margin: 0 0 12px;
+  }
+  .feature h3 .cue { font-size: 20px; margin-left: 8px; transform: rotate(-4deg); }
+  .feature p { margin: 0 0 10px; }
+
+  .layers {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .layer {
+    background: var(--panel);
+    border-left: 4px solid var(--c);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .layer b { color: var(--gold); }
+  .layer small { color: var(--muted); display: block; }
+  .layer p { margin: 6px 0 0; font-size: 14px; }
+
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .gallery img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--line); }
+
+  .about {
+    background: var(--bg2);
+    border: 1px solid #262e48;
+    border-radius: 8px;
+    padding: 28px;
+  }
+  .about h2 { font-size: 24px; }
+  .about p { margin: 0 0 10px; }
+  .btn {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 10px 20px;
+    border: 1px solid var(--amber);
+    border-radius: 4px;
+    color: var(--gold);
+    text-decoration: none;
+    background: rgba(240,180,74,.08);
+  }
+  .btn:hover { background: rgba(240,180,74,.18); }
+
+  footer {
+    border-top: 1px solid #1d2338;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.7;
+    padding: 32px 16px 48px;
+  }
+  footer .in { max-width: 1040px; margin: 0 auto; }
+  footer p { margin: 0 0 10px; }
+
+  @media (max-width: 760px) {
+    .loop { grid-template-columns: 1fr 1fr; }
+    .feature, .feature.flip { grid-template-columns: 1fr; gap: 16px; }
+    .feature.flip figure { order: 0; }
+    .gallery { grid-template-columns: 1fr; }
+    section { margin: 64px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="cue c1">カチリ</span>
+  <span class="cue c2">どかーーーん!</span>
+  <span class="cue c3">ギィ…</span>
+  <div>
+    <h1>Urbs Labyrinthi</h1>
+    <p class="sub">迷宮都市ヴェルガ・ノクス</p>
+    <p class="tag">燐晶を持ち帰れ。<wbr>通路は毎夜、変わる。</p>
+    <p class="note">Godot 4 で作っている、実験中のアクションRPG です</p>
+  </div>
+  <a class="scroll" href="#intro">▼ どんなゲーム?</a>
+</header>
+
+<main>
+
+  <section id="intro" class="intro">
+    <h2>大穴を囲む街と、毎夜組み替わる迷宮</h2>
+    <p>ヴェルガ・ノクスは、荒野に開いた巨大な縦穴「大穴」を囲んで築かれた迷宮都市。大穴の下の迷宮からは、魔力を帯びた鉱石、燐晶(りんしょう)が採れます。冒険者たちは夜ごと坑口から降りて燐晶を掘り、街へ持ち帰って暮らしを立てています。</p>
+    <p>迷宮の通路は毎夜組み替わり、七夜で一巡します。四人までの仲間を連れて潜り、罠を外し、魔物と押し合い、燐晶を背負って帰る。それを夜ごとに繰り返す、体当たりのハックアンドスラッシュです。</p>
+    <ol class="loop">
+      <li><b>仲間を作る</b><span>サイコロで能力値をふり、生まれと育ちを決める</span></li>
+      <li><b>街で支度する</b><span>武具、薬、呪文書、食材をそろえる</span></li>
+      <li><b>迷宮へ潜る</b><span>罠、魔物、層の主。燐晶を掘って袋に詰める</span></li>
+      <li><b>持ち帰る</b><span>三割を税に納め、残りで次の夜へ</span></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>見どころ</h2>
+    <p class="lead">手ごたえは、その場に浮かぶ擬音の文字で。効果音も曲もありません。</p>
+
+    <div class="feature">
+      <figure><img src="img/trap.png" alt="爆発の罠。画面いっぱいに「どかーーーーん」の文字" width="1280" height="720" loading="lazy"></figure>
+      <div>
+        <h3>擬音が看板 <span class="cue">バチン!</span></h3>
+        <p>扉は「ギィ…」、解錠は「カチリ」、爆発の罠は「どかーーーーん!」。行動や出来事の一つ一つに、ベタな擬音の文字が跳ね、叩きつけられ、転がり、飛んでいきます。</p>
+        <p>音を鳴らす代わりに、文字そのものが手ごたえになるゲームです。</p>
+      </div>
+    </div>
+
+    <div class="feature flip">
+      <figure><img src="img/boss.png" alt="層の主の咆哮「ギィィィィイイイッ!!」" width="1280" height="720" loading="lazy"></figure>
+      <div>
+        <h3>押し合う戦い</h3>
+        <p>魔物には体当たりでぶつかり、HP を削るほど押し込み、こちらが削られると押し返される、昔ながらの押し合いの戦いです。攻撃は溜めて放つこともでき、転がって避けられます。</p>
+        <p>各層の底には層の主が待ち、咆哮とともに画面はモノクロに染まります。</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <figure><img src="img/section.png" alt="迷宮の断面。第1層から第10層までの深さが並ぶ" width="1280" height="720" loading="lazy"></figure>
+      <div>
+        <h3>深くなるほど、古く暗く <span class="cue" style="color:#9ee6ff">ヒュウゥ…</span></h3>
+        <p>縦穴の縁から覗けば、下の階が何層にも重なって見えます。縄梯子で降り、落とし穴に落ち、倒れた仲間を背負って帰る。</p>
+        <p>ときどき来る「吐く夜」には、日が落ちると迷宮が魔物を吐き出し、夜明けまで階段が塞がります。</p>
+      </div>
+    </div>
+
+    <div class="layers">
+      <div class="layer" style="--c:#6f8a4a"><b>腐葉の回廊</b><small>第1〜2層</small><p>苔と茸と鼠の巣。灯守の詰所の跡が残る</p></div>
+      <div class="layer" style="--c:#9a6a45"><b>錆鉄の坑道</b><small>第3〜4層</small><p>錆の罠と、五十年前の封鎖令の跡</p></div>
+      <div class="layer" style="--c:#4f8fa8"><b>鏡の水廊</b><small>第5〜6層</small><p>浅瀬と水路。水鏡の間に読めない刻み</p></div>
+      <div class="layer" style="--c:#a7a3b5"><b>骨の大聖堂</b><small>第7〜8層</small><p>百二十年前の遠征隊が眠る</p></div>
+      <div class="layer" style="--c:#5a4a6a"><b>???</b><small>第9層〜</small><p>第十層から先へ行って、帰った者はいない</p></div>
+    </div>
+
+    <div class="feature flip">
+      <figure><img src="img/town.png" alt="夜の街の広場。店の看板が並ぶ" width="1280" height="720" loading="lazy"></figure>
+      <div>
+        <h3>夜の街で暮らす <span class="cue" style="color:#ffd166">チャリン</span></h3>
+        <p>炉火の槌で武具を買い、止まり木亭で仲間を集め、静寂派の神殿で倒れた仲間を蘇らせる。酒場の噂、祭りの夜、坑口館の依頼と預金。</p>
+        <p>家を買えば台所や鍛冶場、実験室を増築して、料理や鍛冶、魔法の薬作りもできます。</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <figure><img src="img/cooking.png" alt="迷宮の中。拾ったものと擬音が浮かぶ" width="1280" height="720" loading="lazy"></figure>
+      <div>
+        <h3>腹が減っては <span class="cue" style="color:#ffb3c7">ぐぅ〜</span></h3>
+        <p>迷宮では腹が減ります。焚き木で火を熾し、拾った茸や魔物の肉で野営の料理を。上出来なら少しだけ力がつき、焦がせば「プスプス…」。</p>
+        <p>放っておいた料理は傷みます。くさったものを食べると、お腹を下します。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>画面から</h2>
+    <p class="lead">開発中の画面です。</p>
+    <div class="gallery">
+      <img src="img/make.png" alt="キャラクターを作る画面。サイコロで能力値をふる" width="1280" height="720" loading="lazy">
+      <img src="img/traps.png" alt="罠がいくつも動く通路。棘、煙、振り子の擬音が浮かぶ" width="1280" height="720" loading="lazy">
+      <img src="img/bless.png" alt="神殿で加護を願う" width="1280" height="720" loading="lazy">
+    </div>
+  </section>
+
+  <section class="about">
+    <h2>このゲームについて</h2>
+    <p>Urbs Labyrinthi は、実験的なコードを書き溜めていくための作品です。配布や販売、リリースを目的としておらず、ダウンロードの窓口もありません。動作や内容について、保証やサポートはありません。</p>
+    <p>ソースコードと開発の記録は GitHub にあります。</p>
+    <a class="btn" href="https://github.com/xex-ken-xex/UrbsLabyrinthi">GitHub のリポジトリ</a>
+  </section>
+
+</main>
+
+<footer>
+  <div class="in">
+    <p>This work includes material taken from the System Reference Document 5.1 (“SRD 5.1”) by Wizards of the Coast LLC and available at <a href="https://dnd.wizards.com/resources/systems-reference-document">https://dnd.wizards.com/resources/systems-reference-document</a>. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at <a href="https://creativecommons.org/licenses/by/4.0/legalcode">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>
+    <p>This work includes material from the System Reference Document 5.2.1 (“SRD 5.2.1”) by Wizards of the Coast LLC, available at <a href="https://www.dndbeyond.com/srd">https://www.dndbeyond.com/srd</a>. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at <a href="https://creativecommons.org/licenses/by/4.0/legalcode">https://creativecommons.org/licenses/by/4.0/legalcode</a>.</p>
+    <p>このリポジトリとゲームは、Wizards of the Coast とは関係がなく、その承認も受けていません。フォントは M+ 1p、Shippori Mincho、Dela Gothic One(SIL Open Font License 1.1)。</p>
+    <p>© xex-ken-xex</p>
+  </div>
+</footer>
+
+</body>
+</html>
