@@ -245,3 +245,198 @@ static func _draw_seat(fl: FloorInstance, cen: Vector2, f: float) -> void:
 	fl.draw_rect(Rect2(cen + Vector2(-14, -6), Vector2(28, 10)), stone)
 	fl.draw_rect(Rect2(cen + Vector2(-12, 4), Vector2(6, 9)), stone.darkened(0.3))
 	fl.draw_rect(Rect2(cen + Vector2(6, 4), Vector2(6, 9)), stone.darkened(0.3))
+
+# ---------- 地物の絵(設計 §11.3)。見るだけの物なので、擬音もログも足さない(部屋の地物は、入ったときの一行のまま) ----------
+
+## 部屋の地物の名前 → 絵
+const FEAT_PIC := {"湧き水": "spring", "黒い茸の畝": "shrooms", "揚水機": "pump", "沈んだ揚水機": "pump_sunk", "骨の祭壇": "altar", "聖歌席": "choir"}
+const DECOR_KINDS := ["rail", "cart"]
+
+## 書き出しから、絵だけの物を抜く(錆鉄の軌条と止まったトロッコ、部屋の地物)
+static func decor(d: Dictionary) -> Array:
+	var out: Array = []
+	for p in d.get("props", []):
+		if String(p.get("kind", "")) in DECOR_KINDS:
+			out.append(p)
+	for r in d.get("rooms", []):
+		var f: Variant = r.get("feature")
+		if typeof(f) == TYPE_DICTIONARY and FEAT_PIC.has(String(f.get("name", ""))) and f.has("x"):
+			out.append({"kind": FEAT_PIC[String(f["name"])], "x": int(f["x"]), "y": int(f["y"])})
+	return out
+
+## 軌条のマス(端から端まで)
+static func rail_cells(p: Dictionary) -> Array:
+	var a := Vector2i(int(p["x"]), int(p["y"]))
+	var b := Vector2i(int(p.get("x2", p["x"])), int(p.get("y2", p["y"])))
+	var step := Vector2i(signi(b.x - a.x), signi(b.y - a.y))
+	var out: Array = [a]
+	var c := a
+	while c != b and step != Vector2i.ZERO:
+		c += step
+		out.append(c)
+	return out
+
+## c のマスを通る軌条(なければ空)。暴走する鉱車は、この軌条の端から端へ走る
+static func rail_at(fl: FloorInstance, c: Vector2i) -> Dictionary:
+	for p in fl.decor:
+		if String(p["kind"]) != "rail":
+			continue
+		var x0 := mini(int(p["x"]), int(p["x2"]))
+		var x1 := maxi(int(p["x"]), int(p["x2"]))
+		var y0 := mini(int(p["y"]), int(p["y2"]))
+		var y1 := maxi(int(p["y"]), int(p["y2"]))
+		if c.x >= x0 and c.x <= x1 and c.y >= y0 and c.y <= y1:
+			return p
+	return {}
+
+## 床の上に描く(階段より下)。踏んだことのあるマスの、画面に入る物だけ
+static func draw_decor(fl: FloorInstance, vr: Rect2) -> void:
+	var m := fl.map
+	for p in fl.decor:
+		var k := String(p["kind"])
+		if k == "rail":
+			_draw_rail(fl, p, vr)
+			continue
+		var c := Vector2i(int(p["x"]), int(p["y"]))
+		var i := m.idx(c.x, c.y)
+		var cen := m.center_of(c)
+		if m.explored[i] == 0 or not vr.has_point(cen):
+			continue
+		var f := 1.0 if m.visible[i] == 1 else 0.45
+		match k:
+			"cart":
+				draw_cart(fl, cen, String(p.get("axis", "h")) == "v", f, 1.0, true)
+			"spring":
+				_draw_spring(fl, cen, f)
+			"shrooms":
+				_draw_shrooms(fl, cen, f)
+			"pump":
+				_draw_pump(fl, cen, f, false)
+			"pump_sunk":
+				_draw_pump(fl, cen, f, true)
+			"altar":
+				_draw_altar(fl, cen, f)
+			"choir":
+				_draw_choir(fl, cen, f)
+
+## 軌条: 錆びた二本の鉄と、枕木
+static func _draw_rail(fl: FloorInstance, p: Dictionary, vr: Rect2) -> void:
+	var m := fl.map
+	var C := float(Balance.CELL)
+	var vert := int(p["x"]) == int(p.get("x2", p["x"]))
+	var along := Vector2(0, 1) if vert else Vector2(1, 0)
+	var side := Vector2(1, 0) if vert else Vector2(0, 1)
+	for c in rail_cells(p):
+		var i := m.idx(c.x, c.y)
+		var cen := m.center_of(c)
+		if m.explored[i] == 0 or not vr.has_point(cen):
+			continue
+		var f := 1.0 if m.visible[i] == 1 else 0.45
+		var wood := _dim(Color(0.32, 0.24, 0.17, 0.9), f)
+		for s in [-0.25, 0.25]:
+			fl.draw_line(cen + along * C * s - side * C * 0.34, cen + along * C * s + side * C * 0.34, wood, 4.0)
+		var iron := _dim(Color(0.55, 0.36, 0.24), f)
+		for o in [-0.22, 0.22]:
+			fl.draw_line(cen - along * C * 0.5 + side * C * o, cen + along * C * 0.5 + side * C * o, iron, 2.0)
+
+## トロッコ: 鉄の箱に四つの車輪。止まっている物(wreck)は少し傾いて、中に石くず。暴走する鉱車の罠も、この絵で走る
+static func draw_cart(ci: CanvasItem, cen: Vector2, vertical: bool, f: float, a: float, wreck: bool = false) -> void:
+	var C := float(Balance.CELL)
+	var along := Vector2(0, 1) if vertical else Vector2(1, 0)
+	var side := Vector2(1, 0) if vertical else Vector2(0, 1)
+	var half_a := C * 0.42
+	var half_s := C * 0.32
+	var tilt := 0.08 if wreck else 0.0
+	var al := along.rotated(tilt)
+	var sd := side.rotated(tilt)
+	var wheel := _dim(Color(0.15, 0.13, 0.12, a), f)
+	for u in [-0.62, 0.62]:
+		for v in [-1.0, 1.0]:
+			ci.draw_circle(cen + al * half_a * u + sd * half_s * v, 3.4, wheel)
+	ci.draw_circle(cen + Vector2(0, 5), C * 0.4, Color(0, 0, 0, 0.25 * a))
+	var box := PackedVector2Array([cen - al * half_a - sd * half_s, cen + al * half_a - sd * half_s, cen + al * half_a + sd * half_s, cen - al * half_a + sd * half_s])
+	ci.draw_colored_polygon(box, _dim(Color(0.46, 0.32, 0.22, a), f))
+	var inner := PackedVector2Array([cen - al * half_a * 0.75 - sd * half_s * 0.65, cen + al * half_a * 0.75 - sd * half_s * 0.65, cen + al * half_a * 0.75 + sd * half_s * 0.65, cen - al * half_a * 0.75 + sd * half_s * 0.65])
+	ci.draw_colored_polygon(inner, _dim(Color(0.18, 0.13, 0.1, a), f))
+	box.append(box[0])
+	ci.draw_polyline(box, _dim(Color(0.62, 0.42, 0.28, a), f), 1.5)
+	if wreck:
+		for n in 4:
+			ci.draw_circle(cen + al * half_a * (-0.5 + n * 0.33) + sd * half_s * (0.2 if n % 2 == 0 else -0.25), 2.6, _dim(Color(0.5, 0.48, 0.45, a), f))
+
+## 湧き水: 岩の割れ目から湧いて、小さな水たまりになっている(波紋がゆっくり広がる)
+static func _draw_spring(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var C := float(Balance.CELL)
+	var tm := Time.get_ticks_msec() / 1000.0
+	fl.draw_line(cen + Vector2(-4, -C * 0.55), cen + Vector2(1, -C * 0.3), _dim(Color(0.12, 0.12, 0.13), f), 2.0)
+	fl.draw_line(cen + Vector2(1, -C * 0.3), cen + Vector2(-1, -C * 0.12), _dim(Color(0.12, 0.12, 0.13), f), 2.0)
+	fl.draw_set_transform(cen + Vector2(0, 4), 0.0, Vector2(1.0, 0.62))
+	fl.draw_circle(Vector2.ZERO, C * 0.44, _dim(Color(0.32, 0.3, 0.27), f))
+	fl.draw_circle(Vector2.ZERO, C * 0.38, _dim(Color(0.2, 0.42, 0.55), f))
+	var k := fmod(tm * 0.6, 1.0)
+	fl.draw_arc(Vector2.ZERO, C * 0.36 * k, 0.0, TAU, 18, _dim(Color(0.7, 0.88, 1.0, 0.6 * (1.0 - k)), f), 1.2)
+	fl.draw_set_transform(Vector2.ZERO)
+	fl.draw_line(cen + Vector2(-1, -C * 0.12), cen + Vector2(-1, -2), _dim(Color(0.6, 0.85, 1.0, 0.7), f), 1.2)
+
+## 黒い茸の畝: 盛った土の畝が三本、黒い茸が並ぶ
+static func _draw_shrooms(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var C := float(Balance.CELL)
+	for row in 3:
+		var y := cen.y - C * 0.35 + row * C * 0.35
+		fl.draw_rect(Rect2(cen.x - C * 0.5, y - 3.0, C, 6.0), _dim(Color(0.24, 0.17, 0.12), f))
+		for n in 4:
+			var x := cen.x - C * 0.38 + n * C * 0.25 + (row % 2) * 3.0
+			fl.draw_line(Vector2(x, y), Vector2(x, y - 4.0), _dim(Color(0.55, 0.52, 0.46), f), 1.5)
+			fl.draw_circle(Vector2(x, y - 5.0), 3.2, _dim(Color(0.1, 0.08, 0.1), f))
+			fl.draw_circle(Vector2(x - 1.0, y - 6.0), 1.0, _dim(Color(0.4, 0.38, 0.45), f))
+
+## 揚水機: 木の水車と枠、つるべの鎖。沈んだ物は、水面から水車の上の半分だけが出ている
+static func _draw_pump(fl: FloorInstance, cen: Vector2, f: float, sunk: bool) -> void:
+	var C := float(Balance.CELL)
+	var wood := _dim(Color(0.42, 0.3, 0.2), f)
+	var rust := _dim(Color(0.55, 0.32, 0.2), f)
+	var hub := cen + Vector2(0, -C * 0.1)
+	var R := C * 0.42
+	if not sunk:
+		fl.draw_line(cen + Vector2(-R - 4, C * 0.45), hub, wood, 3.0)
+		fl.draw_line(cen + Vector2(R + 4, C * 0.45), hub, wood, 3.0)
+	fl.draw_arc(hub, R, PI if sunk else 0.0, TAU, 20, wood, 3.0)
+	for n in 8:
+		var a := TAU * n / 8.0
+		if sunk and sin(a) > 0.05:
+			continue
+		fl.draw_line(hub, hub + Vector2.from_angle(a) * R, wood, 1.5)
+		fl.draw_rect(Rect2(hub + Vector2.from_angle(a) * R - Vector2(2.5, 2.5), Vector2(5, 5)), rust)
+	fl.draw_circle(hub, 3.5, rust)
+	if sunk:
+		fl.draw_set_transform(hub + Vector2(0, 2), 0.0, Vector2(1.0, 0.3))
+		fl.draw_circle(Vector2.ZERO, R + 6.0, _dim(Color(0.2, 0.42, 0.52, 0.85), f))
+		fl.draw_set_transform(Vector2.ZERO)
+		fl.draw_line(hub + Vector2(-R - 3, 2), hub + Vector2(R + 3, 2), _dim(Color(0.7, 0.88, 1.0, 0.5), f), 1.0)
+	else:
+		fl.draw_line(hub + Vector2(R, 0), hub + Vector2(R, C * 0.4), _dim(Color(0.5, 0.5, 0.52), f), 1.0)
+		fl.draw_rect(Rect2(hub + Vector2(R - 4, C * 0.4), Vector2(8, 7)), wood)
+
+## 骨の祭壇: 骨の台に、一枚の肩甲骨
+static func _draw_altar(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var C := float(Balance.CELL)
+	var bone := _dim(Color(0.86, 0.82, 0.7), f)
+	var shade := _dim(Color(0.6, 0.56, 0.47), f)
+	fl.draw_rect(Rect2(cen + Vector2(-C * 0.42, -2), Vector2(C * 0.84, 9)), shade)
+	fl.draw_rect(Rect2(cen + Vector2(-C * 0.46, -6), Vector2(C * 0.92, 5)), bone)
+	fl.draw_rect(Rect2(cen + Vector2(-C * 0.36, 7), Vector2(5, 7)), shade)
+	fl.draw_rect(Rect2(cen + Vector2(C * 0.36 - 5, 7), Vector2(5, 7)), shade)
+	fl.draw_colored_polygon(PackedVector2Array([cen + Vector2(-9, -8), cen + Vector2(9, -8), cen + Vector2(3, -22), cen + Vector2(-5, -20)]), bone)
+	fl.draw_line(cen + Vector2(-6, -12), cen + Vector2(5, -18), shade, 1.2)
+
+## 聖歌席: 段になった骨の座席が三列
+static func _draw_choir(fl: FloorInstance, cen: Vector2, f: float) -> void:
+	var C := float(Balance.CELL)
+	for row in 3:
+		var w := C * (0.6 + row * 0.18)
+		var y := cen.y - C * 0.38 + row * C * 0.3
+		var col := _dim(Color(0.84, 0.8, 0.68).darkened(0.12 * (2 - row)), f)
+		fl.draw_rect(Rect2(cen.x - w / 2.0, y, w, 6.0), col)
+		fl.draw_rect(Rect2(cen.x - w / 2.0, y + 6.0, w, 2.0), _dim(Color(0.35, 0.32, 0.28), f))
+		for n in 3:
+			fl.draw_line(Vector2(cen.x - w / 2.0 + w * (n + 0.5) / 3.0, y), Vector2(cen.x - w / 2.0 + w * (n + 0.5) / 3.0, y + 6.0), _dim(Color(0.55, 0.5, 0.42), f), 1.0)

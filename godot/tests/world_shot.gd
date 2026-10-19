@@ -1,6 +1,7 @@
 extends SceneTree
 ## 迷宮の手ざわりの見た目: xvfb-run godot --path godot --rendering-driver opengl3 -s res://tests/world_shot.gd -- 出力フォルダ
-## world_<種類>.png: 地図屋の印 mark、壁の落書き sigil、闇潜りの野営 camp、灯守の詰所 post、封鎖令の跡 blockade、オルドの杭 stake、水鏡の刻み carving、空の座 seat
+## world_<種類>.png: 地図屋の印 mark、壁の落書き sigil、闇潜りの野営 camp、灯守の詰所 post、封鎖令の跡 blockade、オルドの杭 stake、水鏡の刻み carving、空の座 seat、
+## 地物の絵 rail cart spring shrooms pump pump_sunk altar choir、壁龕の頭蓋 gaze
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -21,9 +22,12 @@ func _find(main: Node, kind: String) -> Dictionary:
 			main.gs.day = night
 			main.floors.clear()
 			main.enter_floor(depth, "up")
-			for p in main.current.world_props:
+			for p in main.current.world_props + main.current.decor:
 				if String(p["kind"]) == kind:
 					return p
+			for t in main.current.traps:
+				if String(t["fx"]) == kind:
+					return t
 	return {}
 
 func _run() -> void:
@@ -44,16 +48,20 @@ func _run() -> void:
 	for h in main.heroes:
 		h.iframes = 1e9
 	Spawner.off = true
-	for kind in ["mark", "sigil", "camp", "post", "blockade", "stake", "carving", "seat"]:
+	for kind in (OS.get_cmdline_user_args().slice(1) if OS.get_cmdline_user_args().size() > 1 else ["mark", "sigil", "camp", "post", "blockade", "stake", "carving", "seat", "rail", "cart", "spring", "shrooms", "pump", "pump_sunk", "altar", "choir", "gaze"]):
 		var p := _find(main, kind)
 		if p.is_empty():
 			continue
 		var c := Vector2i(int(p["x"]), int(p["y"]))
-		main.place_party(main.current.map.center_of(c + (Vector2i(2, 2) if kind in ["sigil", "post", "stake", "carving", "seat"] else Vector2i(0, 2))))
+		main.place_party(main.current.map.center_of(main.current.map.nearest_walkable(c + (Vector2i(2, 2) if kind in ["sigil", "post", "stake", "carving", "seat", "gaze"] else Vector2i(0, 2)))))
 		await _hold(main, 40)
 		main._refresh_view()
 		main.current.queue_redraw()
 		main.camera.zoom = Vector2.ONE * 1.6
 		await _hold(main, 6)
+		for h in main.heroes:
+			h.visible = not (kind in ["rail", "cart", "spring", "shrooms", "pump", "pump_sunk", "altar", "choir", "gaze"])    # 地物の絵が仲間に隠れないように
 		await _shot(out + "/world_%s.png" % kind)
+		for h in main.heroes:
+			h.visible = true
 	quit()

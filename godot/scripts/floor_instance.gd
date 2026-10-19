@@ -40,6 +40,7 @@ var lamp_on := false           # 燐晶の灯油を灯している(光に弱い�
 var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var world_props: Array = []    # 地図屋の印、壁の落書き、闇潜りの野営(FloorProps)
+var decor: Array = []          # 絵だけの物: 錆鉄の軌条と止まったトロッコ、部屋の地物(湧き水、茸の畝、揚水機、骨の祭壇、聖歌席)
 var master_enc := -1           # 主の間の主(遭遇の id)。倒すと、まわりの控えの巣が散る
 const MASTER_REACH := 36.0         # 主の間からこのマス数までの巣は、みな散る
 const MASTER_SCATTER_ELSE := 0.25  # それより遠い巣が散る割合
@@ -148,6 +149,7 @@ func setup(m: FloorMap) -> void:
 		if String(p.get("kind", "")) == "rope":
 			ropes.append(Vector2i(int(p["x"]), int(p["y"])))
 	world_props = FloorProps.pick(d.get("props", []))
+	decor = FloorProps.decor(d)
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
@@ -527,6 +529,7 @@ func _draw() -> void:
 			if tex["walltop"] != null and map.wall_adj[map.idx(x, y - 1)] == 1 and _is_rock(x, y - 1):
 				for k in 4:
 					draw_rect(Rect2(rect.position.x, rect.position.y + k * 3.0, C, 3.0), Color(0, 0, 0, _shade(Color.WHITE, f).r * (0.42 - k * 0.1)))
+	FloorProps.draw_decor(self, vr)
 	# 階段
 	_draw_stairs(up_cell, true, glow)
 	if not arena and down_cell.x >= 0:
@@ -556,6 +559,11 @@ func _draw() -> void:
 		var cen := map.center_of(tc)
 		if TrapFx.PERIODIC.has(t.get("fx", "")):
 			continue          # 振り子と噴き口は、TrapFx が描く
+		if t.get("fx", "") == "sink" and t["st"] == "triggered":
+			# 沈んだ渡し石: 石が無くなって、水が丸く澄んでいる
+			draw_circle(cen, C * 0.3, Color(0.12, 0.3, 0.4, 0.8))
+			draw_arc(cen, C * 0.3, 0.0, TAU, 16, Color(0.6, 0.82, 0.95, 0.5), 1.0)
+			continue
 		if t.get("fx", "") == "pit" and t["st"] == "triggered":
 			# 開いた穴
 			draw_circle(cen, C * 0.42, Color(0, 0, 0, 0.85))
