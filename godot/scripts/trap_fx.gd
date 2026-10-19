@@ -2,15 +2,15 @@ class_name TrapFx
 extends Node2D
 ## 動きのある罠。踏むと予兆が出て、少し間をおいて発動する。セーヴは振らず、そのとき範囲にいたかどうかで決まる。
 ## 転がり(無敵の間)や走り抜けで避けられる。仲間も魔物も巻き込む(魔物を誘い込める)。
-## 振り子と噴き口(PERIODIC)は隠れておらず、層にいる間ずっと動いている。
+## 振り子と噴き口と壁龕の頭蓋(PERIODIC)は隠れておらず、層にいる間ずっと動いている。
 ## どの罠がどれかは、地図の生成器(docs/urbs-labyrinthi.html の罠表)の fx が決める。
 
 ## 予兆のある罠(踏むとこのノードが動き出す)
-const MOVING := ["explode", "spikes", "boulder", "collapse", "log", "censer", "fire", "darts", "bolt", "crush", "net", "gas", "fog"]
+const MOVING := ["explode", "spikes", "boulder", "cart", "sink", "collapse", "log", "censer", "fire", "darts", "bolt", "crush", "net", "gas", "fog"]
 ## ずっと動いている罠(層を作ったときに置く)
-const PERIODIC := ["pendulum", "flame"]
+const PERIODIC := ["pendulum", "flame", "gaze"]
 ## 踏んだ瞬間の擬音(予兆)
-const START_CUE := {"explode": "click", "spikes": "click", "boulder": "rumble", "collapse": "creak", "log": "creak", "censer": "creak",
+const START_CUE := {"explode": "click", "spikes": "click", "boulder": "rumble", "cart": "cart_run", "sink": "stone_tilt", "collapse": "creak", "log": "creak", "censer": "creak",
 	"fire": "click", "darts": "click", "bolt": "click", "crush": "grind", "net": "", "gas": "gas", "fog": "gas"}
 
 const C := float(Balance.CELL)
@@ -24,6 +24,13 @@ const NET_DELAY := 0.35
 const CLOUD := {"gas": [1.6, 5.0], "fog": [2.0, 6.0]}     # [半径(マス), 残る秒]
 const PENDULUM_PERIOD := 2.2
 const FLAME_CYCLE := 3.4       # 噴き口: 0〜0.7 予兆、0.7〜1.9 炎、あとは止む
+const SINK_DELAY := 0.45       # 沈む渡し石: 踏んでから沈むまで(すぐ降りれば落ちない)
+const SINK_DOWN := 1.2         # 水に落ちて起き上がるまで(秒)。重い鎧なら HEAVY_SINK
+const HEAVY_SINK := 2.4
+const GAZE_REACH := 7          # 壁龕の頭蓋の視線が届くマス
+const GAZE_WIND := 0.55        # 目が光ってから射すくめるまで(視線から外れれば無事)
+const GAZE_REST := 3.0         # 射すくめたあと、次に光るまで
+const GAZE_FEAR := 3.0         # 怯えて攻撃できない秒
 
 var fl: FloorInstance
 var t: Dictionary
@@ -47,6 +54,8 @@ var tick := 0.0
 var last_hit := {}             # 体 → 当たった時刻(振り子、噴き口)
 var saved := {}                # 煙: セーヴに成功した体
 var _cue_ms := -10000
+var line: Array = []           # 壁龕の頭蓋: 視線の届くマス(Vector2i)
+var glare_t := -1.0            # 壁龕の頭蓋: 目が光ってからの秒(光っていなければ負)
 
 ## 罠を動かす。victim は踏んだ者(わざと発動させたときは null)
 static func make(floor_inst: FloorInstance, trap: Dictionary, victim: Body) -> TrapFx:
@@ -65,6 +74,8 @@ static func make(floor_inst: FloorInstance, trap: Dictionary, victim: Body) -> T
 func _prepare() -> void:
 	match kind:
 		"boulder": _prepare_boulder()
+		"cart": _prepare_cart()
+		"gaze": _prepare_gaze()
 		"fire", "darts", "bolt": _prepare_wall()
 		"crush": _prepare_crush()
 		"pendulum": _prepare_pendulum()
@@ -130,7 +141,9 @@ func _physics_process(delta: float) -> void:
 	match kind:
 		"explode": _explode()
 		"spikes": _spikes()
-		"boulder": _boulder(delta)
+		"boulder", "cart": _boulder(delta)
+		"sink": _sink()
+		"gaze": _gaze(delta)
 		"collapse", "log", "censer": _drop(delta)
 		"fire": _fire(delta)
 		"darts", "bolt": _darts(delta)
@@ -228,12 +241,49 @@ func _boulder(delta: float) -> void:
 		if reach >= total:
 			done = true
 			zone_t = 0.6
-			Sfx.cue(fl, end, "smash")
+			Sfx.cue(fl, end, "cart_crash" if kind == "cart" else "smash")    # 鉱車は軌条の端で ガシャーン!
 			fl.shake.emit(0.2)
 	else:
 		zone_t -= delta
 		if zone_t <= 0.0:
 			queue_free()
+
+# 暴走する鉱車: 罠のマスを通る軌条の、遠いほうの端から走ってくる(軌条が無ければ大岩と同じ)
+func _prepare_cart() -> void:
+	var c := fl.map.cell_of(origin)
+	var rail := FloorProps.rail_at(fl, c)
+	if rail.is_empty():
+		_prepare_boulder()
+		return
+	var a := Vector2i(int(rail["x"]), int(rail["y"]))
+	var b := Vector2i(int(rail["x2"]), int(rail["y2"]))
+	var from_a := (a - c).length_squared() >= (b - c).length_squared()
+	start = fl.map.center_of(a if from_a else b)
+	end = fl.map.center_of(b if from_a else a)
+	dir = (end - start).normalized() if end != start else Vector2.RIGHT
+	reach = 0.0
+
+# 沈む渡し石: 踏んで一拍おいて石が沈む。そのとき石の上にいた者は水に落ちて転ぶ(重い鎧は起き上がるのに手間取る)。
+# 水に棲む魔物は落ちない
+func _sink() -> void:
+	if not done and age >= SINK_DELAY:
+		done = true
+		Sfx.cue(fl, origin, "plunge")
+		for b in _bodies():
+			if b.position.distance_to(origin) > C * 0.6 + b.radius * 0.4 or dodging(b):
+				continue
+			if b is Enemy and ((b as Enemy).has_trait("aquatic") or (b as Enemy).has_trait("amphib")):
+				continue
+			hurt(b, 0.4, origin + Vector2(0, 4))
+			var heavy := false
+			if b is Hero:
+				var arm: Dictionary = (b as Hero).ch.equip_item("armor")
+				heavy = not arm.is_empty() and String(arm.get("type", "")) == "heavy"
+			knock_down(b, HEAVY_SINK if heavy else SINK_DOWN)
+			if heavy and _seen(origin):
+				_say("%sは重い鎧のせいで、水からなかなか上がれない。" % (b as Hero).ch.name)
+	if age >= SINK_DELAY + 1.4:
+		queue_free()
 
 func _drop(delta: float) -> void:
 	var spec: Array = DROP[kind]
@@ -460,6 +510,64 @@ func _pendulum() -> void:
 		if hurt(b, 1.0, bp - vel * 8.0, 0.0):
 			b.knock = vel.normalized() * 230.0 / maxf(0.5, b.body_mass() * 0.7)
 
+# 壁龕の頭蓋: 行き止まりの壁龕から、通路をまっすぐ見つめる。視線の先に仲間が立つと目が光り(ギラッ)、
+# 一拍おいてまだ立っていれば射すくめる(ギンッ!。恐怖と、少しの死霊の傷)。視線の先の魔物も射すくめられる(不死者は平気)
+func _prepare_gaze() -> void:
+	var c := fl.map.cell_of(origin)
+	var v: Vector2i = {"n": Vector2i(0, -1), "s": Vector2i(0, 1), "e": Vector2i(1, 0), "w": Vector2i(-1, 0)}.get(String(t.get("face", "s")), Vector2i(0, 1))
+	dir = Vector2(v)
+	line = [c]
+	for n in GAZE_REACH:
+		var q := c + v * (n + 1)
+		if not fl.map.in_bounds(q.x, q.y) or fl.map.opaque(q.x, q.y):
+			break
+		line.append(q)
+
+func _in_gaze(b: Body) -> bool:
+	return line.has(fl.map.cell_of(b.position))
+
+func _skull() -> Vector2:
+	return origin - dir * C * 0.38
+
+func _gaze(delta: float) -> void:
+	if _off():
+		glare_t = -1.0
+		return
+	tick -= delta
+	if glare_t < 0.0:
+		if tick > 0.0:
+			return
+		for h in fl.heroes:
+			if is_instance_valid(h) and not h.down and _in_gaze(h) and int(t.get("safe_until", 0)) <= Time.get_ticks_msec():
+				glare_t = 0.0
+				Sfx.cue(fl, _skull() + Vector2(0, -10), "skull_glint")
+				return
+		return
+	glare_t += delta
+	if glare_t < GAZE_WIND:
+		return
+	glare_t = -1.0
+	var struck := false
+	for b in _bodies():
+		if not _in_gaze(b) or dodging(b):
+			continue
+		if b is Hero and int(t.get("safe_until", 0)) > Time.get_ticks_msec():
+			continue
+		if b is Enemy and (b as Enemy).mon_type() == "undead":
+			continue
+		struck = true
+		hurt(b, 0.35, _skull())
+		if b is Hero:
+			(b as Hero).fear_t = maxf((b as Hero).fear_t, GAZE_FEAR)
+		elif (b as Enemy).kind != "mindless":
+			(b as Enemy).state = "flee"
+			(b as Enemy).timer = GAZE_FEAR
+	if struck:
+		Sfx.cue(fl, _skull() + Vector2(0, -12), "skull_gaze")
+		tick = GAZE_REST
+	else:
+		tick = 0.8         # 視線から外れた(光っただけ)
+
 func _flame(delta: float) -> void:
 	if _off():
 		return
@@ -547,6 +655,46 @@ func _draw() -> void:
 			draw_arc(p, 14.0, 0.0, TAU, 20, Color(0.2, 0.17, 0.14, a), 2.0)
 			var r := reach / 14.0
 			draw_line(p + Vector2.from_angle(r) * 10.0, p - Vector2.from_angle(r) * 10.0, Color(0.3, 0.26, 0.22, a), 2.0)
+		"cart":
+			if age < 0.4:
+				return
+			var pc := start + dir * reach
+			var ac := 1.0 if not done else clampf(zone_t / 0.6, 0.0, 1.0)
+			FloorProps.draw_cart(self, pc, absf(dir.y) > absf(dir.x), 1.0, ac)
+			if not done:
+				for n in 3:
+					var back := pc - dir * (C * 0.55 + n * 7.0)
+					var sd := Vector2(-dir.y, dir.x) * (n - 1) * 6.0
+					draw_line(back + sd, back + sd - dir * 8.0, Color(0.9, 0.85, 0.7, 0.5), 1.5)
+		"sink":
+			var ks := clampf(age / SINK_DELAY, 0.0, 1.0)
+			if not done:
+				var wob := sin(tm * 40.0) * 2.0 * ks
+				draw_circle(origin + Vector2(wob, ks * 3.0), C * 0.2 * (1.0 - 0.3 * ks), Color(0.82, 0.8, 0.74))
+			else:
+				var kr := clampf((age - SINK_DELAY) / 1.4, 0.0, 1.0)
+				for n in 3:
+					var rr := C * (0.2 + 0.35 * fmod(kr + n * 0.3, 1.0))
+					draw_arc(origin, rr, 0.0, TAU, 18, Color(0.75, 0.9, 1.0, 0.7 * (1.0 - kr)), 1.5)
+				for n in 6:
+					var drop := origin + Vector2.from_angle(n * TAU / 6.0) * C * 0.4 * kr + Vector2(0, -16.0 * sin(kr * PI))
+					draw_circle(drop, 1.8, Color(0.75, 0.9, 1.0, 1.0 - kr))
+		"gaze":
+			if not _explored():
+				return
+			var sk := _skull()
+			var a8 := 0.4 if _off() else 1.0
+			draw_circle(sk, 7.5, Color(0.88, 0.84, 0.72, a8))
+			draw_rect(Rect2(sk + Vector2(-4, 4), Vector2(8, 4)), Color(0.8, 0.76, 0.64, a8))
+			var eye := Color(0.12, 0.1, 0.1, a8)
+			if glare_t >= 0.0:
+				var g := clampf(glare_t / GAZE_WIND, 0.0, 1.0)
+				eye = Color(1.0, 0.2 + 0.2 * sin(tm * 30.0), 0.15)
+				for q in line:
+					var qc: Vector2 = fl.map.center_of(q)
+					draw_rect(Rect2(qc - Vector2(C, C) * 0.5, Vector2(C, C)), Color(1.0, 0.15, 0.1, 0.08 + 0.14 * g))
+			draw_circle(sk + Vector2(-2.6, -1), 1.9, eye)
+			draw_circle(sk + Vector2(2.6, -1), 1.9, eye)
 		"collapse", "log", "censer":
 			var spec: Array = DROP[kind]
 			var R := float(spec[1]) * C
