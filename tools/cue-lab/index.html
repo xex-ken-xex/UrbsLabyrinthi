@@ -187,6 +187,7 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
     for (const el of document.querySelectorAll("#cueList .cue")) el.classList.toggle("sel", el.dataset.id === current.id);
     $("noteFor").textContent = current.id ? (current.text + " (" + current.id + ")") : ("自由入力 " + current.text);
     loadNoteInto();
+    if (typeof showGraph === "function") showGraph();
   }
   function readCurrentFromForm() {
     current.text = $("text").value; current.style = $("style").value; current.size = parseFloat($("size").value);
