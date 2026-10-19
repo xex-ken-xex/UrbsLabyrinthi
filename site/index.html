@@ -21,7 +21,6 @@
     --amber: #f0b44a;
     --text: #d6d8e2;
     --muted: #959bb0;
-    --cue: #ff5a3c;
     --blue: #8fd0ec;
     --phos: #7fe0d0;
   }
@@ -190,15 +189,6 @@
   .loop li { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 14px; counter-increment: n; font-size: 14px; color: var(--muted); }
   .loop li::before { content: counter(n); display: block; font-family: "Shippori Mincho", serif; font-weight: 800; color: var(--amber); font-size: 20px; line-height: 1.2; }
   .loop b { color: var(--gold); display: block; font-size: 15px; }
-  .cue {
-    font-family: "Dela Gothic One", sans-serif;
-    color: var(--cue);
-    -webkit-text-stroke: 2px #1a0d0a;
-    paint-order: stroke fill;
-    display: inline-block;
-    transform: rotate(-4deg);
-    white-space: nowrap;
-  }
   .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 24px 0; }
   .gallery img { width: 100%; border-radius: 3px; border: 1px solid var(--line); }
 
@@ -346,41 +336,37 @@
     <h3>降りていく</h3>
     <div class="descent">
       <div class="stratum" style="--tone:#121a14">
-        <div class="depth"><b>第1〜2層</b>0〜50m</div>
+        <div class="depth"><b>第1〜2層</b></div>
         <h4>腐葉の回廊</h4>
         <p>湿った洞窟に、苔と茸。洞窟鼠と粘泥。灰等級の新人が最初に降りる層。</p>
         <span class="found">通路の脇に、灯守の詰所の跡と、鉄脚のオルドの時代の杭が残っている。</span>
       </div>
       <div class="stratum" style="--tone:#18130f">
-        <div class="depth"><b>第3〜4層</b>50〜94m</div>
+        <div class="depth"><b>第3〜4層</b></div>
         <h4>錆鉄の坑道</h4>
         <p>古い採掘坑道の廃墟。錆を食う蟲と、坑道の亡霊。</p>
         <span class="found">施錠された扉の奥に、五十年前の封鎖令で取り残された者たちの野営がある。</span>
       </div>
       <div class="stratum" style="--tone:#0e1519">
-        <div class="depth"><b>第5〜6層</b>94〜138m</div>
+        <div class="depth"><b>第5〜6層</b></div>
         <h4>鏡の水廊</h4>
         <p>地下水と、姿を映す壁。冒険者の姿をまねる獣がいる。</p>
         <span class="found">七つの水鏡の間に、読めない刻みがある。下り階段の光が差した夜だけ、一文字ずつ読める。</span>
       </div>
       <div class="stratum" style="--tone:#141318">
-        <div class="depth"><b>第7〜9層</b>138〜183m</div>
+        <div class="depth"><b>第7〜9層</b></div>
         <h4>骨の大聖堂</h4>
         <p>巨大な骨の構造物。骨の守護者と、嘆きの聖歌隊。最深の到達記録は、百二十年前の第九層。それきり更新されていない。</p>
         <span class="found">百二十年前の遠征隊が、まだここで眠っている。</span>
       </div>
       <div class="stratum unknown" style="--tone:#0b0b10">
-        <div class="depth"><b>第10層〜</b>183m〜</div>
+        <div class="depth"><b>第10層〜</b></div>
         <h4>???</h4>
         <p>帰ってきた者はいない。「胃袋の主」がいる、という噂だけがある。</p>
         <span class="found">底には、誰も座っていない座がある、という。</span>
       </div>
     </div>
 
-    <figure class="wide">
-      <img src="img/section.png" alt="迷宮の断面。第1層から第10層までの深さが並ぶ" width="1280" height="720" loading="lazy">
-      <figcaption>迷宮の断面。真ん中を貫く縦穴の縁から、下の階が何層にも重なって見える</figcaption>
-    </figure>
 
     <p>各層の底の間には、その層の主が待っている。</p>
     <figure>
@@ -464,7 +450,7 @@
       <figcaption>仲間を作る。サイコロで能力値をふり、生まれと育ちを決める</figcaption>
     </figure>
     <p>街では、宿に泊まり、市場で食材を買い、神殿で倒れた仲間を蘇らせる。お金が貯まれば、壁下区の長屋の一間を買える。台所で料理を作り、物置に荷を預け、寝床で眠る。迷宮では腹が減るので、焚き火を熾して野営の料理を作る。</p>
-    <p>手ごたえは、その場に浮かぶ擬音の文字で表す。扉は <span class="cue" style="color:#cfd8ff">ギィ…</span>、解錠は <span class="cue" style="color:#ffd166">カチリ</span>、爆発の罠は <span class="cue">どかーーん!</span>。効果音も曲もない。文字が鳴る。</p>
+    <p>手ごたえは、その場に浮かぶ擬音の文字で表す。文字が踊る。</p>
     <div class="gallery">
       <img src="img/trap.png" alt="爆発の罠「どかーーーーん」" width="1280" height="720" loading="lazy">
       <img src="img/cooking.png" alt="迷宮で拾ったものと擬音" width="1280" height="720" loading="lazy">
