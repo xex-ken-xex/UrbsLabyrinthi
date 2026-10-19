@@ -22,6 +22,8 @@
     g: { label: "残像の番号", f: (v, nd, c) => c.g || 0 },
     jrev: { label: "文字番号(右向きなら逆順)", f: (v, nd, c) => (c.dx >= 0 ? c.n - 1 - c.i : c.i) },
     big: { label: "大きいとき / ふつう", ins: ["yes", "no"], f: (v, nd, c) => (c.big ? v.yes : v.no) },
+    hash: { label: "決まった乱数 0〜1(字の番号と種と salt から)", src: "JoJo", f: (v, nd, c) => (window.CueLab ? window.CueLab.hash01(c.i, c.seed, nd.salt || 0) : 0) },
+    exp: { label: "e の x 乗", ins: ["x"], f: (v) => Math.exp(v.x) },
     life: { label: "寿命(秒。消えるまで)", f: (v, nd, c) => c.life },
     // 時間
     delay: { label: "字ごとの遅れ", ins: ["x", "per", "idx"], f: (v, nd, c) => v.x - (nd.idx === undefined ? c.i : v.idx) * v.per },
@@ -127,6 +129,7 @@
     const d = dl > 0 ? { x: dir.x / dl, y: dir.y / dl } : { x: 1, y: 0 };
     const evalProps = makeEval(graph);
     const sylIdx = syllables(chars);
+    const endm = window.CueLab ? window.CueLab.ending(chars) : ["", -1];
     const base = { t, n, px, seed, dx: d.x, dy: d.y, big: !!big, life: lifeS, i: 0, g: 0, syl: 0, nsyl: sylIdx[n - 1] + 1 };
     ctx.font = px + "px " + font;
     const widths = chars.map((ch) => ctx.measureText(ch).width);
@@ -153,7 +156,16 @@
       }
       const cx = bx + (p.x || 0);
       const cy = by + (p.y || 0);
-      const sx = p.sx === undefined ? 1 : p.sx, sy = p.sy === undefined ? 1 : p.sy, rot = brot + (p.rot || 0);
+      let sx = p.sx === undefined ? 1 : p.sx, sy = p.sy === undefined ? 1 : p.sy, rot = brot + (p.rot || 0);
+      // 語末の仕上げ(cue_text.gd と同じ): graph.finish = {tsu: false} / {n: false} で切れる。cdelay は一字ずつ出る間
+      const fin = graph.finish || {}, dly = graph.cdelay || 0;
+      if (endm[0] === "ッ" && i === endm[1] && fin.tsu !== false) {
+        const te = t - i * dly;
+        if (te >= 0) { const k = 1.7 + (1 - 1.7) * (1 - Math.pow(1 - Math.min(Math.max(te / 0.09, 0), 1), 3)); sx *= k; sy *= k; }
+      } else if (endm[0] === "ン" && fin.n !== false) {
+        const tn = t - ((n - 1) * dly + 0.15);
+        if (tn > 0) rot += Math.sin(tn * 14) * 0.08 * Math.exp(-tn * 4);
+      }
       x += w + spread;
       if (a <= 0) continue;
       if (copies) {
@@ -189,6 +201,7 @@
       props: { sx: "s", sy: "s", y: { type: "mul", a: T, b: -14 }, alpha: { type: "fadeend", x: T } },
     },
     slam: {
+      finish: { tsu: false },
       nodes: {
         k: { type: "ramp", x: T, dur: 0.14 },
         s0: { type: "add", a: { type: "mix", k: "k", from: { type: "big", yes: 2.3, no: 1.9 }, to: 1 },
@@ -205,6 +218,7 @@
       },
     },
     shake: {
+      finish: { n: false },
       nodes: { amp: { type: "mul", a: "px", b: 0.08 } },
       props: {
         x: { type: "osc", x: T, f: 61, ph: 2.3, amp: "amp" },
@@ -213,6 +227,7 @@
       },
     },
     stretch: {
+      cdelay: 0.07,
       nodes: { ts: { type: "delay", x: T, per: 0.07 }, s: { type: "mix", k: { type: "back", x: "ts", dur: 0.16, over: 2.0 }, from: 0.4, to: 1 } },
       props: {
         spread: { type: "mul", a: { type: "min", a: T, b: 0.6 }, b: { type: "mul", a: "px", b: 0.35 } },
@@ -233,6 +248,7 @@
       },
     },
     bounce: {
+      cdelay: 0.06,
       nodes: { ti: { type: "delay", x: T, per: 0.06 }, s: { type: "add", a: 1, b: { type: "mul", a: 0.25, b: { type: "sub", a: 1, b: { type: "ramp", x: "ti", dur: 0.1 } } } } },
       props: {
         y: { type: "add", a: { type: "mul", a: T, b: -10 }, b: { type: "mul", a: { type: "hill", x: "ti", dur: 0.22 }, b: { type: "mul", a: "px", b: -0.55 } } },
@@ -241,6 +257,7 @@
       },
     },
     drop: {
+      cdelay: 0.05,
       nodes: {
         td: { type: "delay", x: T, per: 0.05 },
         kd: { type: "div", a: "td", b: 0.15 },
@@ -261,6 +278,7 @@
       },
     },
     roll: {
+      cdelay: 0.07,
       nodes: {
         tr: { type: "delay", x: T, per: 0.07 },
         dist: { type: "mul", a: { type: "sub", a: 1, b: { type: "out", x: "tr", dur: 0.5 } }, b: { type: "mul", a: "px", b: 3.5 } },
@@ -295,14 +313,59 @@
       },
     },
     wave: {
+      finish: { n: false },
       props: {
         y: { type: "add", a: { type: "mul", a: T, b: -10 }, b: { type: "osc", x: T, f: 9, ph: -0.9, amp: { type: "mul", a: "px", b: 0.18 } } },
         rot: { type: "osc", x: T, f: 7, ph: -0.9, amp: 0.12, seeded: false },
         alpha: { type: "fadeend", x: T },
       },
     },
+    // ---- 2026-10-19 に足した 4 種(ゲーム・映像・SNS の用例から。docs/05) ----
+    flutter: {
+      nodes: { tf: { type: "delay", x: T, per: 0.12, idx: "syl" }, kf: { type: "hill", x: "tf", dur: 0.5 }, sg: { type: "alt", a: -1, b: 1 } },
+      props: {
+        x: { type: "mul", a: "sg", b: { type: "mul", a: "kf", b: { type: "mul", a: "px", b: 0.5 } } },
+        y: { type: "add", a: { type: "mul", a: T, b: -10 }, b: { type: "mul", a: { type: "rhythm", x: "tf", f: 8, ph: 1.2, amp: { type: "mul", a: "px", b: -0.15 } }, b: 1 } },
+        rot: { type: "mul", a: "sg", b: { type: "mul", a: "kf", b: 0.3 } },
+        alpha: { type: "mul", a: { type: "fadeend", x: T }, b: { type: "mul", a: { type: "ramp", x: "tf", dur: 0.08 }, b: { type: "step", x: "tf", at: 0, before: 0, after: 1 } } },
+      },
+    },
+    stagger: {
+      cdelay: 0.04, finish: { tsu: false },
+      nodes: {
+        tg: { type: "delay", x: T, per: 0.04 }, kg: { type: "back", x: "tg", dur: 0.2, over: 2.2 },
+        s: { type: "mix", k: "kg", from: 3, to: 1 },
+        sk: { type: "mul", a: { type: "decay", x: T, dur: 0.4 }, b: { type: "big", yes: 4, no: 2.5 } },
+      },
+      props: {
+        sx: "s", sy: "s",
+        rot: { type: "alt", by: "char", a: { type: "mix", k: "kg", from: -0.4, to: -0.12 }, b: { type: "mix", k: "kg", from: 0.4, to: 0.12 } },
+        x: { type: "osc", x: T, f: 80, amp: "sk" },
+        y: { type: "add", a: { type: "add", a: { type: "mul", a: { type: "max", a: 0, b: { type: "sub", a: T, b: 0.4 } }, b: -8 }, b: { type: "cosc", x: T, f: 70, amp: "sk" } }, b: { type: "mul", a: { type: "sub", a: 1, b: "kg" }, b: { type: "mul", a: "px", b: -0.5 } } },
+        alpha: { type: "mul", a: { type: "fadeend", x: T }, b: { type: "step", x: "tg", at: 0, before: 0, after: 1 } },
+      },
+    },
+    tremble: {
+      finish: { n: false },
+      nodes: { amp: { type: "mul", a: "px", b: { type: "mix", k: { type: "ramp", x: T, dur: 1 }, from: 0.04, to: 0.16 } }, s: { type: "mix", k: { type: "ramp", x: T, dur: 1 }, from: 1, to: 1.08 } },
+      props: {
+        x: { type: "osc", x: T, f: 61, ph: 2.3, amp: "amp" },
+        y: { type: "add", a: { type: "mul", a: T, b: -5 }, b: { type: "cosc", x: T, f: 53, ph: 1.7, amp: "amp" } },
+        sx: "s", sy: "s", alpha: { type: "fadeend", x: T },
+      },
+    },
+    loom: {
+      nodes: { kl: { type: "ramp", x: T, dur: 0.6 }, s: { type: "mix", k: "kl", from: 0.8, to: 1.05 } },
+      props: {
+        spread: { type: "mul", a: "px", b: 0.1 },
+        x: { type: "mul", a: { type: "sub", a: { type: "hash", salt: 1 }, b: 0.5 }, b: { type: "mul", a: "px", b: 0.5 } },
+        y: { type: "add", a: { type: "mul", a: T, b: { type: "mul", a: "px", b: -0.25 } }, b: { type: "mul", a: { type: "sub", a: { type: "hash", salt: 2 }, b: 0.5 }, b: { type: "mul", a: "px", b: 1.8 } } },
+        rot: { type: "mul", a: { type: "sub", a: { type: "hash", salt: 3 }, b: 0.5 }, b: 0.5 },
+        sx: "s", sy: "s",
+        alpha: { type: "mul", a: { type: "fadeend", x: T }, b: "kl" },
+      },
+    },
   };
-
   // ---- 先行研究の部品を使った例(ゲームには無い。実験室の「研究の例」) ----
   const EXAMPLES = {
     // TextAlive の階層 + Koguchi のリズム: 音節ごとに左右へ交互に振れる(ひらひらひら、ゴロゴロゴロ)。ken の「音節ごとに向きを変える」

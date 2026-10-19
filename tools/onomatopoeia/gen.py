@@ -20,7 +20,8 @@ GROUP_RE = re.compile(r'^\s*#\s*(?P<name>[^(（。]+)')
 ROAR_RE = re.compile(r'^\s*(?P<n>\d+):\s*\{"room":\s*"(?P<room>[^"]+)",\s*"roar":\s*"(?P<roar>[^"]+)"')
 
 
-def main() -> None:
+def parse() -> tuple:
+    """sfx.gd の CUES と STYLE を読む → (cues, styles)。cues は [{id, text, group, color, size}]"""
     cues = []
     styles = {}
     group = "迷宮"
@@ -52,6 +53,19 @@ def main() -> None:
             elif section == "style":
                 for m in STYLE_RE.finditer(line):
                     styles[m.group("id")] = m.group("style")
+    return cues, styles
+
+
+def parse_cues() -> list:
+    return parse()[0]
+
+
+def parse_style() -> dict:
+    return parse()[1]
+
+
+def main() -> None:
+    cues, styles = parse()
     for c in cues:
         c["style"] = styles.get(c["id"], "pop")
     with open(BOSS, encoding="utf-8") as f:

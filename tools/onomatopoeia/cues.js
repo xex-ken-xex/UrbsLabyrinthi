@@ -70,7 +70,7 @@ window.CUE_DATA = {
     0.7,
     0.4
    ],
-   "size": 1.0,
+   "size": 1.2,
    "style": "shake"
   },
   {
@@ -179,7 +179,7 @@ window.CUE_DATA = {
     1.0
    ],
    "size": 1.0,
-   "style": "soft"
+   "style": "pop"
   },
   {
    "id": "crystal_big",
@@ -207,7 +207,7 @@ window.CUE_DATA = {
   },
   {
    "id": "sunder",
-   "text": "バキッ",
+   "text": "バキッ゙!",
    "group": "迷宮",
    "color": [
     1.0,
@@ -411,7 +411,7 @@ window.CUE_DATA = {
   },
   {
    "id": "charge_hit",
-   "text": "ドンッ!",
+   "text": "ドンッ゙!",
    "group": "料理",
    "color": [
     1.0,
@@ -515,7 +515,7 @@ window.CUE_DATA = {
     0.7
    ],
    "size": 2.2,
-   "style": "bounce"
+   "style": "flutter"
   },
   {
    "id": "t_sway",
@@ -959,7 +959,7 @@ window.CUE_DATA = {
     0.9
    ],
    "size": 1.3,
-   "style": "wave"
+   "style": "loom"
   },
   {
    "id": "rust",
@@ -1126,7 +1126,7 @@ window.CUE_DATA = {
     1.0,
     0.75
    ],
-   "size": 1.0,
+   "size": 1.2,
    "style": "pop"
   },
   {
@@ -1167,7 +1167,7 @@ window.CUE_DATA = {
   },
   {
    "id": "ambush",
-   "text": "ガバッ!",
+   "text": "ガバッ゙!",
    "group": "魔物の特徴",
    "color": [
     1.0,
@@ -1211,7 +1211,7 @@ window.CUE_DATA = {
     0.45
    ],
    "size": 1.0,
-   "style": "shake"
+   "style": "tremble"
   },
   {
    "id": "leap",
@@ -1227,7 +1227,7 @@ window.CUE_DATA = {
   },
   {
    "id": "ram",
-   "text": "ドカッ!",
+   "text": "ドカッ゙!",
    "group": "魔物の特徴",
    "color": [
     1.0,
@@ -1282,7 +1282,7 @@ window.CUE_DATA = {
     0.75,
     0.45
    ],
-   "size": 1.0,
+   "size": 1.2,
    "style": "stretch"
   },
   {
@@ -1427,7 +1427,7 @@ window.CUE_DATA = {
     0.35
    ],
    "size": 1.2,
-   "style": "shake"
+   "style": "stagger"
   },
   {
    "id": "sk_charge",
@@ -1439,7 +1439,7 @@ window.CUE_DATA = {
     0.5
    ],
    "size": 1.0,
-   "style": "shake"
+   "style": "tremble"
   },
   {
    "id": "sk_roar",
@@ -1451,7 +1451,7 @@ window.CUE_DATA = {
     0.4
    ],
    "size": 1.3,
-   "style": "slam"
+   "style": "stagger"
   },
   {
    "id": "sk_quake",
@@ -1559,7 +1559,7 @@ window.CUE_DATA = {
     0.6
    ],
    "size": 1.2,
-   "style": "shake"
+   "style": "stagger"
   },
   {
    "id": "sk_heal",
@@ -1595,7 +1595,7 @@ window.CUE_DATA = {
     0.7
    ],
    "size": 1.0,
-   "style": "bounce"
+   "style": "flutter"
   },
   {
    "id": "sk_mass_heal",
@@ -1919,7 +1919,7 @@ window.CUE_DATA = {
     0.78
    ],
    "size": 1.2,
-   "style": "shake"
+   "style": "tremble"
   },
   {
    "id": "stench",
@@ -1967,7 +1967,7 @@ window.CUE_DATA = {
     0.6
    ],
    "size": 1.2,
-   "style": "slam"
+   "style": "stagger"
   },
   {
    "id": "ms_missile",
@@ -2075,7 +2075,7 @@ window.CUE_DATA = {
     0.75
    ],
    "size": 1.1,
-   "style": "stretch"
+   "style": "loom"
   },
   {
    "id": "ms_vanish",
@@ -2195,7 +2195,7 @@ window.CUE_DATA = {
     0.55
    ],
    "size": 1.0,
-   "style": "bounce"
+   "style": "flutter"
   },
   {
    "id": "seat",
@@ -2270,8 +2270,80 @@ window.CUE_DATA = {
    "style": "shake"
   },
   {
+   "id": "cart_run",
+   "text": "ガタンゴトン…",
+   "group": "能力値のロール",
+   "color": [
+    0.85,
+    0.7,
+    0.55
+   ],
+   "size": 1.3,
+   "style": "roll"
+  },
+  {
+   "id": "cart_crash",
+   "text": "ガシャーン!",
+   "group": "能力値のロール",
+   "color": [
+    1.0,
+    0.65,
+    0.4
+   ],
+   "size": 1.4,
+   "style": "stagger"
+  },
+  {
+   "id": "stone_tilt",
+   "text": "グラッ",
+   "group": "能力値のロール",
+   "color": [
+    0.75,
+    0.9,
+    1.0
+   ],
+   "size": 1.0,
+   "style": "pop"
+  },
+  {
+   "id": "plunge",
+   "text": "ザブン!",
+   "group": "能力値のロール",
+   "color": [
+    0.6,
+    0.85,
+    1.0
+   ],
+   "size": 1.4,
+   "style": "slam"
+  },
+  {
+   "id": "skull_glint",
+   "text": "ギラッ",
+   "group": "能力値のロール",
+   "color": [
+    1.0,
+    0.35,
+    0.3
+   ],
+   "size": 1.0,
+   "style": "pop"
+  },
+  {
+   "id": "skull_gaze",
+   "text": "ギンッ゙!",
+   "group": "能力値のロール",
+   "color": [
+    1.0,
+    0.3,
+    0.25
+   ],
+   "size": 1.3,
+   "style": "snap"
+  },
+  {
    "id": "roar_1",
-   "text": "ギィィィィィィィッ!!",
+   "text": "ギィ゙ィ゙ィ゙ィ゙ィ゙ィ゙ィ゙ッ゙!!",
    "group": "層の主の咆哮(BossFx が画面いっぱいに描く)",
    "color": [
     1.0,
@@ -2283,7 +2355,7 @@ window.CUE_DATA = {
   },
   {
    "id": "roar_2",
-   "text": "ガアアアアァァァッ!!",
+   "text": "ガア゙ア゙ア゙ア゙ァ゙ァ゙ァ゙ッ゙!!",
    "group": "層の主の咆哮(BossFx が画面いっぱいに描く)",
    "color": [
     1.0,
@@ -2295,7 +2367,7 @@ window.CUE_DATA = {
   },
   {
    "id": "roar_3",
-   "text": "グオオオオオォォッ!!",
+   "text": "グオ゙オ゙オ゙オ゙オ゙ォ゙ォ゙ッ゙!!",
    "group": "層の主の咆哮(BossFx が画面いっぱいに描く)",
    "color": [
     1.0,
@@ -2331,7 +2403,7 @@ window.CUE_DATA = {
   },
   {
    "id": "roar_6",
-   "text": "シャアアアアァァァッ!!",
+   "text": "シャア゙ア゙ア゙ア゙ァ゙ァ゙ァ゙ッ゙!!",
    "group": "層の主の咆哮(BossFx が画面いっぱいに描く)",
    "color": [
     1.0,
@@ -2343,7 +2415,7 @@ window.CUE_DATA = {
   },
   {
    "id": "roar_7",
-   "text": "アアアアアアァァァ……!!",
+   "text": "ア゙ア゙ア゙ア゙ア゙ア゙ァ゙ァ゙ァ゙……!!",
    "group": "層の主の咆哮(BossFx が画面いっぱいに描く)",
    "color": [
     1.0,
@@ -2355,7 +2427,7 @@ window.CUE_DATA = {
   },
   {
    "id": "roar_8",
-   "text": "ウオオオオオォォッ!!",
+   "text": "ウオ゙オ゙オ゙オ゙オ゙ォ゙ォ゙ッ゙!!",
    "group": "層の主の咆哮(BossFx が画面いっぱいに描く)",
    "color": [
     1.0,
@@ -2381,14 +2453,18 @@ window.CUE_DATA = {
  "styles": [
   "bounce",
   "drop",
+  "flutter",
   "fly",
+  "loom",
   "pop",
   "roll",
   "shake",
   "slam",
   "snap",
   "soft",
+  "stagger",
   "stretch",
+  "tremble",
   "wave"
  ]
 };

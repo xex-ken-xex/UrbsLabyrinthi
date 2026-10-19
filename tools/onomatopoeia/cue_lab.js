@@ -1,6 +1,7 @@
 // 擬音の実験室: godot/scripts/cue_text.gd の draw_word と sfx.gd の life() を JS に写したもの。
 // ゲームの描き方を変えたら、ここも同じに直す(ロジックの確認用なので、1対1で写す)。
-// 「実験」の印がある所は、ゲームにはまだ無い試し(濁点をくっつける、音節ごとに向きを変える)。
+// 「実験」の印がある所は、ゲームにはまだ無い試し(音節ごとに向きを変える alt)。濁点をくっつける split と
+// flutter / stagger / tremble / loom、語末の仕上げ(ッ・ン)は 2026-10-19 にゲームへ入れた。
 (function () {
   "use strict";
 
@@ -27,36 +28,61 @@
       case "bounce": case "stretch": l += 0.06 * nchars; break;
       case "slam": case "shake": case "wave": case "drop": case "fly": l += 0.2; break;
       case "roll": l += 0.3 + 0.07 * nchars; break;
+      case "flutter": l += 0.08 * nchars; break;
+      case "stagger": l += 0.3 + 0.04 * nchars; break;
+      case "tremble": l += 0.4; break;
+      case "loom": l += 0.6; break;
     }
-    return l;
+    // テロップの目安(1 文字 0.1〜0.15 秒)を下限に
+    return Math.max(l, 0.1 * nchars + 0.35);
   }
 
-  // sfx.gd の _ready(): 一文字ずつに切る(コードポイント単位)
+  // 2026-10-19 までの split(コードポイント単位。濁点が別の字になる)。比べるために残す
   function splitPlain(s) { return Array.from(s); }
 
-  // 実験: 合成用の濁点・半濁点(U+3099 / U+309A)を前の字にくっつける
+  // cue_text.gd の split: 濁点・半濁点(U+3099 / U+309A、半角 ﾞ ﾟ)を前の字にくっつける(ゲームもこれになった)
   function splitGrapheme(s) {
     const out = [];
     for (const c of s) {
       const cp = c.codePointAt(0);
-      if ((cp === 0x3099 || cp === 0x309a) && out.length) out[out.length - 1] += c;
+      if ((cp === 0x3099 || cp === 0x309a || cp === 0xff9e || cp === 0xff9f) && out.length) out[out.length - 1] += c;
       else out.push(c);
     }
     return out;
   }
 
-  // 実験: 音節(拍)のまとまり。小書きの母音・ャュョ、長音、濁点は前の字につく。ッ は一つの拍
-  const SMALL = "ァィゥェォャュョヮぁぃぅぇぉゃゅょゎ";
+  // cue_text.gd の syllables: 音節(拍)の番号。小書き・ー・濁点・読点・ッ は前の字につく(flutter が使う)
+  const SMALL_CP = [0x30A1, 0x30A3, 0x30A5, 0x30A7, 0x30A9, 0x30E3, 0x30E5, 0x30E7, 0x30EE, 0x3041, 0x3043, 0x3045, 0x3047, 0x3049, 0x3083, 0x3085, 0x3087, 0x308E, 0x30FC, 0x301C, 0xFF5E, 0x2026, 0x3001, 0x3099, 0x309A, 0x30C3, 0x3063];
   function syllableIndex(chars) {
     const idx = [];
     let j = -1;
     chars.forEach((c, i) => {
-      const cp = c.codePointAt(0);
-      const joins = i > 0 && (SMALL.includes(c[0]) || c[0] === "ー" || c[0] === "〜" || c[0] === "~" || cp === 0x3099 || cp === 0x309a);
-      if (!joins) j += 1;
+      const small = SMALL_CP.includes(c.codePointAt(0));
+      if (i === 0 || !small) j += 1;
       idx.push(Math.max(j, 0));
     });
     return idx;
+  }
+
+  // cue_text.gd の ending: 語末の標識 ["ッ"|"ン"|"", その字の番号]。! ? は読み飛ばす
+  function ending(chars) {
+    let i = chars.length - 1;
+    while (i >= 0 && (chars[i] === "!" || chars[i] === "?" || chars[i] === "！" || chars[i] === "？")) i -= 1;
+    if (i < 0) return ["", -1];
+    const c = chars[i].codePointAt(0);
+    if (c === 0x30C3 || c === 0x3063) return ["ッ", i];
+    if (c === 0x30F3 || c === 0x3093) return ["ン", i];
+    return ["", i];
+  }
+  // cue_text.gd の char_delay
+  function charDelay(style) {
+    switch (style) { case "bounce": return 0.06; case "stretch": case "roll": return 0.07; case "drop": return 0.05; case "stagger": return 0.04; }
+    return 0;
+  }
+  // cue_text.gd の hash01
+  function hash01(i, seed, salt) {
+    const v = Math.sin(i * 12.9898 + seed * 7.13 + (salt || 0)) * 43758.5453;
+    return v - Math.floor(v);
   }
 
   function measure(ctx, c, px) {
@@ -117,8 +143,28 @@
         rise = -t * 4;
         break;
       }
-      case "wave": case "bounce": rise = -t * 10; break;
+      case "wave": case "bounce": case "flutter": rise = -t * 10; break;
+      case "stagger": {
+        const sk2 = Math.max(0, 1 - t / 0.4) * (big ? 4 : 2.5);
+        shake = { x: Math.sin(t * 80 + seed) * sk2, y: Math.cos(t * 70 + seed) * sk2 };
+        rise = -Math.max(0, t - 0.4) * 8;
+        break;
+      }
+      case "tremble":
+        scale = lerpf(1, 1.08, clampf(t / 1, 0, 1));
+        rise = -t * 5;
+        break;
+      case "loom": {
+        const kl = clampf(t / 0.6, 0, 1);
+        scale = lerpf(0.8, 1.05, kl);
+        fade *= kl;
+        spread = px * 0.1;
+        rise = -t * px * 0.25;
+        break;
+      }
     }
+    const endm = ending(chars);
+    const dly = charDelay(style);
     const widths = chars.map((c) => measure(ctx, c, px));
     let total = widths.reduce((a, b) => a + b, 0) + spread * (n - 1);
     let x = -total / 2;
@@ -194,8 +240,47 @@
           off.y = Math.sin(t * 9 - i * 0.9 + seed) * px * 0.18;
           rot = Math.sin(t * 7 - i * 0.9) * 0.12;
           break;
+        case "flutter": {
+          const sy = syl[i];
+          ti = t - sy * 0.12;
+          if (ti < 0) { skip = true; break; }
+          const sg = sy % 2 === 0 ? -1 : 1;
+          const kf2 = Math.sin(clampf(ti / 0.5, 0, 1) * Math.PI);
+          off.x = sg * kf2 * px * 0.5;
+          off.y = -Math.sin(ti * 8 - sy * 1.2) * px * 0.15;
+          rot = sg * kf2 * 0.3;
+          a *= clampf(ti / 0.08, 0, 1);
+          break;
+        }
+        case "stagger": {
+          ti = t - i * dly;
+          if (ti < 0) { skip = true; break; }
+          const kg = easeBack(ti / 0.2, 2.2);
+          cs = lerpf(3, 1, kg);
+          rot = (i % 2 === 0 ? -1 : 1) * lerpf(0.4, 0.12, kg);
+          off.y = -(1 - kg) * px * 0.5;
+          break;
+        }
+        case "tremble": {
+          const amp2 = px * lerpf(0.04, 0.16, clampf(t / 1, 0, 1));
+          off = { x: Math.sin(t * 61 + i * 2.3 + seed) * amp2, y: Math.cos(t * 53 + i * 1.7 + seed) * amp2 };
+          break;
+        }
+        case "loom":
+          off.x = (hash01(i, seed, 1) - 0.5) * px * 0.5;
+          off.y = (hash01(i, seed, 2) - 0.5) * px * 1.8;
+          rot = (hash01(i, seed, 3) - 0.5) * 0.5;
+          break;
       }
       if (skip) { x += w + spread; continue; }
+      // 語末の仕上げ: ッ で終わる語は最後の字が叩き込まれて止まる、ン で終わる語は出きったあとに揺れ戻す
+      if (endm[0] === "ッ" && i === endm[1] && style !== "slam" && style !== "stagger") {
+        const te = t - i * dly;
+        if (te >= 0) cs *= lerpf(1.7, 1, easeOut(te / 0.09));
+      } else if (endm[0] === "ン" && style !== "shake" && style !== "wave" && style !== "tremble") {
+        const tn = t - ((n - 1) * dly + 0.15);
+        if (tn > 0) rot += Math.sin(tn * 14) * 0.08 * Math.exp(-tn * 4);
+      }
       // ---- 実験: 音節(または字)ごとに左右の向きを変える ----
       if (alt > 0) {
         const g = opts.altBy === "char" ? i : syl[i];
@@ -237,5 +322,5 @@
     }
   }
 
-  window.CueLab = { LIFE, FONT, life, splitPlain, splitGrapheme, syllableIndex, drawWord };
+  window.CueLab = { LIFE, FONT, life, splitPlain, splitGrapheme, syllableIndex, ending, charDelay, hash01, drawWord };
 })();
