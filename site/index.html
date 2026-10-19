@@ -4,25 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Urbs Labyrinthi — 迷宮都市ヴェルガ・ノクス</title>
-<meta name="description" content="燐晶を持ち帰れ。通路は毎夜、変わる。迷宮都市ヴェルガ・ノクスを舞台にした、体当たりで押し合うアクションRPG(実験中)。">
+<meta name="description" content="夜の鐘が七つ鳴ると、街が動く。行くあてのないふたりが、迷宮都市ヴェルガ・ノクスで迷宮へ降りていく。Godot 4 で作っている実験中のアクションRPG。">
 <meta property="og:title" content="Urbs Labyrinthi — 迷宮都市ヴェルガ・ノクス">
-<meta property="og:description" content="燐晶を持ち帰れ。通路は毎夜、変わる。">
+<meta property="og:description" content="夜の鐘が七つ鳴ると、街が動く。">
 <meta property="og:image" content="https://xex-ken-xex.github.io/UrbsLabyrinthi/img/title.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+1p:wght@400;700&family=Shippori+Mincho:wght@600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+1p:wght@400;700&family=Shippori+Mincho:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0d16;
-    --bg2: #111626;
-    --panel: #161c2e;
+    --bg: #090b13;
+    --bg2: #0f1320;
+    --panel: #141a2b;
     --line: #3a3324;
     --gold: #e8d6a4;
     --amber: #f0b44a;
-    --text: #d9dbe4;
-    --muted: #9aa0b4;
+    --text: #d6d8e2;
+    --muted: #959bb0;
     --cue: #ff5a3c;
-    --blue: #7fc8e8;
+    --blue: #8fd0ec;
+    --phos: #7fe0d0;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -30,345 +31,461 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: "M PLUS 1p", system-ui, sans-serif;
-    line-height: 1.85;
-    font-size: 16px;
+    font-family: "Shippori Mincho", serif;
+    font-size: 17px;
+    line-height: 2;
   }
-  img { max-width: 100%; display: block; }
+  img { max-width: 100%; height: auto; display: block; }
   a { color: var(--blue); }
+  .sans { font-family: "M PLUS 1p", system-ui, sans-serif; }
 
-  /* 見出し */
+  /* ---------- 序 ---------- */
   .hero {
     position: relative;
-    min-height: 92vh;
+    min-height: 100vh;
     display: grid;
     place-items: center;
     text-align: center;
     padding: 64px 16px;
-    background: var(--bg);
     overflow: hidden;
     isolation: isolate;
   }
   /* 背景はタイトル画面。画面の文字と重ならないよう、ぼかして暗くする */
-  .hero::before, .hero::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-  }
+  .hero::before, .hero::after { content: ""; position: absolute; inset: 0; z-index: -1; }
   .hero::before {
     inset: -24px;
     background: url("img/title.png") center / cover no-repeat;
-    filter: blur(18px) brightness(.7);
+    filter: blur(18px) brightness(.6);
   }
-  .hero::after {
-    background: linear-gradient(to bottom, rgba(10,13,22,.1), rgba(10,13,22,.45) 60%, var(--bg));
+  .hero::after { background: linear-gradient(to bottom, rgba(9,11,19,.2), rgba(9,11,19,.5) 60%, var(--bg)); }
+  .bells { color: var(--amber); letter-spacing: .5em; font-size: 14px; margin: 0 0 20px; }
+  .bells span { opacity: .25; animation: bell 7s infinite; }
+  .bells span:nth-child(2) { animation-delay: .5s; }
+  .bells span:nth-child(3) { animation-delay: 1s; }
+  .bells span:nth-child(4) { animation-delay: 1.5s; }
+  .bells span:nth-child(5) { animation-delay: 2s; }
+  .bells span:nth-child(6) { animation-delay: 2.5s; }
+  .bells span:nth-child(7) { animation-delay: 3s; }
+  @keyframes bell { 0%, 100% { opacity: .25; } 6% { opacity: 1; } 20% { opacity: .25; } }
+  .hero .first {
+    font-size: clamp(22px, 4.2vw, 38px);
+    font-weight: 600;
+    color: #f4e3b0;
+    margin: 0 0 40px;
+    word-break: keep-all;
+    text-shadow: 0 2px 18px rgba(0,0,0,.9);
   }
   .hero h1 {
-    font-family: "Shippori Mincho", serif;
     font-weight: 800;
-    font-size: clamp(42px, 9vw, 96px);
+    font-size: clamp(40px, 8vw, 84px);
     color: var(--gold);
     margin: 0;
-    letter-spacing: .02em;
+    line-height: 1.2;
     text-shadow: 0 2px 24px rgba(0,0,0,.8);
   }
-  .hero .sub {
-    color: #b9c9e8;
-    font-size: clamp(16px, 2.6vw, 22px);
-    margin: 4px 0 28px;
-  }
-  .hero .tag {
-    font-family: "Shippori Mincho", serif;
-    font-weight: 600;
-    color: #f4de8c;
-    font-size: clamp(20px, 3.6vw, 32px);
-    margin: 0;
-    word-break: keep-all;
-    text-shadow: 0 2px 16px rgba(0,0,0,.9);
-  }
-  .hero .note {
-    margin-top: 36px;
-    display: inline-block;
-    font-size: 13px;
-    color: var(--muted);
-    border: 1px solid #2c3550;
-    background: rgba(10,13,22,.7);
-    padding: 6px 14px;
-    border-radius: 4px;
-  }
-  .scroll {
-    position: absolute;
-    bottom: 22px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: var(--muted);
-    font-size: 13px;
-    text-decoration: none;
-  }
+  .hero .sub { color: #b9c9e8; margin: 6px 0 0; font-size: clamp(15px, 2.4vw, 20px); }
+  .scroll { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 13px; text-decoration: none; }
 
-  /* 擬音 */
+  /* ---------- 本文 ---------- */
+  main { max-width: 860px; margin: 0 auto; padding: 0 16px 64px; }
+  .chapter { margin: 120px 0; }
+  .num { display: block; color: var(--amber); font-size: 14px; letter-spacing: .3em; margin-bottom: 4px; }
+  h2 {
+    font-weight: 800;
+    color: var(--gold);
+    font-size: clamp(28px, 5vw, 42px);
+    line-height: 1.4;
+    margin: 0 0 28px;
+    word-break: keep-all;
+  }
+  h3 { font-weight: 800; color: var(--gold); font-size: 22px; margin: 48px 0 12px; }
+  p { margin: 0 0 1.2em; }
+  .drop::first-letter {
+    float: left;
+    font-size: 3.4em;
+    line-height: 1;
+    margin: .08em .12em 0 0;
+    color: var(--gold);
+    font-weight: 800;
+  }
+  .quote {
+    margin: 40px 0;
+    padding: 4px 0 4px 24px;
+    border-left: 2px solid var(--amber);
+    color: #efe2bd;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .quote small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; margin-top: 4px; }
+  figure { margin: 40px 0; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 12px 40px rgba(0,0,0,.55); }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; font-family: "M PLUS 1p", sans-serif; }
+  .wide { margin-left: calc(50% - min(50vw, 560px) + 16px); margin-right: calc(50% - min(50vw, 560px) + 16px); }
+
+  /* ふたりの場面 */
+  .two {
+    margin: 64px auto;
+    max-width: 640px;
+    padding: 28px 28px 20px;
+    background: linear-gradient(180deg, rgba(240,180,74,.07), rgba(240,180,74,.02));
+    border-top: 1px solid rgba(240,180,74,.35);
+    border-bottom: 1px solid rgba(240,180,74,.15);
+    color: #efe4c6;
+    font-size: 17px;
+    text-align: left;
+  }
+  .two .who { display: block; text-align: center; color: var(--amber); font-size: 13px; letter-spacing: .4em; margin-bottom: 14px; }
+  .two p { margin: 0 0 1em; }
+  .two .say { color: #fff3d0; }
+
+  /* 暮らしの小話 */
+  .life { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 28px 0 36px; }
+  .life div { background: var(--bg2); border: 1px solid #232a40; border-radius: 4px; padding: 16px 16px 12px; font-size: 15px; line-height: 1.85; }
+  .life b { display: block; color: var(--gold); font-size: 16px; margin-bottom: 4px; }
+
+  /* 名前の表 */
+  .names { display: grid; gap: 1px; background: #232a40; border: 1px solid #232a40; border-radius: 4px; overflow: hidden; margin: 24px 0 40px; }
+  .names div { background: var(--bg2); padding: 14px 18px; display: grid; grid-template-columns: 11em 1fr; gap: 16px; }
+  .names b { color: var(--gold); font-weight: 600; }
+  .names span { color: var(--muted); font-size: 15px; }
+
+  /* 層 */
+  .descent { position: relative; margin: 40px 0; }
+  .stratum { position: relative; padding: 28px 24px 24px 112px; border-left: 1px solid #2a3150; background: var(--tone); }
+  .stratum .depth { position: absolute; left: 20px; top: 30px; font-family: "M PLUS 1p", sans-serif; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .stratum .depth b { display: block; color: var(--amber); font-size: 15px; }
+  .stratum h4 { margin: 0 0 6px; font-size: 21px; color: var(--gold); font-weight: 800; }
+  .stratum p { margin: 0; font-size: 16px; }
+  .stratum .found { display: block; margin-top: 10px; font-size: 14px; color: var(--phos); font-family: "M PLUS 1p", sans-serif; }
+  .stratum.unknown h4 { color: #8a86a0; }
+
+  /* 許可証 */
+  .ranks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 28px 0; }
+  .rank { text-align: center; font-size: 14px; line-height: 1.6; }
+  .rank i { display: block; height: 56px; border-radius: 3px; margin-bottom: 8px; background: var(--c); border: 1px solid rgba(255,255,255,.15); box-shadow: inset 0 0 0 4px rgba(0,0,0,.18); }
+  .rank b { display: block; color: var(--gold); font-size: 16px; }
+  .rank span { color: var(--muted); font-family: "M PLUS 1p", sans-serif; font-size: 12px; }
+
+  /* 印 */
+  .seals { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 32px 0; }
+  .seal { background: var(--bg2); border: 1px solid #232a40; border-radius: 4px; padding: 24px; text-align: center; }
+  .seal svg { width: 112px; height: 112px; margin: 0 auto 12px; display: block; }
+  .seal b { color: var(--gold); font-size: 19px; display: block; }
+  .seal p { color: var(--muted); font-size: 15px; margin: 6px 0 0; }
+
+  /* 兆し */
+  .signs { list-style: none; padding: 0; margin: 28px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .signs li { background: var(--bg2); border-left: 3px solid var(--phos); padding: 12px 16px; font-size: 15px; }
+  .signs b { color: #c9f2ea; display: block; font-size: 17px; }
+
+  .rumors { list-style: none; padding: 0; margin: 24px 0; }
+  .rumors li { padding: 12px 0; border-bottom: 1px dashed #2a3150; color: #cfd2de; }
+  .rumors li::before { content: "「"; color: var(--muted); }
+  .rumors li::after { content: "」"; color: var(--muted); }
+
+  /* 遊び */
+  .play { font-family: "M PLUS 1p", sans-serif; font-size: 16px; line-height: 1.9; }
+  .play h2 { font-family: "Shippori Mincho", serif; }
+  .loop { list-style: none; padding: 0; margin: 28px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; counter-reset: n; }
+  .loop li { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 14px; counter-increment: n; font-size: 14px; color: var(--muted); }
+  .loop li::before { content: counter(n); display: block; font-family: "Shippori Mincho", serif; font-weight: 800; color: var(--amber); font-size: 20px; line-height: 1.2; }
+  .loop b { color: var(--gold); display: block; font-size: 15px; }
   .cue {
     font-family: "Dela Gothic One", sans-serif;
     color: var(--cue);
     -webkit-text-stroke: 2px #1a0d0a;
     paint-order: stroke fill;
     display: inline-block;
+    transform: rotate(-4deg);
     white-space: nowrap;
   }
-  .hero .cue {
-    position: absolute;
-    font-size: clamp(22px, 4vw, 40px);
-    opacity: 0;
-    animation: cue 7s infinite;
-  }
-  .hero .c1 { top: 16%; left: 8%;  color: #ffd166; animation-delay: .4s; }
-  .hero .c2 { top: 68%; right: 9%; animation-delay: 2.6s; }
-  .hero .c3 { top: 74%; left: 12%; color: #9ee6ff; animation-delay: 4.8s; }
-  @keyframes cue {
-    0%   { opacity: 0; transform: scale(2.2) rotate(-6deg); }
-    4%   { opacity: 1; transform: scale(.92) rotate(-3deg); }
-    7%   { transform: scale(1.05) rotate(-4deg); }
-    22%  { opacity: 1; transform: scale(1) rotate(-4deg); }
-    30%  { opacity: 0; transform: scale(1) translateY(-14px) rotate(-4deg); }
-    100% { opacity: 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .hero .cue { animation: none; opacity: .9; }
-  }
+  .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 24px 0; }
+  .gallery img { width: 100%; border-radius: 3px; border: 1px solid var(--line); }
 
-  /* 本文 */
-  main { max-width: 1040px; margin: 0 auto; padding: 0 16px 80px; }
-  section { margin: 96px 0; }
-  h2 {
-    font-family: "Shippori Mincho", serif;
-    font-weight: 800;
-    color: var(--gold);
-    font-size: clamp(26px, 4vw, 36px);
-    margin: 0 0 8px;
-  }
-  .lead { color: var(--muted); margin: 0 0 28px; }
-  .intro p { font-size: 17px; max-width: 46em; }
+  .closing { text-align: center; margin: 140px 0 100px; }
+  .closing > p { font-size: clamp(20px, 3.4vw, 28px); color: #f2e2b2; font-weight: 600; margin: 0 0 8px; word-break: keep-all; }
+  .closing > .small { font-size: 15px; color: var(--muted); font-weight: 400; }
 
-  .loop {
-    list-style: none;
-    padding: 0;
-    margin: 32px 0 0;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    counter-reset: n;
-  }
-  .loop li {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 16px;
-    counter-increment: n;
-  }
-  .loop li::before {
-    content: counter(n);
-    display: block;
-    font-family: "Shippori Mincho", serif;
-    font-weight: 800;
-    color: var(--amber);
-    font-size: 22px;
-    line-height: 1;
-    margin-bottom: 8px;
-  }
-  .loop b { color: var(--gold); display: block; }
-  .loop span { color: var(--muted); font-size: 14px; }
-
-  .feature {
-    display: grid;
-    grid-template-columns: 1.35fr 1fr;
-    gap: 32px;
-    align-items: center;
-    margin: 56px 0;
-  }
-  .feature.flip { grid-template-columns: 1fr 1.35fr; }
-  .feature.flip figure { order: 2; }
-  figure { margin: 0; }
-  figure img {
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    box-shadow: 0 10px 40px rgba(0,0,0,.5);
-    width: 100%;
-    height: auto;
-  }
-  .feature h3 {
-    font-family: "Shippori Mincho", serif;
-    font-weight: 800;
-    color: var(--gold);
-    font-size: 24px;
-    margin: 0 0 12px;
-  }
-  .feature h3 .cue { font-size: 20px; margin-left: 8px; transform: rotate(-4deg); }
-  .feature p { margin: 0 0 10px; }
-
-  .layers {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    margin-top: 24px;
-  }
-  .layer {
-    background: var(--panel);
-    border-left: 4px solid var(--c);
-    border-radius: 4px;
-    padding: 14px 16px;
-  }
-  .layer b { color: var(--gold); }
-  .layer small { color: var(--muted); display: block; }
-  .layer p { margin: 6px 0 0; font-size: 14px; }
-
-  .gallery {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-  }
-  .gallery img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--line); }
-
-  .about {
-    background: var(--bg2);
-    border: 1px solid #262e48;
-    border-radius: 8px;
-    padding: 28px;
-  }
-  .about h2 { font-size: 24px; }
+  .about { background: var(--bg2); border: 1px solid #232a40; border-radius: 6px; padding: 24px; font-family: "M PLUS 1p", sans-serif; font-size: 14px; line-height: 1.8; }
   .about p { margin: 0 0 10px; }
-  .btn {
-    display: inline-block;
-    margin-top: 8px;
-    padding: 10px 20px;
-    border: 1px solid var(--amber);
-    border-radius: 4px;
-    color: var(--gold);
-    text-decoration: none;
-    background: rgba(240,180,74,.08);
-  }
-  .btn:hover { background: rgba(240,180,74,.18); }
+  .btn { display: inline-block; margin-top: 6px; padding: 8px 18px; border: 1px solid var(--amber); border-radius: 4px; color: var(--gold); text-decoration: none; }
+  .btn:hover { background: rgba(240,180,74,.15); }
 
-  footer {
-    border-top: 1px solid #1d2338;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.7;
-    padding: 32px 16px 48px;
-  }
-  footer .in { max-width: 1040px; margin: 0 auto; }
+  footer { border-top: 1px solid #1a2034; color: var(--muted); font-family: "M PLUS 1p", sans-serif; font-size: 12px; line-height: 1.7; padding: 32px 16px 48px; }
+  footer .in { max-width: 860px; margin: 0 auto; }
   footer p { margin: 0 0 10px; }
 
-  @media (max-width: 760px) {
+  /* スクロールで浮かぶ(JS が無いときは最初から見える) */
+  .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity .9s ease, transform .9s ease; }
+  .js .reveal.on { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .js .reveal { opacity: 1; transform: none; transition: none; }
+    .bells span { animation: none; opacity: 1; }
+  }
+
+  @media (max-width: 680px) {
+    body { font-size: 16px; }
+    .chapter { margin: 88px 0; }
+    .names div { grid-template-columns: 1fr; gap: 2px; }
+    .stratum { padding: 20px 16px 18px 16px; }
+    .stratum .depth { position: static; margin-bottom: 6px; }
+    .stratum .depth b { display: inline; margin-right: 8px; }
+    .ranks { grid-template-columns: repeat(3, 1fr); }
+    .seals, .signs, .life { grid-template-columns: 1fr; }
+    .two { padding: 22px 16px 14px; }
     .loop { grid-template-columns: 1fr 1fr; }
-    .feature, .feature.flip { grid-template-columns: 1fr; gap: 16px; }
-    .feature.flip figure { order: 0; }
     .gallery { grid-template-columns: 1fr; }
-    section { margin: 64px 0; }
   }
 </style>
+<script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
 
 <header class="hero">
-  <span class="cue c1">カチリ</span>
-  <span class="cue c2">どかーーーん!</span>
-  <span class="cue c3">ギィ…</span>
   <div>
+    <p class="bells" aria-hidden="true"><span>●</span><span>●</span><span>●</span><span>●</span><span>●</span><span>●</span><span>●</span></p>
+    <p class="first">夜の鐘が七つ鳴ると、<wbr>街が動く。</p>
     <h1>Urbs Labyrinthi</h1>
     <p class="sub">迷宮都市ヴェルガ・ノクス</p>
-    <p class="tag">燐晶を持ち帰れ。<wbr>通路は毎夜、変わる。</p>
-    <p class="note">Godot 4 で作っている、実験中のアクションRPG です</p>
   </div>
-  <a class="scroll" href="#intro">▼ どんなゲーム?</a>
+  <a class="scroll sans" href="#hole">▼ 物語を読む</a>
 </header>
 
 <main>
 
-  <section id="intro" class="intro">
-    <h2>大穴を囲む街と、毎夜組み替わる迷宮</h2>
-    <p>ヴェルガ・ノクスは、荒野に開いた巨大な縦穴「大穴」を囲んで築かれた迷宮都市。大穴の下の迷宮からは、魔力を帯びた鉱石、燐晶(りんしょう)が採れます。冒険者たちは夜ごと坑口から降りて燐晶を掘り、街へ持ち帰って暮らしを立てています。</p>
-    <p>迷宮の通路は毎夜組み替わり、七夜で一巡します。四人までの仲間を連れて潜り、罠を外し、魔物と押し合い、燐晶を背負って帰る。それを夜ごとに繰り返す、体当たりのハックアンドスラッシュです。</p>
+  <!-- 序章 -->
+  <section class="chapter reveal" id="hole">
+    <span class="num">序章</span>
+    <h2>行くあてのない、ふたり</h2>
+
+    <div class="two">
+      <span class="who">ふたり</span>
+      <p>門をくぐったのは、日が暮れる少し前だった。帰る家はもう無く、次に行く町のあてもない。持ち物は、背負い袋がふたつと、銀貨が数枚。</p>
+      <p>宿を探して歩くうちに、遠くで鐘が鳴りはじめた。ひとつ、ふたつ。足もとの石畳が、かすかに動いた気がした。七つめが鳴りやんだとき、さっき曲がった角は、もうどこにもなかった。</p>
+      <p>途方に暮れて立っていると、汁物屋の女将が、何も言わずに椀をふたつ出してくれた。湯気の向こうで、女将は笑った。</p>
+      <p class="say">「この街は、はじめてかい。迷った人は、だいたいここに出るんだよ」</p>
+    </div>
+
+    <p class="drop">四百年ほど前、大陸の真ん中の荒野に、底の見えない縦穴が開いた。隕石が落ちたのか、古い遺跡が崩れたのか、今も誰にもわからない。国を追われた傭兵と盗賊の寄せ集めが、その浅いところで、青く光る石を見つけた。魔力を帯びた鉱石、燐晶(りんしょう)。灯りにも、鍛冶にも、魔術にも使える。</p>
+    <p>穴のまわりに天幕が立ち、天幕は家になり、家は街になった。それが迷宮都市ヴェルガ・ノクス。丘の上の冠環区には貴族と大商人が、穴のまわりの縁環区には職人と商人が、穴の斜面にしがみつく壁下区には、運び屋と、どこからか流れ着いた者たちが住む。</p>
+    <p>高いところほど安全で、低いところほど、迷宮の「息」に近い。行くあてのない者が最初に住むのは、たいてい、いちばん低いところだ。</p>
+  </section>
+
+  <!-- 第一章 -->
+  <section class="chapter reveal">
+    <span class="num">第一章</span>
+    <h2>動く街の暮らし</h2>
+    <p class="drop">毎日の日没に、静寂派の神殿が大鐘を七つ打つ。夜の鐘だ。鐘が鳴り終わるまでのあいだに、街の家が、中の人と家財ごと動く。揺れは小さく、棚の皿が少し滑るくらい。庭木の鉢も、小さな噴水も、家に付いていっしょに動く。大穴に近いほど大きく動き、壁下区の斜面では、一晩で路地のほとんどが入れ替わる。</p>
+    <p>城壁や神殿、ギルド、金のある者の屋敷は動かない。根柱(ねばしら)という魔法の柱が、芯に詰めた燐晶で、建物を地面に根づかせている。けれど、街の半分より多くの人は、毎夜動く家に住んでいる。だから、この街の朝は、窓を開けるところから始まる。</p>
+
+    <div class="life">
+      <div><b>今日のお向かい</b>窓を開けるまで、向かいが誰かわからない。魚屋と仕立屋が向かい合った朝は、窓から窓へ、干物と糸巻きが行き来する。</div>
+      <div><b>色布</b>動く家には番地がない。住人は戸口に色布を掛けて、自分の家を見分ける。</div>
+      <div><b>人あての手紙</b>宛名は人そのものになる。「橋のたもとで、釣れない釣りをしている人へ」。配達人は耳を澄まして歩く。</div>
+      <div><b>その日の地図</b>地図屋は夜明け前に路地を歩いて、その日かぎりの地図を描く。隅には「ここで三毛猫が寝ていた」。道案内の役には立たないのに、よく売れる。</div>
+      <div><b>三夜隣</b>同じ家が三夜続けて隣り合うと、縁起がいい。酒を酌み交わす。</div>
+      <div><b>七つの名前</b>石段の三段目で寝る三毛猫は、朝ごとに違う家の前にいる。呼ばれ方は七つ、朝ごはんも七種類。</div>
+    </div>
+
+    <p>鐘のあいだは路地に出ない。家と家に挟まれる事故が、毎年ある。それでも夜の鐘は、ときどき少し遅れて鳴る。鐘つきが、最後のひとりが戸を閉めるまで、綱を握ったまま待っているからだ、と街の人は言う。</p>
+
+    <figure class="wide">
+      <img src="img/town.png" alt="夜の街の広場。坑口を中心に、店の看板が並ぶ" width="1280" height="720" loading="lazy">
+      <figcaption>夜の広場。真ん中の光る穴が坑口。宿の「止まり木亭」、灯守の店、静寂派の神殿、色街の寝息通り</figcaption>
+    </figure>
+
+    <div class="two">
+      <span class="who">ふたり</span>
+      <p>壁下区の安宿は、一晩ごとに斜面のどこかへ流れていった。朝、窓を開けると、昨日とは違う洗濯物がはためいている。隣の部屋の子が咳をしていて、ひとりが薬草を煎じてやると、礼に毛布が一枚届いた。</p>
+      <p>戸口に掛ける色布は、まだ持っていない。この街にどれだけいるのか、自分たちでも決めていなかった。</p>
+      <p>ただ、銀貨はもう、ほとんど残っていなかった。働き口を訊くと、誰もが同じ方角を指さした。街の真ん中の、光る穴を。</p>
+    </div>
+  </section>
+
+  <!-- 第二章 -->
+  <section class="chapter reveal">
+    <span class="num">第二章</span>
+    <h2>冒険者という仕事</h2>
+    <p class="drop">迷宮に入るには、潜行許可証が要る。名義は評議会、審査はギルド。許可証には等級があり、深く潜るほど高い等級が要る。</p>
+    <div class="ranks">
+      <div class="rank" style="--c:#8a8a8a"><i></i><b>灰</b><span>第1〜2層<br>新人。九割が一年で消える</span></div>
+      <div class="rank" style="--c:#a8703a"><i></i><b>青銅</b><span>第3〜4層<br>一人前</span></div>
+      <div class="rank" style="--c:#c9ced6"><i></i><b>銀</b><span>第5〜6層<br>一行を率いる</span></div>
+      <div class="rank" style="--c:#1c1c22"><i></i><b>黒鉄</b><span>第7〜9層<br>都市の英雄。数十人</span></div>
+      <div class="rank" style="--c:repeating-linear-gradient(45deg,#0d0e14 0 6px,#171927 6px 12px)"><i></i><b>無印</b><span>第10層〜<br>実質、いない</span></div>
+    </div>
+    <p>持ち帰った燐晶の三割は、税になる。徴税官は、迷宮の出口で待っている。装備の手入れとギルドの手数料を引くと、手元に残るのは三割に届かない。新人の死因でいちばん多いのは、魔物ではない。仲間の裏切りと、遺品目当ての殺しだ。</p>
+    <p>だから冒険者は「相棒」を選ぶ。ギルドに届け出る二人組の契約で、遺品の受け取り手や、残った借金の引き受けを互いに決めておく。男だけの採掘団が、坑内で二人一組で命綱を結び合った「坑夫の契り」が始まりだという。冒険者のあいだで「相棒」は、恋人とほとんど同じ意味で使われる。</p>
+
+    <div class="quote">空席の杯<small>ギルドの酒場では、帰らなかった仲間の席と杯を、必ず用意しておく</small></div>
+
+    <div class="two">
+      <span class="who">ふたり</span>
+      <p>坑口館の受付は、灰色の許可証をふたつ、机に並べた。名義の欄に名前を書き、潜行の届けに日付を書く。受付の係は、ペンを置いてから、ふたりの顔を見た。</p>
+      <p class="say">「相棒の届けは、出しておきますか」</p>
+      <p>ふたりは顔を見合わせた。遺品を受け取る相手。残った借金を引き受ける相手。どちらかが帰らなかったときに、名前を継ぐ相手。</p>
+      <p>しばらくして、片方が黙って、ペンを取った。</p>
+    </div>
+  </section>
+
+  <!-- 第三章 -->
+  <section class="chapter reveal">
+    <span class="num">第三章</span>
+    <h2>螺旋の胃袋</h2>
+    <p class="drop">大穴の下には、迷宮が広がっている。その通路も、街と同じように、毎夜少しずつ組み替わる。地図は数日で役に立たなくなる。迷宮は呼吸もする。吸う時期と吐く時期があり、吐く時期には魔物が騒ぐ。</p>
+    <p>同じ迷宮を、人は立場によって違う名で呼ぶ。</p>
+
+    <div class="names">
+      <div><b>螺旋の胃袋</b><span>採掘者と冒険者と下層の民の呼び名。掘った坑道が螺旋を描き、呑まれて帰らない者が多かったことから</span></div>
+      <div><b>ヴェルガ大迷宮</b><span>評議会とギルドの呼び名。許可証にはこの名が書かれる</span></div>
+      <div><b>眠りの床(ねどこ)</b><span>静寂派の呼び名。底に眠る深淵の寝床</span></div>
+      <div><b>玉座の階(きざはし)</b><span>異端「目覚めの徒」の呼び名。口にすると、人が離れていく</span></div>
+      <div><b>真の名</b><span>古い文書に断片が残るという。読み解けた者はいない</span></div>
+    </div>
+
+    <h3>降りていく</h3>
+    <div class="descent">
+      <div class="stratum" style="--tone:#121a14">
+        <div class="depth"><b>第1〜2層</b>0〜50m</div>
+        <h4>腐葉の回廊</h4>
+        <p>湿った洞窟に、苔と茸。洞窟鼠と粘泥。灰等級の新人が最初に降りる層。</p>
+        <span class="found">通路の脇に、灯守の詰所の跡と、鉄脚のオルドの時代の杭が残っている。</span>
+      </div>
+      <div class="stratum" style="--tone:#18130f">
+        <div class="depth"><b>第3〜4層</b>50〜94m</div>
+        <h4>錆鉄の坑道</h4>
+        <p>古い採掘坑道の廃墟。錆を食う蟲と、坑道の亡霊。</p>
+        <span class="found">施錠された扉の奥に、五十年前の封鎖令で取り残された者たちの野営がある。</span>
+      </div>
+      <div class="stratum" style="--tone:#0e1519">
+        <div class="depth"><b>第5〜6層</b>94〜138m</div>
+        <h4>鏡の水廊</h4>
+        <p>地下水と、姿を映す壁。冒険者の姿をまねる獣がいる。</p>
+        <span class="found">七つの水鏡の間に、読めない刻みがある。下り階段の光が差した夜だけ、一文字ずつ読める。</span>
+      </div>
+      <div class="stratum" style="--tone:#141318">
+        <div class="depth"><b>第7〜9層</b>138〜183m</div>
+        <h4>骨の大聖堂</h4>
+        <p>巨大な骨の構造物。骨の守護者と、嘆きの聖歌隊。最深の到達記録は、百二十年前の第九層。それきり更新されていない。</p>
+        <span class="found">百二十年前の遠征隊が、まだここで眠っている。</span>
+      </div>
+      <div class="stratum unknown" style="--tone:#0b0b10">
+        <div class="depth"><b>第10層〜</b>183m〜</div>
+        <h4>???</h4>
+        <p>帰ってきた者はいない。「胃袋の主」がいる、という噂だけがある。</p>
+        <span class="found">底には、誰も座っていない座がある、という。</span>
+      </div>
+    </div>
+
+    <figure class="wide">
+      <img src="img/section.png" alt="迷宮の断面。第1層から第10層までの深さが並ぶ" width="1280" height="720" loading="lazy">
+      <figcaption>迷宮の断面。真ん中を貫く縦穴の縁から、下の階が何層にも重なって見える</figcaption>
+    </figure>
+
+    <p>各層の底の間には、その層の主が待っている。</p>
+    <figure>
+      <img src="img/boss.png" alt="第1層の主の咆哮「ギィィィィイイイッ!!」" width="1280" height="720" loading="lazy">
+      <figcaption>第1層の主、錆鉄の洞窟鼠。気づかれると、咆哮が画面を揺らす</figcaption>
+    </figure>
+
+    <div class="two">
+      <span class="who">ふたり</span>
+      <p>はじめて降りた夜、第一層は思っていたより静かだった。苔の匂い。滴る水の音。灯守の灯が、通路の先で青く揺れている。</p>
+      <p>壁の燐晶を掘って袋に詰め、鼠の群れを追い払い、罠の板をまたいで、夜明け前に坑口へ戻った。袋は軽かった。三割を税に納めると、もっと軽くなった。</p>
+      <p>それでも、汁物屋で、いちばん安い胃袋スープを二杯たのむことができた。</p>
+      <p class="say">「明日も、降りる?」</p>
+      <p>返事のかわりに、もう片方は椀の底まで飲みほした。</p>
+    </div>
+  </section>
+
+  <!-- 第四章 -->
+  <section class="chapter reveal">
+    <span class="num">第四章</span>
+    <h2>穴を起こすな</h2>
+    <p class="drop">大陸の人々は、十二の座に就いた神々を信じている。ただ、十二番目の座には、誰も座っていない。どの神殿でも、空の玉座として描かれる。去った神か、追放された神か、まだ生まれていない神か、眠っている神か。教派によって答えが違う。</p>
+    <p>この街でいちばん力を持つのは、眠りと夜と死者の安息を司る、静寂の母シレンティアの教会、静寂派だ。静寂派は教える。大穴の底には「眠れる深淵」がいて、静寂の母が子守唄で眠らせ続けているのだと。七節の子守唄「静寂の七息」。夜の鐘が七つなのは、その息に合わせているからだという。</p>
+    <p class="quote">穴を起こすな。<small>ヴェルガの静寂派の教え</small></p>
+    <p>深い層を目指すことを、教会は禁じている。そして、百年ほど前から、下層の民のあいだに異端の教えが広がっている。空の座の主は、迷宮の底で目覚めを待つ王なのだ、と。</p>
+
+    <div class="seals">
+      <div class="seal">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="50.0,8.0 82.8,23.8 90.9,59.3 68.2,87.8 31.8,87.8 9.1,59.3 17.2,23.8" fill="none" stroke="#e8d6a4" stroke-width="3"/><polygon points="50.0,22 71,32 76.5,55 62,73.5 38,73.5 23.5,55 29,32" fill="none" stroke="#e8d6a4" stroke-width="1" opacity=".5"/></svg>
+        <b>静印</b>
+        <p>正七角形。完全な囲い、つまり封印。<br>街の内壁もこの形に築かれ、七つの角に塔が立つ</p>
+      </div>
+      <div class="seal">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="50.0,8.0 68.2,87.8 17.2,23.8 90.9,59.3 9.1,59.3 82.8,23.8 31.8,87.8" fill="none" stroke="#b07ad8" stroke-width="2.4" stroke-linejoin="round"/></svg>
+        <b>七芒星</b>
+        <p>目覚めの徒の印。開かれた門。<br>掲げれば罰される。迷宮の壁に、ときどき描かれている</p>
+      </div>
+    </div>
+    <p>年の終わりの「沈黙の夜」には、街じゅうが日没から夜明けまで音を立てず、灯りを消して過ごす。深淵を起こさないために。その夜だけは夜の鐘も打たれず、街は動かない。二百年前、人口の三分の一が一夜で消えた大海嘯は、沈黙の夜に起きたと伝わっている。</p>
+  </section>
+
+  <!-- 第五章 -->
+  <section class="chapter reveal">
+    <span class="num">第五章</span>
+    <h2>座暦二三五二年</h2>
+    <p class="drop">大穴からは、ときどき魔物が波のように地上へ溢れ出す。人はそれを海嘯(かいしょう)と呼ぶ。大きな海嘯は、座暦が四十九の倍数の年にしか起きない。</p>
+    <p>今年、座暦二三五二年は、四十九の倍数だ。しかも百九十六年に一度の大閏(おおうるう)の年にあたる。暦官は、大海嘯に備えるよう告げた。</p>
+    <p>けれど、五十年前のことを覚えている者もいる。兆しが現れ、封鎖令が出て、迷宮の入口がすべて閉ざされた。海嘯は来なかった。閉ざされた迷宮の中には、冒険者が数百人取り残されていて、誰も戻らなかった。それ以来、警報を疑う声は強い。</p>
+
+    <h3>海嘯の前の兆し</h3>
+    <ul class="signs sans">
+      <li><b>偽の曙</b>夜なのに、地平がぼんやり緑白く明るむ。当てにならない</li>
+      <li><b>星の滲み</b>星が一つずつ滲んで消え、空座の方角の星だけが瞬かなくなる</li>
+      <li><b>灯守の灯の変色</b>迷宮の燐晶の灯が、青から白へ変わる</li>
+      <li><b>燐の霧</b>燐晶の粉を含んだ霧が地を這い、夜に薄青く光る。いちばん信用される</li>
+    </ul>
+
+    <h3>街の噂(真偽不明)</h3>
+    <ul class="rumors">
+      <li>浅い層の燐晶が尽きかけている。査定の値が少しずつ上がっているのは、そのせいだ</li>
+      <li>第五層で、死んだはずの冒険者の姿を見た</li>
+      <li>教会は、公開していない古い子守唄を持っている</li>
+      <li>壁下区の家が、年を追って遠くまで動くようになった。今年は、とくにひどい</li>
+      <li>闇潜りの若者が、迷宮から「何か」を持ち帰ったらしい</li>
+    </ul>
+  </section>
+
+  <!-- 遊び -->
+  <section class="chapter play reveal">
+    <span class="num">ゲームについて</span>
+    <h2>ふたりから、はじめる</h2>
+    <p>はじめの仲間は二人。宿の酒場で、四人まで増やせる。灰等級の新人として迷宮に潜り、罠を外し、魔物と体当たりで押し合い、燐晶を背負って街へ帰る。三割を税に納め、残りで装備を整え、また次の夜に潜る。通路は毎夜組み替わり、七夜で一巡する。</p>
     <ol class="loop">
-      <li><b>仲間を作る</b><span>サイコロで能力値をふり、生まれと育ちを決める</span></li>
-      <li><b>街で支度する</b><span>武具、薬、呪文書、食材をそろえる</span></li>
-      <li><b>迷宮へ潜る</b><span>罠、魔物、層の主。燐晶を掘って袋に詰める</span></li>
-      <li><b>持ち帰る</b><span>三割を税に納め、残りで次の夜へ</span></li>
+      <li><b>仲間を作る</b>能力値と生まれを決める</li>
+      <li><b>街で支度する</b>武具、薬、呪文書、食材</li>
+      <li><b>迷宮へ潜る</b>罠、魔物、層の主</li>
+      <li><b>持ち帰る</b>燐晶を納め、次の夜へ</li>
     </ol>
-  </section>
-
-  <section>
-    <h2>見どころ</h2>
-    <p class="lead">手ごたえは、その場に浮かぶ擬音の文字で。効果音も曲もありません。</p>
-
-    <div class="feature">
-      <figure><img src="img/trap.png" alt="爆発の罠。画面いっぱいに「どかーーーーん」の文字" width="1280" height="720" loading="lazy"></figure>
-      <div>
-        <h3>擬音が看板 <span class="cue">バチン!</span></h3>
-        <p>扉は「ギィ…」、解錠は「カチリ」、爆発の罠は「どかーーーーん!」。行動や出来事の一つ一つに、ベタな擬音の文字が跳ね、叩きつけられ、転がり、飛んでいきます。</p>
-        <p>音を鳴らす代わりに、文字そのものが手ごたえになるゲームです。</p>
-      </div>
-    </div>
-
-    <div class="feature flip">
-      <figure><img src="img/boss.png" alt="層の主の咆哮「ギィィィィイイイッ!!」" width="1280" height="720" loading="lazy"></figure>
-      <div>
-        <h3>押し合う戦い</h3>
-        <p>魔物には体当たりでぶつかり、HP を削るほど押し込み、こちらが削られると押し返される、昔ながらの押し合いの戦いです。攻撃は溜めて放つこともでき、転がって避けられます。</p>
-        <p>各層の底には層の主が待ち、咆哮とともに画面はモノクロに染まります。</p>
-      </div>
-    </div>
-
-    <div class="feature">
-      <figure><img src="img/section.png" alt="迷宮の断面。第1層から第10層までの深さが並ぶ" width="1280" height="720" loading="lazy"></figure>
-      <div>
-        <h3>深くなるほど、古く暗く <span class="cue" style="color:#9ee6ff">ヒュウゥ…</span></h3>
-        <p>縦穴の縁から覗けば、下の階が何層にも重なって見えます。縄梯子で降り、落とし穴に落ち、倒れた仲間を背負って帰る。</p>
-        <p>ときどき来る「吐く夜」には、日が落ちると迷宮が魔物を吐き出し、夜明けまで階段が塞がります。</p>
-      </div>
-    </div>
-
-    <div class="layers">
-      <div class="layer" style="--c:#6f8a4a"><b>腐葉の回廊</b><small>第1〜2層</small><p>苔と茸と鼠の巣。灯守の詰所の跡が残る</p></div>
-      <div class="layer" style="--c:#9a6a45"><b>錆鉄の坑道</b><small>第3〜4層</small><p>錆の罠と、五十年前の封鎖令の跡</p></div>
-      <div class="layer" style="--c:#4f8fa8"><b>鏡の水廊</b><small>第5〜6層</small><p>浅瀬と水路。水鏡の間に読めない刻み</p></div>
-      <div class="layer" style="--c:#a7a3b5"><b>骨の大聖堂</b><small>第7〜8層</small><p>百二十年前の遠征隊が眠る</p></div>
-      <div class="layer" style="--c:#5a4a6a"><b>???</b><small>第9層〜</small><p>第十層から先へ行って、帰った者はいない</p></div>
-    </div>
-
-    <div class="feature flip">
-      <figure><img src="img/town.png" alt="夜の街の広場。店の看板が並ぶ" width="1280" height="720" loading="lazy"></figure>
-      <div>
-        <h3>夜の街で暮らす <span class="cue" style="color:#ffd166">チャリン</span></h3>
-        <p>炉火の槌で武具を買い、止まり木亭で仲間を集め、静寂派の神殿で倒れた仲間を蘇らせる。酒場の噂、祭りの夜、坑口館の依頼と預金。</p>
-        <p>家を買えば台所や鍛冶場、実験室を増築して、料理や鍛冶、魔法の薬作りもできます。</p>
-      </div>
-    </div>
-
-    <div class="feature">
-      <figure><img src="img/cooking.png" alt="迷宮の中。拾ったものと擬音が浮かぶ" width="1280" height="720" loading="lazy"></figure>
-      <div>
-        <h3>腹が減っては <span class="cue" style="color:#ffb3c7">ぐぅ〜</span></h3>
-        <p>迷宮では腹が減ります。焚き木で火を熾し、拾った茸や魔物の肉で野営の料理を。上出来なら少しだけ力がつき、焦がせば「プスプス…」。</p>
-        <p>放っておいた料理は傷みます。くさったものを食べると、お腹を下します。</p>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <h2>画面から</h2>
-    <p class="lead">開発中の画面です。</p>
+    <figure>
+      <img src="img/make.png" alt="仲間を作る画面。能力値と生まれを決める" width="1280" height="720" loading="lazy">
+      <figcaption>仲間を作る。サイコロで能力値をふり、生まれと育ちを決める</figcaption>
+    </figure>
+    <p>街では、宿に泊まり、市場で食材を買い、神殿で倒れた仲間を蘇らせる。お金が貯まれば、壁下区の長屋の一間を買える。台所で料理を作り、物置に荷を預け、寝床で眠る。迷宮では腹が減るので、焚き火を熾して野営の料理を作る。</p>
+    <p>手ごたえは、その場に浮かぶ擬音の文字で表す。扉は <span class="cue" style="color:#cfd8ff">ギィ…</span>、解錠は <span class="cue" style="color:#ffd166">カチリ</span>、爆発の罠は <span class="cue">どかーーん!</span>。効果音も曲もない。文字が鳴る。</p>
     <div class="gallery">
-      <img src="img/make.png" alt="キャラクターを作る画面。サイコロで能力値をふる" width="1280" height="720" loading="lazy">
-      <img src="img/traps.png" alt="罠がいくつも動く通路。棘、煙、振り子の擬音が浮かぶ" width="1280" height="720" loading="lazy">
-      <img src="img/bless.png" alt="神殿で加護を願う" width="1280" height="720" loading="lazy">
+      <img src="img/trap.png" alt="爆発の罠「どかーーーーん」" width="1280" height="720" loading="lazy">
+      <img src="img/cooking.png" alt="迷宮で拾ったものと擬音" width="1280" height="720" loading="lazy">
+      <img src="img/bless.png" alt="神殿で加護を願う「キラキラ フワァ〜〜〜」" width="1280" height="720" loading="lazy">
     </div>
   </section>
+
+  <div class="closing reveal">
+    <div class="two">
+      <span class="who">ふたり</span>
+      <p>いくつめかの夜。帰りの階段をのぼりながら、片方が言った。</p>
+      <p class="say">「色布、買おうか。何色がいい」</p>
+      <p>坑口を出ると、ちょうど夜の鐘が鳴りはじめた。ふたりは、根札のある軒下へ駆けこんで、街が動くのを並んで眺めた。</p>
+    </div>
+    <p>行くあてがないなら、<wbr>下へ。</p>
+    <p class="small">燐晶を持ち帰れ。通路は毎夜、変わる。</p>
+  </div>
 
   <section class="about">
-    <h2>このゲームについて</h2>
-    <p>Urbs Labyrinthi は、実験的なコードを書き溜めていくための作品です。配布や販売、リリースを目的としておらず、ダウンロードの窓口もありません。動作や内容について、保証やサポートはありません。</p>
-    <p>ソースコードと開発の記録は GitHub にあります。</p>
+    <p><b>このゲームについて</b></p>
+    <p>Urbs Labyrinthi は、Godot 4 で作っている実験中のアクションRPGです。実験的なコードを書き溜めていくための作品で、配布や販売、リリースを目的としておらず、ダウンロードの窓口もありません。動作や内容について、保証やサポートはありません。</p>
     <a class="btn" href="https://github.com/xex-ken-xex/UrbsLabyrinthi">GitHub のリポジトリ</a>
   </section>
 
@@ -383,5 +500,20 @@
   </div>
 </footer>
 
+<script>
+  (function () {
+    var els = document.querySelectorAll(".reveal");
+    if (!("IntersectionObserver" in window)) {
+      els.forEach(function (e) { e.classList.add("on"); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("on"); io.unobserve(en.target); }
+      });
+    }, { rootMargin: "0px 0px -10% 0px" });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+</script>
 </body>
 </html>
