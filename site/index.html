@@ -83,6 +83,8 @@
     text-shadow: 0 2px 24px rgba(0,0,0,.8);
   }
   .hero .sub { color: #b9c9e8; margin: 6px 0 0; font-size: clamp(15px, 2.4vw, 20px); }
+  .hero .dl { position: absolute; top: 16px; right: 18px; z-index: 2; padding: 6px 14px; border: 1px solid var(--amber); border-radius: 4px; color: var(--gold); font-size: 13px; text-decoration: none; background: rgba(9,11,19,.55); }
+  .hero .dl:hover { background: rgba(240,180,74,.2); }
   .scroll { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 13px; text-decoration: none; }
 
   /* ---------- 本文 ---------- */
@@ -200,6 +202,12 @@
   .about p { margin: 0 0 10px; }
   .btn { display: inline-block; margin-top: 6px; padding: 8px 18px; border: 1px solid var(--amber); border-radius: 4px; color: var(--gold); text-decoration: none; }
   .btn:hover { background: rgba(240,180,74,.15); }
+  .download { text-align: center; font-family: "M PLUS 1p", sans-serif; font-size: 15px; line-height: 1.8; }
+  .download h2 { font-family: "Shippori Mincho", serif; }
+  .download .btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 14px; margin: 18px 0 14px; }
+  .download .btn { margin: 0; }
+  .download .btn.main { background: rgba(240,180,74,.18); font-weight: bold; padding: 12px 26px; }
+  .download .small { color: var(--muted); font-size: 13px; }
 
   footer { border-top: 1px solid #1a2034; color: var(--muted); font-family: "M PLUS 1p", sans-serif; font-size: 12px; line-height: 1.7; padding: 32px 16px 48px; }
   footer .in { max-width: 860px; margin: 0 auto; }
@@ -238,6 +246,7 @@
     <h1>Urbs Labyrinthi</h1>
     <p class="sub">迷宮都市ヴェルガ・ノクス</p>
   </div>
+  <a class="dl sans" href="#download">ダウンロード</a>
   <a class="scroll sans" href="#hole">▼ 物語を読む</a>
 </header>
 
@@ -469,9 +478,19 @@
     <p class="small">燐晶を持ち帰れ。通路は毎夜、変わる。</p>
   </div>
 
+  <section class="download reveal" id="download">
+    <h2>ダウンロード</h2>
+    <div class="btns">
+      <a class="btn main" href="https://github.com/xex-ken-xex/UrbsLabyrinthi/releases/latest/download/UrbsLabyrinthi-setup.exe">Windows 版(インストーラー)</a>
+      <a class="btn" href="https://github.com/xex-ken-xex/UrbsLabyrinthi/releases/latest/download/UrbsLabyrinthi-windows.zip">Windows 版(ZIP)</a>
+      <a class="btn" href="https://github.com/xex-ken-xex/UrbsLabyrinthi/releases/latest/download/UrbsLabyrinthi-linux.zip">Linux 版(ZIP)</a>
+    </div>
+    <p class="small">インストーラーは自分のユーザーにだけ入れるので、管理者の権限は要りません。署名のない実行ファイルなので、Windows の警告が出たら「詳細情報」から「実行」を選んでください。ZIP は展開して、中の UrbsLabyrinthi.exe(Linux は UrbsLabyrinthi.x86_64)を起動します。一度入れれば、起動したときに新しい版へ自動で更新します。<br><a href="https://github.com/xex-ken-xex/UrbsLabyrinthi/releases/latest">ファイルの一覧と SHA256</a></p>
+  </section>
+
   <section class="about">
     <p><b>このゲームについて</b></p>
-    <p>Urbs Labyrinthi は、Godot 4 で作っている実験中のアクションRPGです。実験的なコードを書き溜めていくための作品で、配布や販売、リリースを目的としておらず、ダウンロードの窓口もありません。動作や内容について、保証やサポートはありません。</p>
+    <p>Urbs Labyrinthi は、Godot 4 で作っている実験中のアクションRPGです。実験的なコードを書き溜めていくための作品で、販売を目的としていません。ダウンロードできるのは実験中の版そのままです。動作や内容について、保証やサポートはありません。</p>
     <a class="btn" href="https://github.com/xex-ken-xex/UrbsLabyrinthi">GitHub のリポジトリ</a>
   </section>
 
