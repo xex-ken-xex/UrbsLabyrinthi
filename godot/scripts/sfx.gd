@@ -210,6 +210,12 @@ const CUES := {
 	"magic_pick": ["シャラーン", Color(0.85, 0.72, 1.0), 1.3],
 	"feather": ["ふわり", Color(0.78, 0.88, 1.0)],
 	"rearrange": ["ゴゴゴ…", Color(0.85, 0.75, 0.6), 1.7],
+	"cart_run": ["ガタンゴトン…", Color(0.85, 0.7, 0.55), 1.3],
+	"cart_crash": ["ガシャーン!", Color(1.0, 0.65, 0.4), 1.4],
+	"stone_tilt": ["グラッ", Color(0.75, 0.9, 1.0)],
+	"plunge": ["ザブン!", Color(0.6, 0.85, 1.0), 1.4],
+	"skull_glint": ["ギラッ", Color(1.0, 0.35, 0.3)],
+	"skull_gaze": ["ギンッ!", Color(1.0, 0.3, 0.25), 1.3],
 }
 ## 擬音ごとの動き方(無いものは pop)
 const STYLE := {
@@ -225,7 +231,7 @@ const STYLE := {
 	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
 	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
 	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce", "wade": "bounce",
-	"abyss": "stretch", "rope": "bounce", "seat": "soft", "slip": "snap", "heat": "wave", "magic_pick": "stretch", "feather": "soft", "rearrange": "shake",
+	"abyss": "stretch", "rope": "bounce", "seat": "soft", "slip": "snap", "heat": "wave", "magic_pick": "stretch", "feather": "soft", "rearrange": "shake", "cart_run": "roll", "cart_crash": "slam", "stone_tilt": "pop", "plunge": "slam", "skull_glint": "pop", "skull_gaze": "snap",
 	"t_coin": "pop", "t_sell": "bounce", "t_whisper": "wave", "t_pray": "stretch", "t_write": "bounce", "t_peel": "snap",
 	"t_geta": "bounce", "t_sway": "wave", "t_fortune": "soft", "t_bell": "bounce", "t_anvil": "slam", "t_door": "stretch",
 	"t_hush": "stretch", "t_chatter": "bounce", "t_pen": "bounce", "t_bustle": "bounce", "t_slide": "snap", "t_lantern": "wave",

@@ -1812,7 +1812,8 @@ func open_trap_menu(t: Dictionary) -> void:
 	var who := party_best_char("lock")
 	var fx := String(t.get("fx", ""))
 	var fx_note := {"pit": "踏むと床が抜けて、下の階へ落ちる。", "teleport": "踏むと、同じ層のどこかへ引き込まれる。", "cage": "踏むと格子が落ち、部屋の出口が閉ざされる。",
-		"teleport_one": "踏んだ一人だけが、同じ層のどこかへ飛ばされる。"}
+		"teleport_one": "踏んだ一人だけが、同じ層のどこかへ飛ばされる。", "cart": "踏むと、軌条の先から鉱車が走ってくる。", "sink": "踏んで一拍おいて石が沈む。すぐ降りれば落ちない。",
+		"gaze": "視線の先に立つと目が光り、一拍おいて射すくめられる。走り抜けるか、転がって避ける。"}
 	var note := "%s(%s)。%s%s" % [String(t["trigger"]) if t.has("trigger") else "", SEVERITY_JP.get(String(t["severity"]), ""), String(fx_note.get(fx, "")), String(t.get("effect", ""))]
 	var opts: Array = [["disarm", "解除する", "%sの盗賊道具 %+d / 難易度 %d。大きく外すと発動する。" % [who.name, who.lock_bonus(), int(t["disarm_dc"])]]]
 	if TrapFx.MOVING.has(fx):
