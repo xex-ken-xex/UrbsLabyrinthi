@@ -70,12 +70,12 @@ func update(delta: float) -> void:
 		else:
 			stop_rest("目を覚ました。%d時間ほど休んだ。" % int(round((minutes - rest_from) / 60.0)))
 	elif not was_night and is_night():
+		main.log_msg(BELL, Color("d8c8a0"))
+		main.recombine_at_night()      # 鐘のあと、迷宮の一画が組み替わる(ゴゴゴ…)
 		if exhaling():
 			_exhale()
 		elif not resting:
 			_nightfall()
-		else:
-			main.log_msg(BELL, Color("d8c8a0"))
 	elif was_night and not is_night() and main.current != null and main.current.exhale:
 		main.log_msg("夜が明けた。階段を塞いでいた吐息が、引いていく。", Color("e8dcb0"))
 
@@ -292,7 +292,6 @@ func _exhale() -> void:
 	fl.spawner.queued += Balance.EXHALE_BURST
 	_queue_t = 0.0
 	Sfx.cue(fl, main.leader().position, "exhale")
-	main.log_msg(BELL, Color("d8c8a0"))
 	main.log_msg("日が落ちた。今夜は吐く夜だ。迷宮が、魔物を吐き出した。", Color("ff8a6a"))
 	main.log_msg("階段は吐息に塞がれた。夜明けまで、この層から出られない。(%d組が湧き出してくる)" % Balance.EXHALE_BURST, Color("ff9a8a"))
 	if not PhosFlow.layer_info(fl.layer_no + 1).is_empty():
@@ -315,7 +314,6 @@ func _nightfall() -> void:
 	var fl: FloorInstance = main.current
 	var m := fl.map
 	var pc := m.cell_of(main.leader().position)
-	main.log_msg(BELL, Color("d8c8a0"))
 	main.log_msg("日が落ちた。吐息が満ちて、意識が遠のく…", Color("b8a8e8"))
 	var at: Vector2 = main.random_room_pos(fl, m.room_at[m.idx(pc.x, pc.y)])
 	if at.x >= INF:
