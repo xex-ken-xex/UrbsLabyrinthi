@@ -100,6 +100,25 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
     </section>
 
     <section class="panel exp">
+      <h2>ノード(実験): 動きをノードのグラフで書く</h2>
+      <div class="row">
+        <div class="narrow"><label for="engine">描く仕組み</label><select id="engine"><option value="port">写し(cue_text.gd と同じ式)</option><option value="node">ノードのグラフ</option></select></div>
+        <button id="compareBtn" class="narrow" title="いまの発生点を、写しとノードの両方で描いて、違う画素の数を数える">写しと比べる</button>
+      </div>
+      <p class="status" id="compareStatus"></p>
+      <label for="graph" style="margin-top:6px">いまの動き方 <b id="graphStyle">pop</b> のグラフ(JSON。直して「適用」)</label>
+      <textarea id="graph" style="min-height:140px; font-family: ui-monospace, monospace; font-size: 11px"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="applyGraph" class="primary">適用</button>
+        <button id="resetGraph">元に戻す</button>
+        <button id="saveGraph" title="直したグラフをこのページに残す(Claude も読める)">グラフを残す</button>
+        <span class="status" id="graphStatus"></span>
+      </div>
+      <details style="margin-top:8px"><summary>ノードの種類</summary><div id="nodeRef" style="font-size:12px; columns: 2; column-gap: 12px"></div></details>
+      <p class="hint">props の x y sx sy rot alpha spread が性質。入力は 数 / ノード id / 入れ子。t px dx dy i n seed big g は id だけで引ける。copies は残像(fly)。</p>
+    </section>
+
+    <section class="panel exp">
       <h2>実験(ゲームにはまだ無い)</h2>
       <label><input type="checkbox" id="grapheme" checked> 濁点(U+3099)を前の字にくっつけて一字として動かす</label>
       <label style="margin-top:6px" for="alt">音節ごとに向きを変える 強さ <span id="altV">0</span></label>
@@ -143,6 +162,7 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
 
 <script src="cues.js"></script>
 <script src="cue_lab.js"></script>
+<script src="cue_nodes.js"></script>
 <script>
 (function () {
   "use strict";
@@ -276,7 +296,7 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
       const lf = L.life(em.style, em.size, chars.length);
       if (t < 0 || t >= lf) continue;
       // Sfx.cue: 位置は pos + (0, -22)、文字の大きさは 14 × size、big は size >= 2
-      L.drawWord(ctx, chars, em.style, t, lf, 14 * em.size, rgb(em.color), em.seed, em.size >= 2, { x: em.x, y: em.y - 22 }, { x: em.dir[0], y: em.dir[1] }, opts);
+      drawOne(ctx, $("engine").value, chars, em, t, lf, opts);
     }
     ctx.restore();
     if (emitters.length === 0) {
@@ -284,7 +304,63 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
       ctx.fillText("舞台を押して、擬音の発生点を置く", stage.width / 2, stage.height / 2); ctx.textAlign = "start";
     }
   }
-  for (const id of ["alt", "altBy", "grapheme"]) $(id).addEventListener("input", () => { $("altV").textContent = $("alt").value; if (!playing) draw(); });
+  for (const id of ["alt", "altBy", "grapheme", "engine"]) $(id).addEventListener("input", () => { $("altV").textContent = $("alt").value; if (!playing) draw(); });
+
+  // ---- ノードのグラフ ----
+  const N = window.CueNodes;
+  let graphs = {};                        // 直したグラフ(動き方 → グラフ)。無ければ N.GRAPHS
+  function graphFor(style) { return graphs[style] || N.GRAPHS[style] || N.GRAPHS.pop; }
+  function drawOne(c, engine, chars, em, t, lf, opts) {
+    const col = rgb(em.color), org = { x: em.x, y: em.y - 22 }, dir = { x: em.dir[0], y: em.dir[1] };
+    if (engine === "node") {
+      try { N.drawWordGraph(c, chars, graphFor(em.style), t, lf, 14 * em.size, col, em.seed, em.size >= 2, org, dir, L.FONT); }
+      catch (e) { setStatus("graphStatus", "グラフの誤り: " + e.message, "warn"); }
+    } else L.drawWord(c, chars, em.style, t, lf, 14 * em.size, col, em.seed, em.size >= 2, org, dir, opts);
+  }
+  function showGraph() {
+    const st = $("style").value;
+    $("graphStyle").textContent = st + (graphs[st] ? "(直したもの)" : "");
+    $("graph").value = JSON.stringify(graphFor(st), null, 1);
+  }
+  $("style").addEventListener("input", showGraph);
+  $("applyGraph").addEventListener("click", () => {
+    try { graphs[$("style").value] = JSON.parse($("graph").value); setStatus("graphStatus", "適用した(このページを開いている間だけ)", "ok"); showGraph(); if (!playing) draw(); }
+    catch (e) { setStatus("graphStatus", "JSON の誤り: " + e.message, "warn"); }
+  });
+  $("resetGraph").addEventListener("click", () => { delete graphs[$("style").value]; showGraph(); setStatus("graphStatus", "元に戻した", "ok"); if (!playing) draw(); });
+  $("saveGraph").addEventListener("click", async () => {
+    if (!db) { setStatus("graphStatus", "ここでは残せない", "warn"); return; }
+    const st = $("style").value;
+    try { JSON.parse($("graph").value); await db.collection("graphs").doc(st).set({ style: st, json: $("graph").value, at: new Date().toISOString() }); setStatus("graphStatus", "グラフを残した", "ok"); }
+    catch (e) { setStatus("graphStatus", "残せない: " + (e.message || e.code), "warn"); }
+  });
+  $("compareBtn").addEventListener("click", () => {
+    if (!emitters.length) { setStatus("compareStatus", "発生点を置いてから", "warn"); return; }
+    const W = stage.width, H = stage.height;
+    const ca = document.createElement("canvas"), cb = document.createElement("canvas"); ca.width = cb.width = W; ca.height = cb.height = H;
+    const A = ca.getContext("2d"), B = cb.getContext("2d");
+    const split = $("grapheme").checked ? L.splitGrapheme : L.splitPlain;
+    let diff = 0, drawn = 0, frames = 0;
+    const end = totalLife();
+    for (let tt = 0.02; tt < end; tt += end / 16) {
+      for (const [c, eng] of [[A, "port"], [B, "node"]]) {
+        c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); c.scale(SCALE, SCALE);
+        for (const em of emitters) { const t = tt - em.delay; const chars = split(em.text); const lf = L.life(em.style, em.size, chars.length); if (t >= 0 && t < lf) drawOne(c, eng, chars, em, t, lf, { alt: 0 }); }
+      }
+      const da = A.getImageData(0, 0, W, H).data, dbb = B.getImageData(0, 0, W, H).data;
+      for (let k = 0; k < da.length; k += 4) {
+        if (da[k + 3] > 0 || dbb[k + 3] > 0) drawn++;
+        const dd = Math.max(Math.abs(da[k] - dbb[k]), Math.abs(da[k + 1] - dbb[k + 1]), Math.abs(da[k + 2] - dbb[k + 2]), Math.abs(da[k + 3] - dbb[k + 3]));
+        if (dd > 8) diff++;
+      }
+      frames++;
+    }
+    setStatus("compareStatus", frames + " コマを比べて、描いた " + drawn + " 画素のうち違うのは " + diff + " 画素" + (diff === 0 ? "(同じ)" : ""), diff === 0 ? "ok" : "warn");
+  });
+  (function renderNodeRef() {
+    const box = $("nodeRef");
+    for (const k of Object.keys(N.NODES)) { const d = document.createElement("div"); d.innerHTML = "<code></code> "; d.querySelector("code").textContent = k + (N.NODES[k].ins ? "(" + N.NODES[k].ins.join(", ") + ")" : ""); d.appendChild(document.createTextNode(N.NODES[k].label)); box.appendChild(d); }
+  })();
 
   // ---- 帳面(db) ----
   let db = null, notes = {}, customs = [];
@@ -318,6 +394,10 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
     db.collection("notes").onSnapshot((snap) => { notes = {}; for (const d of snap.docs) notes[d.id] = d.data(); renderNotes(); loadNoteInto(); },
       (e) => setStatus("noteStatus", "帳面を読めない: " + e.code, "warn"));
     db.collection("custom").orderBy("at", "desc").limit(100).onSnapshot((snap) => { customs = snap.docs.map((d) => d.data()); renderNotes(); }, () => {});
+    db.collection("graphs").onSnapshot((snap) => {
+      for (const d of snap.docs) { try { graphs[d.id] = JSON.parse(d.data().json); } catch (e) { /* 壊れたものは飛ばす */ } }
+      showGraph(); if (!playing) draw();
+    }, () => {});
   }
   const safeId = (k) => k.replace(/[^A-Za-z0-9_.~:@+-]/g, (ch) => "u" + ch.codePointAt(0).toString(16));
   $("saveNote").addEventListener("click", async () => {
@@ -346,6 +426,7 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
   // ---- 起動 ----
   renderList();
   setCurrent(current);
+  showGraph();
   document.fonts.ready.then(() => draw());
   draw();
   initDb();
