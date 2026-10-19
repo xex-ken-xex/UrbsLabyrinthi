@@ -8,6 +8,8 @@
 
 ゲーム本体の説明は [`godot/README.md`](godot/README.md) にあります。
 
+紹介ページ(`site/`)は GitHub Pages に出しています(`.github/workflows/pages.yml`。main で `site/` が変わると出し直す)。
+
 ## ライセンス
 
 このリポジトリには、作者が書いた部分と、第三者のライセンスで公開されている素材が含まれています。
