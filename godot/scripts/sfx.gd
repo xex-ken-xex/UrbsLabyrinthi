@@ -209,6 +209,7 @@ const CUES := {
 	"heat": ["ジリジリ…", Color(1.0, 0.6, 0.3)],
 	"magic_pick": ["シャラーン", Color(0.85, 0.72, 1.0), 1.3],
 	"feather": ["ふわり", Color(0.78, 0.88, 1.0)],
+	"rearrange": ["ゴゴゴ…", Color(0.85, 0.75, 0.6), 1.7],
 }
 ## 擬音ごとの動き方(無いものは pop)
 const STYLE := {
@@ -224,7 +225,7 @@ const STYLE := {
 	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
 	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
 	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce", "wade": "bounce",
-	"abyss": "stretch", "rope": "bounce", "seat": "soft", "slip": "snap", "heat": "wave", "magic_pick": "stretch", "feather": "soft",
+	"abyss": "stretch", "rope": "bounce", "seat": "soft", "slip": "snap", "heat": "wave", "magic_pick": "stretch", "feather": "soft", "rearrange": "shake",
 	"t_coin": "pop", "t_sell": "bounce", "t_whisper": "wave", "t_pray": "stretch", "t_write": "bounce", "t_peel": "snap",
 	"t_geta": "bounce", "t_sway": "wave", "t_fortune": "soft", "t_bell": "bounce", "t_anvil": "slam", "t_door": "stretch",
 	"t_hush": "stretch", "t_chatter": "bounce", "t_pen": "bounce", "t_bustle": "bounce", "t_slide": "snap", "t_lantern": "wave",

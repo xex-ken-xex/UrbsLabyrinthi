@@ -1942,20 +1942,21 @@ func _test_time(main: Node) -> void:
 	# 夜: 起きていると、どこかの部屋へ放り出され、朝になる(吐く夜でない日)
 	var ex0: bool = fl.exhale
 	fl.exhale = false
-	var room0: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(h0.position).x, fl.map.cell_of(h0.position).y)]
+	var pos_n: Vector2 = h0.position
 	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + Balance.NIGHT_MIN - 0.01
 	await _step(3)
+	fl = main.current     # 夜の鐘のあと、階は次の夜の形に替わる
 	var room1: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
-	check(not dt.is_night() and dt.phase_name() == "朝" and room1 >= 0 and room1 != room0, "夜を迎えると、別の部屋へ放り出され、朝になる (部屋 %d → %d)" % [room0, room1])
+	check(not dt.is_night() and dt.phase_name() == "朝" and room1 >= 0 and main.leader().position.distance_to(pos_n) > Balance.CELL, "夜を迎えると、別の部屋へ放り出され、朝になる (部屋 %d)" % room1)
 	# 吐く夜: 日が落ちると魔物が大量に湧き、夜明けまで階段が塞がる(放り出されない)
 	fl.exhale = true
 	var wm := Balance.WANDER_CHANCE
 	Balance.WANDER_CHANCE = 0.0
-	var room2: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
+	var pos2: Vector2 = main.leader().position
 	dt.minutes = floorf(dt.minutes / 1440.0) * 1440.0 + Balance.NIGHT_MIN - 0.01
 	await _step(3)
-	var room3: int = fl.map.room_at[fl.map.idx(fl.map.cell_of(main.leader().position).x, fl.map.cell_of(main.leader().position).y)]
-	check(dt.is_night() and dt.exhaling() and room3 == room2, "吐く夜に日が落ちても、放り出されない")
+	fl = main.current
+	check(dt.is_night() and dt.exhaling() and main.leader().position.distance_to(pos2) < Balance.CELL * 2.0, "吐く夜に日が落ちても、放り出されない")
 	check(dt._alive_wanderers() + fl.spawner.queued >= Balance.EXHALE_BURST, "吐く夜に日が落ちると、魔物が大量に湧く (出た %d組、順番待ち %d組)" % [dt._alive_wanderers(), fl.spawner.queued])
 	for i in 200:
 		dt._drain_queue(0.1)

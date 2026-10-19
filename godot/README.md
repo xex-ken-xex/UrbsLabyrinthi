@@ -12,6 +12,7 @@
 
 - 街へ戻ると、持ち帰った燐晶の3割が税になり、残りが預け金(銀貨)になる。預け金で装備や薬、呪文書を買う。
 - 迷宮の通路は、毎夜組み替わる(縦穴、階段の候補地、骨組みの道と大部屋は同じ場所。階段は候補地を夜ごとに巡り、一画の通路と小部屋は静かな夜に4割、吐く夜に全部が組み替わる)。7夜で一巡する。
+- 迷宮の中で日が落ちる(夜の鐘が鳴る)と、いまいる階がその場で次の夜の形に組み替わる。魔物・燐晶・罠・落ちている物は次の夜のものになり、足もとに置いた物と、組み替わらなかった所の地図は残る。見える所が組み替われば **ゴゴゴ…** と小さな揺れ、見えない所ならログだけ。ほかの階は、次に入ったとき次の夜の形で作り直す。夜の性格(静か・吐く)は、潜った日のまま。
 - 全滅すると、未査定の燐晶と、持ち物と装備(武器・防具も)を全部失う(預け金は残る)。個別に倒れた仲間は、神殿で蘇らせる。
 - 第三節と第五節の夜は「吐く夜」。その日の迷宮で日が落ちると、迷宮が魔物を大量に吐き出し(群れが5組、その後もワンダリングが4倍出やすく、上限10組)、夜明けまで階段が塞がる。ほかの夜と違い、吐息に呑まれて放り出されはしない。
 - 宿屋でセーブできる。街へ着くたびに自動でもセーブされる。
@@ -369,6 +370,7 @@ godot --headless --path godot -s res://tests/flow_test.gd                  # 燐
 godot --headless --path godot -s res://tests/content_test.gd               # 迷宮の中身(部屋の描写、遺体の理由と等級、水ぎわの自生物)
 godot --headless --path godot -s res://tests/nest_test.gd                  # 迷宮の中身 その2(見張り、主の間、罠の場所の理由)
 godot --headless --path godot -s res://tests/world_test.gd                 # 迷宮の中身 その3(地図屋の印、落書き、野営、夜の鐘、水鏡の刻み、空の座)
+godot --headless --path godot -s res://tests/night_shift_test.gd           # 夜の鐘のあと、一画が組み替わる(ゴゴゴ…、置いた物と地図が残る、記録)
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/ui_shots.gd -- /tmp   # 各画面を撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/cue_shots.gd -- /tmp  # 擬音の動き方を並べて撮る
 xvfb-run -a godot --path godot --rendering-driver opengl3 -s res://tests/abyss_shot.gd -- /tmp # 縦穴を覗く・縄梯子・迷宮の断面を撮る

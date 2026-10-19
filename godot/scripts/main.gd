@@ -29,6 +29,7 @@ var fire_until := -1.0            # 野営の火が消える時刻(迷宮の時�
 var _kill_cue_ms := -1000            # 魔物が倒れた擬音を、最後に出した時刻(間引く)
 var _jot_cue_ms := 0               # 冒険日記帳に書き足す擬音(サラサラ)を、続けて出さない
 var _magic_cue_ms := 0
+var night_shift := 0               # この潜行で迎えた夜の数。夜の鐘のたびに、迷宮は次の夜の形に組み替わる
 var _menu_fx: Array = []           # 持ち物の画面で起きた手ごたえ(料理、食べる)。閉じたら出す [擬音, Hero]
 var pending_rest := false         # 持ち物の「休む」を押した(閉じたら休み始める)
 var dtime: DungeonTime = null      # 迷宮の中の時間(闘技場では使わない)
@@ -290,7 +291,7 @@ func save_dive() -> bool:
 		hs.append({"party": gs.party.find(h.ch), "pos": h.position, "buffs": h.buffs.duplicate(true), "rust": h.rust, "last_stand": h.last_stand})
 	var d := {"version": DiveSave.VERSION, "day": gs.day, "floor": current.floor_no, "floor_label": String(current.map.data["meta"].get("floor_label", "")), "floors": fls, "heroes": hs,
 		"active": gs.party.find(leader().ch), "bag": bag_crystal.duplicate(), "light_t": light_t, "insured": dive_insured,
-		"minutes": dtime.minutes, "resting": dtime.resting, "rest_end": dtime.rest_end, "rest_from": dtime.rest_from, "fire_until": fire_until}
+		"minutes": dtime.minutes, "nights": night_shift, "resting": dtime.resting, "rest_end": dtime.rest_end, "rest_from": dtime.rest_from, "fire_until": fire_until}
 	if not gs.save() or not DiveSave.write(d):
 		return false
 	log_msg("記録をつけた(%s、%s)。" % [ZaCalendar.label(gs.day), current.map.data["meta"].get("floor_label", "")], Color("9be29b"))
@@ -346,6 +347,7 @@ func resume_dive(d: Dictionary) -> void:
 	dtime.rest_end = float(d.get("rest_end", 0.0))
 	dtime.rest_from = float(d.get("rest_from", 0.0))
 	fire_until = float(d.get("fire_until", -1.0))
+	night_shift = int(d.get("nights", 0))
 	var fls: Dictionary = d.get("floors", {})
 	for n in fls:
 		var fl := _make_floor(int(n))
@@ -496,6 +498,7 @@ func start_day() -> void:
 	_trace("start_day 日%d" % gs.day)
 	DiveSave.clear()      # 前の夜の迷宮の記録は、もう使わない
 	_clear_dungeon()
+	night_shift = 0
 	_clear_bag()
 	light_t = 0.0
 	active = 0
@@ -538,7 +541,7 @@ func _make_floor(n: int) -> FloorInstance:
 	var fl: FloorInstance = floors.get(n)
 	if fl != null:
 		return fl
-	fl = FloorInstance.create(floor_path(n, gs.day))
+	fl = FloorInstance.create(floor_path(n, gs.day + night_shift))
 	if fl == null:
 		push_error("層を読めない: %d" % n)
 		return null
@@ -553,6 +556,96 @@ func _make_floor(n: int) -> FloorInstance:
 	LayerBoss.setup_floor(fl, gs)
 	floors[n] = fl
 	return fl
+
+## 夜の鐘のあと、迷宮の一画が組み替わる(生成器の夜の組み換え。静かな夜は一画ごとに4割、吐く夜は全部)。
+## 次の夜の書き出しに移る。組み替わらない一画は前の夜と同じ形なので、マスの種類が変わった所が組み替わった所。
+## いまの階はその場で次の夜の形に替わり、中身(魔物・燐晶・罠)も入れ替わる。置いた物と、組み替わらなかった所の地図は残る。
+## ほかの階は、次に入ったときに次の夜の形で作る。夜の性格(静か・吐く)は、いまの階のまま
+func recombine_at_night() -> void:
+	if arena != null or current == null or dtime == null:
+		return
+	var old: FloorInstance = current
+	var n := old.floor_no
+	night_shift += 1
+	var fresh := FloorInstance.create(floor_path(n, gs.day + night_shift))
+	if fresh == null:
+		return
+	var om := old.map
+	var nm := fresh.map
+	var changed := 0
+	var seen_sum := Vector2.ZERO
+	var seen_n := 0
+	for i in om.tiles.size():
+		if i >= nm.tiles.size():
+			break
+		if om.tiles[i] != nm.tiles[i]:
+			changed += 1
+			if om.visible[i] == 1:
+				seen_sum += om.center_of(Vector2i(i % om.w, floori(float(i) / om.w)))
+				seen_n += 1
+		elif om.explored[i] == 1:
+			nm.explored[i] = 1       # 組み替わらなかった所の地図は、覚えている
+	# ほかの階は作り直す(次に入ったとき、次の夜の形で)
+	for k in floors.keys():
+		if k != n:
+			floors[k].queue_free()
+	floors.clear()
+	if changed == 0:
+		fresh.queue_free()
+		floors[n] = old
+		return
+	fresh.exhale = old.exhale
+	for e in old.ground.entries:
+		if String(e.get("kind", "")) == "item" and e.get("dropped", false):
+			var c := nm.cell_of(e["pos"])
+			var wc := nm.nearest_walkable(c)
+			if wc.x >= 0:
+				fresh.ground.add_item(e["pos"] if wc == c else nm.center_of(wc), String(e["id"]), int(e.get("qty", 1)))
+				fresh.ground.entries[-1]["dropped"] = true
+	var keep: Array = []
+	for h in heroes:
+		keep.append(h.position)
+	floors[n] = fresh
+	fresh.message.connect(_on_floor_message)
+	fresh.shake.connect(func(v: float): _shake = maxf(_shake, v))
+	fresh.enemy_killed.connect(_on_enemy_killed)
+	fresh.enemy_seen.connect(_on_enemy_seen)
+	fresh.stat.connect(_on_floor_stat)
+	fresh.darkened.connect(_refresh_view)
+	fresh.ground_picked.connect(_on_ground_picked)
+	fresh.boss_fallen.connect(_on_boss_fallen)
+	LayerBoss.setup_floor(fresh, gs)
+	boss_fx.stop()
+	if old.get_parent() == self:
+		remove_child(old)
+	old.queue_free()
+	current = fresh
+	add_child(fresh)
+	move_child(fresh, 0)
+	fresh.heroes = heroes
+	fresh.leader = leader()
+	for h in heroes:
+		h.game_floor = fresh
+	var lc := nm.cell_of(leader().position)
+	var lt := nm.tiles[nm.idx(lc.x, lc.y)] if nm.in_bounds(lc.x, lc.y) else -1
+	if lt == FloorMap.ROOM or lt == FloorMap.CORR:
+		for i in heroes.size():
+			var hc := nm.cell_of(keep[i])
+			var wc := nm.nearest_walkable(hc)
+			heroes[i].position = keep[i] if wc == hc else nm.center_of(wc)
+	else:
+		var wc2 := nm.nearest_walkable(lc)
+		if wc2.x >= 0:
+			place_party(nm.center_of(wc2))
+	trail = [leader().position]
+	_last_cell = Vector2i(-99, -99)
+	_refresh_view()
+	if seen_n > 0:
+		Sfx.cue(fresh, seen_sum / seen_n, "rearrange")     # 見えている所が組み替わった
+		_shake = maxf(_shake, 0.35)
+		log_msg("ゴゴゴ…と岩が動き、まわりの通路が組み替わった。", Color("d8c0a0"))
+	else:
+		log_msg("遠くで、岩の擦れる低い音が続いた。この階のどこかの一画が組み替わったらしい。", Color("c8b8a0"))
 
 ## arrive: "up"(上り階段に着く)/ "down"(下り階段に着く)/ "rope"(縄梯子。at は縦穴の中心からの差)
 func enter_floor(n: int, arrive: String, at: Vector2i = Vector2i.ZERO) -> void:
@@ -1497,6 +1590,7 @@ func drop_item(id: String) -> String:
 	var at := lead.position + lead.facing * 16.0
 	current.ground.add_item(at, id, 1)
 	current.ground.entries[-1]["hold"] = true
+	current.ground.entries[-1]["dropped"] = true     # 夜に一画が組み替わっても、置いた物は残る
 	if inventory != null:
 		_menu_fx.append(["toss", lead, lead.facing * 16.0 + Vector2(0, -12)])     # 持ち物を閉じたら ポイ
 	else:
