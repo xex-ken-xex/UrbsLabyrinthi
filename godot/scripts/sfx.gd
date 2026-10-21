@@ -6,7 +6,10 @@ extends Node2D
 ##   shake 震え続ける / stretch 一文字ずつ伸びて出る(… や ー が間延びする) / soft ふわっと出て消える /
 ##   snap 横から素早く滑り込む / wave 波打つ /
 ##   drop 一文字ずつ上から落ちて、着地でつぶれる(ドスン) / roll 一文字ずつ転がってくる(ゴロゴロ) /
-##   fly 飛ぶ向きへ残像を引いて流れる(ヒュッ)。roll と fly は cue の dir の向きに動く
+##   fly 飛ぶ向きへ残像を引いて流れる(ヒュッ)。roll と fly は cue の dir の向きに動く /
+##   flutter 音節ごとに左右へ向きを変えて舞う(カラン、コロン) / stagger 一字ずつ大きく叩き込む(バリバリッ!) /
+##   tremble 震えが強くなっていく(ピキピキッ) / loom 字が散って漂う気配(ズモモ…)
+## 語末が ッ の語は最後の字が叩き込まれて止まり、ン の語は揺れ戻す(CueText の仕上げ)。ッ゙(濁点)は最上段の数個だけ。
 
 const CUES := {
 	"door": ["ギィ…", Color(0.9, 0.85, 0.75)],
@@ -14,7 +17,7 @@ const CUES := {
 	"unlock": ["カチリ", Color(1.0, 0.92, 0.6)],
 	"unlock_fail": ["ガチャガチャッ", Color(1.0, 0.6, 0.55)],
 	"trap": ["バチン!", Color(1.0, 0.45, 0.4)],
-	"trap_alarm": ["キィィィ!", Color(1.0, 0.7, 0.4)],
+	"trap_alarm": ["キィィィ!", Color(1.0, 0.7, 0.4), 1.2],
 	"trap_found": ["おや?", Color(1.0, 0.85, 0.5)],
 	"disarm": ["カチッ", Color(0.6, 0.9, 0.6)],
 	"disarm_fail": ["ガキッ", Color(1.0, 0.65, 0.5)],
@@ -26,7 +29,7 @@ const CUES := {
 	"crystal": ["キラッ", Color(0.75, 0.95, 1.0)],
 	"crystal_big": ["ゴロッ", Color(0.75, 0.95, 1.0)],
 	"stun": ["ピヨピヨ", Color(1.0, 0.95, 0.55)],
-	"sunder": ["バキッ", Color(1.0, 0.7, 0.45)],
+	"sunder": ["バキッ゙!", Color(1.0, 0.7, 0.45)],
 	"exhale": ["ゴオォォ…", Color(1.0, 0.55, 0.45)],
 	"sealed": ["ズン…", Color(0.85, 0.7, 0.95)],
 	"charge_full": ["キン", Color(1.0, 0.92, 0.55)],
@@ -44,7 +47,7 @@ const CUES := {
 	"heavy": ["ズシッ", Color(0.85, 0.75, 0.6)],
 	"toss": ["ポイ", Color(0.9, 0.9, 0.85), 0.8],
 	"bellyache": ["ギュルル…", Color(0.7, 0.85, 0.5)],
-	"charge_hit": ["ドンッ!", Color(1.0, 0.7, 0.4)],
+	"charge_hit": ["ドンッ゙!", Color(1.0, 0.7, 0.4)],
 	"charge_miss": ["ブンッ", Color(0.85, 0.85, 0.9)],
 	# 街(TownScreen._cue)。画面が広いので大きめ
 	"t_coin": ["チャリン", Color(1.0, 0.88, 0.45), 2.4],
@@ -106,21 +109,21 @@ const CUES := {
 	"lift": ["フワッ", Color(0.85, 0.85, 1.0)],
 	# 倒れる・起きる・強くなる・倒す・転がる
 	"down": ["バタッ", Color(1.0, 0.5, 0.45), 1.2],
-	"revive": ["ハッ!", Color(0.7, 1.0, 0.75)],
+	"revive": ["ハッ!", Color(0.7, 1.0, 0.75), 1.2],
 	"levelup": ["パァァッ", Color(0.6, 0.85, 1.0), 1.2],
 	"kill": ["ドサッ", Color(0.8, 0.75, 0.7)],
 	"dodge": ["サッ", Color(0.85, 0.9, 1.0), 0.85],
 	# 魔物の特徴(MonTraits)
-	"ambush": ["ガバッ!", Color(1.0, 0.5, 0.45), 1.2],
+	"ambush": ["ガバッ゙!", Color(1.0, 0.5, 0.45), 1.2],
 	"glue": ["ネチャッ", Color(0.75, 0.9, 0.55)],
 	"rise": ["ムクッ", Color(0.8, 0.85, 0.7)],
 	"mon_charge": ["ドドドッ", Color(1.0, 0.6, 0.45)],
 	"leap": ["ピョン", Color(0.75, 1.0, 0.7)],
-	"ram": ["ドカッ!", Color(1.0, 0.55, 0.4), 1.2],
+	"ram": ["ドカッ゙!", Color(1.0, 0.55, 0.4), 1.2],
 	"burst": ["パンッ!", Color(1.0, 0.7, 0.45), 1.2],
 	"emerge": ["スゥ…", Color(0.75, 0.75, 1.0)],
 	"sniff": ["クンクン", Color(0.9, 0.85, 0.7)],
-	"sentry": ["ピィーッ!", Color(1.0, 0.75, 0.45)],
+	"sentry": ["ピィーッ!", Color(1.0, 0.75, 0.45), 1.2],
 	# 冒険日記帳と実績
 	"jot": ["サラサラ", Color(0.85, 0.85, 0.75), 0.85],
 	"trophy": ["パンパカパーン!", Color(1.0, 0.85, 0.35), 1.3],
@@ -215,40 +218,40 @@ const CUES := {
 	"stone_tilt": ["グラッ", Color(0.75, 0.9, 1.0)],
 	"plunge": ["ザブン!", Color(0.6, 0.85, 1.0), 1.4],
 	"skull_glint": ["ギラッ", Color(1.0, 0.35, 0.3)],
-	"skull_gaze": ["ギンッ!", Color(1.0, 0.3, 0.25), 1.3],
+	"skull_gaze": ["ギンッ゙!", Color(1.0, 0.3, 0.25), 1.3],
 }
 ## 擬音ごとの動き方(無いものは pop)
 const STYLE := {
 	"door": "stretch", "door_secret": "shake", "unlock": "pop", "unlock_fail": "shake",
 	"trap": "slam", "trap_alarm": "shake", "trap_found": "soft", "disarm": "pop", "disarm_fail": "slam",
 	"corpse": "bounce", "drink": "pop", "stairs": "bounce", "search": "bounce", "rest": "bounce",
-	"crystal": "soft", "crystal_big": "roll", "stun": "wave", "sunder": "slam", "exhale": "shake", "sealed": "slam",
+	"crystal": "pop", "crystal_big": "roll", "stun": "wave", "sunder": "slam", "exhale": "shake", "sealed": "slam",
 	"charge_full": "pop", "charge_hit": "slam", "charge_miss": "snap",
 	"sizzle": "stretch", "simmer": "bounce", "burnt": "soft", "munch": "bounce", "growl": "wave", "growl_hard": "wave", "growl_rest": "wave", "shoulder": "bounce", "set_down": "soft", "cart_load": "drop", "heavy": "slam", "toss": "pop", "bellyache": "shake",
 	"click": "pop", "fuse": "stretch", "boom": "slam", "spikes": "snap", "rumble": "roll", "smash": "slam", "creak": "shake",
 	"rubble": "shake", "thud": "drop", "clang": "slam", "flame": "stretch", "dart": "fly", "grind": "shake", "crush": "slam",
 	"net": "snap", "gas": "stretch", "swing": "snap", "jet": "pop", "pit": "slam", "warp": "soft", "warp_out": "soft",
-	"squeak": "pop", "summon": "wave", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
+	"squeak": "pop", "summon": "loom", "rust": "stretch", "spin": "wave", "trip": "slam", "spill": "bounce", "needle": "pop",
 	"poison": "pop", "slide": "snap", "flash": "slam", "wail": "wave", "chill": "stretch", "teeth": "slam", "lift": "soft",
 	"dice_1": "bounce", "dice_2": "bounce", "dice_3": "bounce", "wade": "bounce",
-	"abyss": "stretch", "rope": "bounce", "seat": "soft", "slip": "snap", "heat": "wave", "magic_pick": "stretch", "feather": "soft", "rearrange": "shake", "cart_run": "roll", "cart_crash": "slam", "stone_tilt": "pop", "plunge": "slam", "skull_glint": "pop", "skull_gaze": "snap",
+	"abyss": "stretch", "rope": "flutter", "seat": "soft", "slip": "snap", "heat": "wave", "magic_pick": "stretch", "feather": "soft", "rearrange": "shake", "cart_run": "roll", "cart_crash": "stagger", "stone_tilt": "pop", "plunge": "slam", "skull_glint": "pop", "skull_gaze": "snap",
 	"t_coin": "pop", "t_sell": "bounce", "t_whisper": "wave", "t_pray": "stretch", "t_write": "bounce", "t_peel": "snap",
-	"t_geta": "bounce", "t_sway": "wave", "t_fortune": "soft", "t_bell": "bounce", "t_anvil": "slam", "t_door": "stretch",
+	"t_geta": "flutter", "t_sway": "wave", "t_fortune": "soft", "t_bell": "bounce", "t_anvil": "slam", "t_door": "stretch",
 	"t_hush": "stretch", "t_chatter": "bounce", "t_pen": "bounce", "t_bustle": "bounce", "t_slide": "snap", "t_lantern": "wave",
 	"t_revive": "pop", "t_key": "pop", "t_stamp": "pop",
 	"down": "drop", "revive": "pop", "levelup": "stretch", "kill": "drop", "dodge": "snap",
 	"glass": "snap", "ignite": "pop", "recall": "stretch",
-	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "shake", "leap": "bounce", "ram": "slam", "burst": "slam",
+	"ambush": "slam", "glue": "stretch", "rise": "pop", "mon_charge": "tremble", "leap": "bounce", "ram": "slam", "burst": "slam",
 	"emerge": "soft", "sniff": "bounce", "sentry": "stretch", "jot": "stretch", "trophy": "bounce", "boss_blast": "slam", "boss_fall": "slam",
 	"glare": "shake", "splash": "slam", "drop": "drop", "shape": "wave", "web_shot": "fly", "web": "stretch",
-	"squeeze": "stretch", "gaze": "snap", "stone": "shake", "stench": "wave",
-	"chant": "bounce", "ms_fire": "pop", "ms_lightning": "slam", "ms_missile": "fly", "ms_frost": "stretch", "ms_guide": "pop",
-	"ms_hold": "pop", "ms_sleep": "wave", "ms_charm": "wave", "ms_vine": "stretch", "ms_heat": "shake", "ms_dark": "stretch",
+	"squeeze": "stretch", "gaze": "snap", "stone": "tremble", "stench": "wave",
+	"chant": "bounce", "ms_fire": "pop", "ms_lightning": "stagger", "ms_missile": "fly", "ms_frost": "stretch", "ms_guide": "pop",
+	"ms_hold": "pop", "ms_sleep": "wave", "ms_charm": "wave", "ms_vine": "stretch", "ms_heat": "shake", "ms_dark": "loom",
 	"ms_vanish": "soft", "shrug": "slam", "burn": "pop", "mist": "stretch",
-	"sk_rush": "snap", "sk_power": "slam", "sk_wall": "slam", "sk_sweep": "snap", "sk_rage": "shake", "sk_charge": "shake",
-	"sk_roar": "slam", "sk_quake": "slam", "sk_throw": "fly", "sk_haste": "snap", "sk_smoke": "soft", "sk_stab": "pop",
-	"sk_bolt": "snap", "sk_fire": "slam", "sk_frost": "shake", "sk_thunder": "shake", "sk_heal": "soft", "sk_holy": "slam",
-	"sk_bless": "bounce", "sk_mass_heal": "stretch", "sk_arrow": "fly", "sk_triple": "fly", "sk_snare": "pop",
+	"sk_rush": "snap", "sk_power": "slam", "sk_wall": "slam", "sk_sweep": "snap", "sk_rage": "stagger", "sk_charge": "tremble",
+	"sk_roar": "stagger", "sk_quake": "slam", "sk_throw": "fly", "sk_haste": "snap", "sk_smoke": "soft", "sk_stab": "pop",
+	"sk_bolt": "snap", "sk_fire": "slam", "sk_frost": "shake", "sk_thunder": "stagger", "sk_heal": "soft", "sk_holy": "slam",
+	"sk_bless": "flutter", "sk_mass_heal": "stretch", "sk_arrow": "fly", "sk_triple": "fly", "sk_snare": "pop",
 	"sk_snipe": "slam", "sk_shield": "stretch", "sk_sleep": "wave", "sk_regen": "soft", "sk_spin": "wave", "sk_twin": "snap",
 	"sk_cleave": "slam", "sk_bonk": "slam", "sk_pierce": "snap", "sk_aim": "stretch", "sk_focus": "shake", "sk_shadow": "soft",
 	"sk_rend": "slam", "sk_comet": "fly",
@@ -287,13 +290,17 @@ static func cue(parent: Node, pos: Vector2, id: String, dir: Vector2 = Vector2.Z
 	f.style = String(STYLE.get(id, "pop"))
 	f.dir = dir
 	f.position = pos + Vector2(0, -22)
+	# 重なりを避ける: 同じ所に出たばかりの擬音があれば、その上に積む
+	var stack := 0
+	for c in parent.get_children():
+		if c is Sfx and c.age < 0.35 and c.position.distance_to(f.position) < 28.0:
+			stack += 1
+	f.position.y -= 16.0 * stack
 	f.z_index = 21
 	parent.add_child(f)
 
 func _ready() -> void:
-	_chars = PackedStringArray()
-	for i in text.length():
-		_chars.append(text.substr(i, 1))
+	_chars = CueText.split(text)
 	_seed = randf() * 10.0
 
 ## 消えるまでの秒(大きいもの、文字の多いもの、伸びるものは長め)
@@ -303,7 +310,12 @@ func life() -> float:
 		"bounce", "stretch": l += 0.06 * _chars.size()
 		"slam", "shake", "wave", "drop", "fly": l += 0.2
 		"roll": l += 0.3 + 0.07 * _chars.size()
-	return l
+		"flutter": l += 0.08 * _chars.size()
+		"stagger": l += 0.3 + 0.04 * _chars.size()
+		"tremble": l += 0.4
+		"loom": l += 0.6
+	# テロップの目安(1 文字 0.1〜0.15 秒)を下限に
+	return maxf(l, 0.1 * _chars.size() + 0.35)
 
 func _process(delta: float) -> void:
 	age += delta

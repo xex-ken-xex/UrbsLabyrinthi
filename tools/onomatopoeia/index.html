@@ -1,0 +1,537 @@
+<title>擬音の実験室</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+1p:wght@400;700&display=swap">
+<style>
+/* 迷宮の画面の色に寄せた暗い作業台。左に一覧と設定、右に舞台(キャンバス)と帳面 */
+:root {
+  --bg: #f1ede6; --panel: #ffffff; --fg: #2a2430; --muted: #6f6578; --line: #d9d2c9;
+  --accent: #b8742a; --accent-fg: #ffffff; --stage: #1c1a24; --ok: #3f8f5a; --warn: #b4452f;
+  --font-body: "M PLUS 1p", system-ui, sans-serif; --font-cue: "Dela Gothic One", "M PLUS 1p", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15131a; --panel: #211e29; --fg: #ece6ea; --muted: #a39aae; --line: #3a3444;
+  --accent: #e0a252; --accent-fg: #1c1408; --stage: #1c1a24; --ok: #6fc488; --warn: #f08b72; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #15131a; --panel: #211e29; --fg: #ece6ea; --muted: #a39aae; --line: #3a3444;
+  --accent: #e0a252; --accent-fg: #1c1408; --stage: #1c1a24; --ok: #6fc488; --warn: #f08b72; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px 32px; }
+h1 { font-family: var(--font-cue); font-weight: 400; font-size: 22px; margin: 0; letter-spacing: 0.02em; }
+h2 { font-size: 13px; text-transform: none; color: var(--muted); margin: 0 0 6px; font-weight: 700; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 12px; }
+header p { margin: 0; color: var(--muted); font-size: 12px; }
+.grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+input[type=text], input[type=number], select, textarea { width: 100%; font: inherit; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; }
+textarea { min-height: 70px; resize: vertical; }
+input[type=range] { width: 100%; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.row > * { flex: 1 1 110px; min-width: 0; }
+.row > .narrow { flex: 0 0 auto; }
+button { font: inherit; font-weight: 700; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#cueList { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+#cueList .grp { font-size: 11px; color: var(--muted); padding: 6px 8px 2px; position: sticky; top: 0; background: var(--bg); }
+#cueList .cue { display: flex; gap: 8px; align-items: center; padding: 3px 8px; cursor: pointer; border-left: 3px solid transparent; }
+#cueList .cue:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#cueList .cue.sel { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+#cueList .cue .txt { font-family: var(--font-cue); font-size: 15px; min-width: 7em; }
+#cueList .cue .id { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+#cueList .cue .st { color: var(--muted); font-size: 11px; margin-left: auto; }
+#cueList .cue .note { color: var(--ok); font-size: 11px; }
+.stageWrap { position: relative; background: var(--stage); border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
+.stageBar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.stageBar .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; min-width: 6em; }
+#emitters { display: flex; flex-direction: column; gap: 4px; }
+#emitters .em { display: flex; gap: 8px; align-items: center; font-size: 12px; flex-wrap: wrap; }
+#emitters .em .txt { font-family: var(--font-cue); font-size: 14px; }
+#emitters .em input[type=number] { width: 5em; }
+#emitters .em .kind { color: var(--muted); }
+.hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.status { font-size: 12px; color: var(--muted); }
+.status.ok { color: var(--ok); }
+.status.warn { color: var(--warn); }
+.pill { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+.exp { border-left: 3px solid var(--accent); padding-left: 8px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header>
+  <h1>擬音の実験室</h1>
+  <p>ゲーム(cue_text.gd / sfx.gd)の描き方を JS に写した道具。舞台を押すと発生点を置き、再生で動きを見る。帳面はこのページに残り、Claude も読める。</p>
+</header>
+
+<div class="grid">
+  <div class="stack">
+    <section class="panel">
+      <h2>擬音の一覧(sfx.gd から)</h2>
+      <input type="text" id="filter" placeholder="さがす: 文字・id・動き方・まとまり" aria-label="さがす">
+      <div id="cueList" style="margin-top:6px"></div>
+      <p class="hint">押すと「いまの擬音」になる。もう一度押すか、舞台を押すと発生点に置く。</p>
+    </section>
+
+    <section class="panel">
+      <h2>いまの擬音(自由入力もここ)</h2>
+      <div class="row">
+        <div style="flex-basis:160px"><label for="text">文字</label><input type="text" id="text" value="ギンッ!"></div>
+        <div class="narrow"><label for="style">動き方</label><select id="style"></select></div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><label for="size">大きさ ×<span id="sizeV">1.0</span></label><input type="range" id="size" min="0.5" max="3" step="0.05" value="1"></div>
+        <div class="narrow"><label for="color">色</label><input type="color" id="color" value="#ffe08a"></div>
+        <div class="narrow"><label for="dir">向き(roll / fly)</label>
+          <select id="dir"><option value="1,0">→ 右</option><option value="-1,0">← 左</option><option value="0,-1">↑ 上</option><option value="0,1">↓ 下</option><option value="1,-1">↗</option><option value="-1,1">↙</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="addCurrent" class="primary">舞台の真ん中に置く</button>
+        <button id="dakutenBtn" title="最後の ッ に合成用の濁点(U+3099)を足す">ッ に濁点</button>
+        <button id="saveCustom" title="この自由入力を帳面に残す">自由入力を残す</button>
+      </div>
+      <p class="hint" id="curInfo"></p>
+    </section>
+
+    <section class="panel exp">
+      <h2>ノード(実験): 動きをノードのグラフで書く</h2>
+      <div class="row">
+        <div class="narrow"><label for="engine">描く仕組み</label><select id="engine"><option value="port">写し(cue_text.gd と同じ式)</option><option value="node">ノードのグラフ</option></select></div>
+        <button id="compareBtn" class="narrow" title="いまの発生点を、写しとノードの両方で描いて、違う画素の数を数える">写しと比べる</button>
+      </div>
+      <p class="status" id="compareStatus"></p>
+      <label for="graph" style="margin-top:6px">いまの動き方 <b id="graphStyle">pop</b> のグラフ(JSON。直して「適用」)</label>
+      <textarea id="graph" style="min-height:140px; font-family: ui-monospace, monospace; font-size: 11px"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="applyGraph" class="primary">適用</button>
+        <button id="resetGraph">元に戻す</button>
+        <button id="saveGraph" title="直したグラフをこのページに残す(Claude も読める)">グラフを残す</button>
+        <span class="status" id="graphStatus"></span>
+      </div>
+      <details style="margin-top:8px"><summary>ノードの種類</summary><div id="nodeRef" style="font-size:12px; columns: 2; column-gap: 12px"></div></details>
+      <p class="hint">props の x y sx sy rot alpha spread が性質。入力は 数 / ノード id / 入れ子。t px dx dy i n seed big g は id だけで引ける。copies は残像(fly)。</p>
+    </section>
+
+    <section class="panel exp">
+      <h2>実験(ゲームにはまだ無い)</h2>
+      <label><input type="checkbox" id="grapheme" checked> 濁点(U+3099)を前の字にくっつけて一字として動かす</label>
+      <label style="margin-top:6px" for="alt">音節ごとに向きを変える 強さ <span id="altV">0</span></label>
+      <input type="range" id="alt" min="0" max="1" step="0.05" value="0">
+      <div class="row" style="margin-top:4px">
+        <div class="narrow"><label for="altBy">区切り</label><select id="altBy"><option value="syllable">音節(小書き・ー・濁点は前につく)</option><option value="char">一字ずつ</option></select></div>
+      </div>
+      <p class="hint">奇数番目の組は、横の動きと傾きを反転し、出てすぐ横に振れて戻る。ひらひらひら、ゴロゴロゴロ… で見比べる。</p>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="stageWrap"><canvas id="stage" width="960" height="540" aria-label="舞台"></canvas></div>
+      <div class="stageBar">
+        <button id="play" class="primary">▶ 再生</button>
+        <button id="loop" aria-pressed="false">くり返し</button>
+        <label class="narrow" style="margin:0">速さ <select id="speed"><option value="1">1×</option><option value="0.5">½×</option><option value="0.25">¼×</option><option value="0.1">1/10×</option></select></label>
+        <span class="time" id="timeV">0.00 s</span>
+        <input type="range" id="scrub" min="0" max="2.5" step="0.005" value="0" style="flex:1 1 160px" aria-label="時間をなぞる">
+        <button id="clear">発生点を消す</button>
+      </div>
+      <p class="hint">舞台を押すと、いまの擬音の発生点を置く(ゲームと同じ ×2 の拡大)。発生点ごとに遅れ(秒)を変えられる。時間の棒をなぞると止めて見られる。</p>
+      <div id="emitters" style="margin-top:8px"></div>
+    </section>
+
+    <section class="panel">
+      <h2>書き出し(リール向けの試作)</h2>
+      <div class="row">
+        <label class="narrow">大きさ <select id="exPreset"><option value="1080,1920">縦 1080×1920(リール)</option><option value="1080,1080">正方 1080×1080</option><option value="1920,1080">横 1920×1080</option><option value="540,960">縦 540×960(軽い)</option><option value="">自由</option></select></label>
+        <label class="narrow">幅 <input type="number" id="exW" value="1080" min="16" max="4096" step="1"></label>
+        <label class="narrow">高さ <input type="number" id="exH" value="1920" min="16" max="4096" step="1"></label>
+        <label class="narrow">拡大 <input type="number" id="exK" value="6" min="1" max="20" step="0.5" title="ゲームは ×2。1080 幅なら 6 くらい"></label>
+        <label class="narrow">fps <select id="exFps"><option value="30">30</option><option value="60">60</option><option value="24">24</option><option value="15">15</option></select></label>
+      </div>
+      <div class="row">
+        <label class="narrow">背景 <select id="exBg"><option value="">透過</option><option value="#00ff00">緑(クロマキー)</option><option value="#0000ff">青(クロマキー)</option><option value="#000000">黒</option><option value="#ffffff">白</option><option value="#1c1a24">舞台と同じ</option><option value="custom">色を選ぶ</option></select></label>
+        <input type="color" id="exBgColor" value="#00ff00" aria-label="背景の色" style="display:none">
+        <label class="narrow">前後の間 <input type="number" id="exPad" value="0.2" min="0" max="3" step="0.1" title="最初と最後に足す無音の秒数"></label>
+        <label class="narrow"><input type="checkbox" id="exCenter" checked> 発生点をまとめて中央に</label>
+      </div>
+      <div class="row">
+        <button id="exApng" class="primary">APNG(透過のアニメ画像)</button>
+        <button id="exZip">PNG 連番(zip)</button>
+        <button id="exWebm">WebM(動画。透過なし)</button>
+        <button id="exPreview">1コマ見る</button>
+        <span id="exStatus" class="status"></span>
+      </div>
+      <p class="hint">透過が要るなら APNG か PNG 連番(どちらも背景「透過」で)。動画の編集ソフトに入れるなら PNG 連番が確実。WebM は背景を緑にしてクロマキーで抜く。拡大は「ゲームの ×2」と同じ尺度で、1080 幅に 14px の字を ×6 で 84px。Instagram のリールは 1080×1920・最大 30fps 推奨(出す側で変換される)。</p>
+      <div id="exPreviewWrap" style="display:none; margin-top:8px"><img id="exPreviewImg" alt="書き出しの1コマ" style="max-height:240px; border:1px solid var(--line); background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0/16px 16px"></div>
+    </section>
+
+    <section class="panel">
+      <h2>帳面: <span id="noteFor">(擬音を選ぶと、その擬音の帳面)</span></h2>
+      <textarea id="note" placeholder="この擬音の動きについて、気づいたこと・直したいこと"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="saveNote" class="primary">帳面に書く</button>
+        <span class="status" id="noteStatus"></span>
+      </div>
+      <details style="margin-top:10px"><summary>帳面の一覧(<span id="noteCount">0</span>)と、残した自由入力</summary>
+        <div id="noteList" style="margin-top:6px; font-size:13px"></div>
+        <div class="row" style="margin-top:8px"><button id="copyAll">まとめをコピー(Markdown)</button><span class="status" id="copyStatus"></span></div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script src="cues.js"></script>
+<script src="cue_lab.js"></script>
+<script src="cue_nodes.js"></script>
+<script src="cue_export.js"></script>
+<script>
+(function () {
+  "use strict";
+  const DATA = window.CUE_DATA || { cues: [], styles: ["pop"] };
+  const L = window.CueLab;
+  const SCALE = 2;                       // 迷宮の画面の拡大
+  const $ = (id) => document.getElementById(id);
+  const stage = $("stage"), ctx = stage.getContext("2d");
+
+  // ---- いまの擬音 ----
+  let current = { id: null, text: "ギンッ!", style: "slam", size: 1.0, color: "#ffe08a", dir: [1, 0], group: "" };
+  const STYLES = ["pop", "slam", "bounce", "shake", "stretch", "soft", "snap", "wave", "drop", "roll", "fly"];
+  for (const s of STYLES) { const o = document.createElement("option"); o.value = s; o.textContent = s; $("style").appendChild(o); }
+  (function () {   // 先行研究の例(ノードのグラフでだけ描ける)
+    const EX = (window.CueNodes && window.CueNodes.EXAMPLES) || {};
+    const og = document.createElement("optgroup"); og.label = "研究の例(ノードのみ)";
+    for (const k of Object.keys(EX)) { const o = document.createElement("option"); o.value = k; o.textContent = k + " [" + EX[k].src + "]"; og.appendChild(o); }
+    $("style").appendChild(og);
+  })();
+  const hex = (c) => "#" + c.map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+  const rgb = (h) => ({ r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16), a: 1 });
+
+  function setCurrent(c) {
+    current = Object.assign({}, current, c);
+    $("text").value = current.text; $("style").value = current.style; $("size").value = current.size; $("sizeV").textContent = current.size.toFixed(2);
+    $("color").value = current.color; $("dir").value = current.dir.join(",");
+    $("curInfo").textContent = current.id ? ("id: " + current.id + " / " + current.group) : "自由入力";
+    for (const el of document.querySelectorAll("#cueList .cue")) el.classList.toggle("sel", el.dataset.id === current.id);
+    $("noteFor").textContent = current.id ? (current.text + " (" + current.id + ")") : ("自由入力 " + current.text);
+    loadNoteInto();
+    if (typeof showGraph === "function") showGraph();
+  }
+  function readCurrentFromForm() {
+    current.text = $("text").value; current.style = $("style").value; current.size = parseFloat($("size").value);
+    current.color = $("color").value; current.dir = $("dir").value.split(",").map(Number);
+    const c = DATA.cues.find((x) => x.id === current.id);
+    if (c && (c.text !== current.text || c.style !== current.style || Math.abs(c.size - current.size) > 1e-6)) { current.id = null; current.group = ""; }
+    $("curInfo").textContent = current.id ? ("id: " + current.id + " / " + current.group) : "自由入力";
+    $("sizeV").textContent = current.size.toFixed(2);
+    $("noteFor").textContent = current.id ? (current.text + " (" + current.id + ")") : ("自由入力 " + current.text);
+    for (const el of document.querySelectorAll("#cueList .cue")) el.classList.toggle("sel", el.dataset.id === current.id);
+  }
+  for (const id of ["text", "style", "size", "color", "dir"]) $(id).addEventListener("input", () => { readCurrentFromForm(); if (!playing) draw(); });
+  $("dakutenBtn").addEventListener("click", () => {
+    let t = $("text").value;
+    const i = Math.max(t.lastIndexOf("ッ"), t.lastIndexOf("っ"));
+    if (i >= 0 && t[i + 1] !== "゙") t = t.slice(0, i + 1) + "゙" + t.slice(i + 1);
+    else t += "゙";
+    $("text").value = t; readCurrentFromForm(); if (!playing) draw();
+  });
+
+  // ---- 一覧 ----
+  function renderList() {
+    const q = $("filter").value.trim().toLowerCase();
+    const box = $("cueList"); box.textContent = "";
+    let lastG = null;
+    for (const c of DATA.cues) {
+      const hay = (c.text + " " + c.id + " " + c.style + " " + c.group).toLowerCase();
+      if (q && !hay.includes(q)) continue;
+      if (c.group !== lastG) { const g = document.createElement("div"); g.className = "grp"; g.textContent = c.group; box.appendChild(g); lastG = c.group; }
+      const el = document.createElement("div"); el.className = "cue" + (c.id === current.id ? " sel" : ""); el.dataset.id = c.id;
+      el.innerHTML = '<span class="txt"></span><span class="id"></span><span class="note" hidden>帳面あり</span><span class="st"></span>';
+      el.querySelector(".txt").textContent = c.text; el.querySelector(".id").textContent = c.id; el.querySelector(".st").textContent = c.style + (c.size !== 1 ? " ×" + c.size : "");
+      el.querySelector(".note").hidden = !notes[c.id];
+      el.addEventListener("click", () => {
+        if (current.id === c.id) addEmitter(stage.width / 2 / SCALE, stage.height / 2 / SCALE);
+        else setCurrent({ id: c.id, text: c.text, style: c.style, size: c.size, color: hex(c.color), group: c.group });
+        if (!playing) draw();
+      });
+      box.appendChild(el);
+    }
+  }
+  $("filter").addEventListener("input", renderList);
+
+  // ---- 発生点 ----
+  let emitters = [];
+  function addEmitter(x, y) {
+    readCurrentFromForm();
+    emitters.push({ x, y, text: current.text, style: current.style, size: current.size, color: current.color, dir: current.dir.slice(), delay: 0, seed: Math.random() * 10, id: current.id });
+    renderEmitters(); play();
+  }
+  stage.addEventListener("click", (e) => {
+    const r = stage.getBoundingClientRect();
+    addEmitter((e.clientX - r.left) * stage.width / r.width / SCALE, (e.clientY - r.top) * stage.height / r.height / SCALE);
+  });
+  $("addCurrent").addEventListener("click", () => addEmitter(stage.width / 2 / SCALE, stage.height / 2 / SCALE));
+  $("clear").addEventListener("click", () => { emitters = []; renderEmitters(); draw(); });
+  function renderEmitters() {
+    const box = $("emitters"); box.textContent = "";
+    emitters.forEach((em, i) => {
+      const el = document.createElement("div"); el.className = "em";
+      el.innerHTML = '<span class="txt"></span><span class="kind"></span> 遅れ <input type="number" step="0.05" min="0" max="3"> 秒 <button>消す</button>';
+      el.querySelector(".txt").textContent = em.text; el.querySelector(".kind").textContent = em.style + " ×" + em.size + (em.id ? " / " + em.id : " / 自由入力");
+      const inp = el.querySelector("input"); inp.value = em.delay; inp.id = "delay" + i; inp.addEventListener("input", () => { em.delay = parseFloat(inp.value) || 0; });
+      el.querySelector("button").addEventListener("click", () => { emitters.splice(i, 1); renderEmitters(); draw(); });
+      box.appendChild(el);
+    });
+  }
+
+  // ---- 再生 ----
+  let playing = false, t0 = 0, tNow = 0, raf = 0;
+  function totalLife() { return emitters.reduce((m, em) => Math.max(m, em.delay + L.life(em.style, em.size, Array.from(em.text).length)), 0.9); }
+  function play() { playing = true; t0 = performance.now(); $("play").textContent = "■ 止める"; cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); }
+  function stop() { playing = false; $("play").textContent = "▶ 再生"; cancelAnimationFrame(raf); }
+  $("play").addEventListener("click", () => { if (playing) stop(); else play(); });
+  $("loop").addEventListener("click", () => { const on = $("loop").getAttribute("aria-pressed") !== "true"; $("loop").setAttribute("aria-pressed", on); $("loop").style.borderColor = on ? "var(--accent)" : ""; });
+  $("scrub").addEventListener("input", () => { stop(); tNow = parseFloat($("scrub").value); draw(); });
+  function tick(now) {
+    const speed = parseFloat($("speed").value);
+    tNow = (now - t0) / 1000 * speed;
+    const end = totalLife() + 0.3;
+    if (tNow >= end) {
+      if ($("loop").getAttribute("aria-pressed") === "true") { t0 = now; tNow = 0; }
+      else { tNow = end; draw(); stop(); return; }
+    }
+    draw();
+    raf = requestAnimationFrame(tick);
+  }
+
+  function drawFloor() {
+    ctx.fillStyle = "#1c1a24"; ctx.fillRect(0, 0, stage.width, stage.height);
+    ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+    const T = 32 * SCALE;
+    for (let x = 0; x < stage.width; x += T) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, stage.height); ctx.stroke(); }
+    for (let y = 0; y < stage.height; y += T) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(stage.width, y); ctx.stroke(); }
+  }
+  function draw() {
+    drawFloor();
+    $("timeV").textContent = tNow.toFixed(2) + " s"; $("scrub").max = (totalLife() + 0.3).toFixed(2); if (playing) $("scrub").value = tNow;
+    const opts = { alt: parseFloat($("alt").value), altBy: $("altBy").value };
+    const split = $("grapheme").checked ? L.splitGrapheme : L.splitPlain;
+    ctx.save(); ctx.scale(SCALE, SCALE);
+    for (const em of emitters) {
+      // 発生点の印(魔物・罠の立つ場所)
+      ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(em.x, em.y, 7, 0, Math.PI * 2); ctx.stroke();
+      const t = tNow - em.delay;
+      const chars = split(em.text);
+      const lf = L.life(em.style, em.size, chars.length);
+      if (t < 0 || t >= lf) continue;
+      // Sfx.cue: 位置は pos + (0, -22)、文字の大きさは 14 × size、big は size >= 2
+      drawOne(ctx, $("engine").value, chars, em, t, lf, opts);
+    }
+    ctx.restore();
+    if (emitters.length === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.font = "16px " + L.FONT; ctx.textAlign = "center";
+      ctx.fillText("舞台を押して、擬音の発生点を置く", stage.width / 2, stage.height / 2); ctx.textAlign = "start";
+    }
+  }
+  for (const id of ["alt", "altBy", "grapheme", "engine"]) $(id).addEventListener("input", () => { $("altV").textContent = $("alt").value; if (!playing) draw(); });
+
+
+  // ---- 書き出し(リール向け) ----
+  const X = window.CueExport;
+  $("exPreset").addEventListener("input", () => { const v = $("exPreset").value; if (v) { const [w, h] = v.split(","); $("exW").value = w; $("exH").value = h; } });
+  $("exBg").addEventListener("input", () => { $("exBgColor").style.display = $("exBg").value === "custom" ? "" : "none"; });
+  function exBg() { const v = $("exBg").value; return v === "custom" ? $("exBgColor").value : v; }
+  function exSetup() {
+    const W = parseInt($("exW").value, 10), H = parseInt($("exH").value, 10), K = parseFloat($("exK").value);
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    // 発生点の重心を書き出しの中央へ(まとめない時は舞台の中央を中央へ)
+    let cx = stage.width / 2 / SCALE, cy = stage.height / 2 / SCALE;
+    if ($("exCenter").checked && emitters.length) { cx = emitters.reduce((s, e) => s + e.x, 0) / emitters.length; cy = emitters.reduce((s, e) => s + e.y, 0) / emitters.length - 22; }
+    const pad = parseFloat($("exPad").value) || 0, dur = totalLife() + pad * 2;
+    const bg = exBg();
+    const opts = { alt: parseFloat($("alt").value), altBy: $("altBy").value };
+    const split = $("grapheme").checked ? L.splitGrapheme : L.splitPlain;
+    function drawAt(tt) {
+      const g = c.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H);
+      if (bg) { g.fillStyle = bg; g.fillRect(0, 0, W, H); }
+      g.translate(W / 2, H / 2); g.scale(K, K); g.translate(-cx, -cy);
+      for (const em of emitters) {
+        const t = tt - pad - em.delay; const chars = split(em.text); const lf = L.life(em.style, em.size, chars.length);
+        if (t >= 0 && t < lf) drawOne(g, $("engine").value, chars, em, t, lf, opts);
+      }
+    }
+    return { c, W, H, dur, drawAt };
+  }
+  function exName(ext) { const t = emitters.map((e) => e.text).join("_").replace(/[\\/:*?"<>|\s]/g, "") || "cue"; return "cue_" + t.slice(0, 20) + "_" + $("exW").value + "x" + $("exH").value + "." + ext; }
+  async function exFrames(onProgress) {
+    const s = exSetup(), fps = parseInt($("exFps").value, 10), n = Math.max(1, Math.ceil(s.dur * fps));
+    const frames = [];
+    for (let i = 0; i < n; i++) { s.drawAt(i / fps); frames.push(await X.toPNG(s.c)); if (onProgress && i % 5 === 0) onProgress(i / n); }
+    return { frames, fps, s };
+  }
+  $("exPreview").addEventListener("click", () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    const s = exSetup(); s.drawAt(tNow + (parseFloat($("exPad").value) || 0));
+    $("exPreviewWrap").style.display = ""; $("exPreviewImg").src = s.c.toDataURL("image/png"); setStatus("exStatus", "いまの時刻の1コマ(" + s.W + "×" + s.H + ")", "ok");
+  });
+  $("exApng").addEventListener("click", async () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    try {
+      const { frames, fps } = await exFrames((p) => setStatus("exStatus", "描いている… " + Math.round(p * 100) + "%", ""));
+      const blob = X.apng(frames, fps); X.download(blob, exName("png"));
+      setStatus("exStatus", "APNG " + frames.length + " コマ / " + (blob.size / 1024 / 1024).toFixed(1) + " MB(拡張子は .png のまま。ブラウザや編集ソフトで動く)", "ok");
+    } catch (e) { setStatus("exStatus", "失敗: " + e.message, "warn"); }
+  });
+  $("exZip").addEventListener("click", async () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    try {
+      const { frames, fps } = await exFrames((p) => setStatus("exStatus", "描いている… " + Math.round(p * 100) + "%", ""));
+      const entries = frames.map((f, i) => ({ name: "cue_" + String(i + 1).padStart(4, "0") + ".png", data: f }));
+      entries.push({ name: "README.txt", data: new TextEncoder().encode(fps + " fps の連番。擬音の実験室から書き出した。\n") });
+      const blob = X.zip(entries); X.download(blob, exName("zip"));
+      setStatus("exStatus", "PNG 連番 " + frames.length + " 枚 / " + (blob.size / 1024 / 1024).toFixed(1) + " MB", "ok");
+    } catch (e) { setStatus("exStatus", "失敗: " + e.message, "warn"); }
+  });
+  $("exWebm").addEventListener("click", async () => {
+    if (!emitters.length) { setStatus("exStatus", "発生点を置いてから", "warn"); return; }
+    if (!exBg()) setStatus("exStatus", "背景が透過のままなので黒になる(緑にしてクロマキーで抜くのがおすすめ)", "warn");
+    try {
+      const s = exSetup(), fps = parseInt($("exFps").value, 10);
+      const blob = await X.webm(s.c, s.drawAt, s.dur, fps, (p) => setStatus("exStatus", "録っている… " + Math.round(p * 100) + "%", ""));
+      X.download(blob, exName("webm"));
+      setStatus("exStatus", "WebM " + s.dur.toFixed(1) + " 秒 / " + (blob.size / 1024 / 1024).toFixed(1) + " MB(mp4 が要るなら編集ソフトで変換)", "ok");
+    } catch (e) { setStatus("exStatus", "失敗: " + e.message, "warn"); }
+  });
+
+  // ---- ノードのグラフ ----
+  const N = window.CueNodes;
+  let graphs = {};                        // 直したグラフ(動き方 → グラフ)。無ければ N.GRAPHS
+  function graphFor(style) { return graphs[style] || N.GRAPHS[style] || N.GRAPHS.pop; }
+  function drawOne(c, engine, chars, em, t, lf, opts) {
+    const col = rgb(em.color), org = { x: em.x, y: em.y - 22 }, dir = { x: em.dir[0], y: em.dir[1] };
+    if (engine === "node" || !STYLES.includes(em.style)) {
+      try { N.drawWordGraph(c, chars, graphFor(em.style), t, lf, 14 * em.size, col, em.seed, em.size >= 2, org, dir, L.FONT); }
+      catch (e) { setStatus("graphStatus", "グラフの誤り: " + e.message, "warn"); }
+    } else L.drawWord(c, chars, em.style, t, lf, 14 * em.size, col, em.seed, em.size >= 2, org, dir, opts);
+  }
+  function showGraph() {
+    const st = $("style").value;
+    $("graphStyle").textContent = st + (graphs[st] ? "(直したもの)" : "");
+    $("graph").value = JSON.stringify(graphFor(st), null, 1);
+  }
+  $("style").addEventListener("input", showGraph);
+  $("applyGraph").addEventListener("click", () => {
+    try { graphs[$("style").value] = JSON.parse($("graph").value); setStatus("graphStatus", "適用した(このページを開いている間だけ)", "ok"); showGraph(); if (!playing) draw(); }
+    catch (e) { setStatus("graphStatus", "JSON の誤り: " + e.message, "warn"); }
+  });
+  $("resetGraph").addEventListener("click", () => { delete graphs[$("style").value]; showGraph(); setStatus("graphStatus", "元に戻した", "ok"); if (!playing) draw(); });
+  $("saveGraph").addEventListener("click", async () => {
+    if (!db) { setStatus("graphStatus", "ここでは残せない", "warn"); return; }
+    const st = $("style").value;
+    try { JSON.parse($("graph").value); await db.collection("graphs").doc(st).set({ style: st, json: $("graph").value, at: new Date().toISOString() }); setStatus("graphStatus", "グラフを残した", "ok"); }
+    catch (e) { setStatus("graphStatus", "残せない: " + (e.message || e.code), "warn"); }
+  });
+  $("compareBtn").addEventListener("click", () => {
+    if (!emitters.length) { setStatus("compareStatus", "発生点を置いてから", "warn"); return; }
+    const W = stage.width, H = stage.height;
+    const ca = document.createElement("canvas"), cb = document.createElement("canvas"); ca.width = cb.width = W; ca.height = cb.height = H;
+    const A = ca.getContext("2d"), B = cb.getContext("2d");
+    const split = $("grapheme").checked ? L.splitGrapheme : L.splitPlain;
+    let diff = 0, drawn = 0, frames = 0;
+    const end = totalLife();
+    for (let tt = 0.02; tt < end; tt += end / 16) {
+      for (const [c, eng] of [[A, "port"], [B, "node"]]) {
+        c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); c.scale(SCALE, SCALE);
+        for (const em of emitters) { const t = tt - em.delay; const chars = split(em.text); const lf = L.life(em.style, em.size, chars.length); if (t >= 0 && t < lf) drawOne(c, eng, chars, em, t, lf, { alt: 0 }); }
+      }
+      const da = A.getImageData(0, 0, W, H).data, dbb = B.getImageData(0, 0, W, H).data;
+      for (let k = 0; k < da.length; k += 4) {
+        if (da[k + 3] > 0 || dbb[k + 3] > 0) drawn++;
+        const dd = Math.max(Math.abs(da[k] - dbb[k]), Math.abs(da[k + 1] - dbb[k + 1]), Math.abs(da[k + 2] - dbb[k + 2]), Math.abs(da[k + 3] - dbb[k + 3]));
+        if (dd > 8) diff++;
+      }
+      frames++;
+    }
+    setStatus("compareStatus", frames + " コマを比べて、描いた " + drawn + " 画素のうち違うのは " + diff + " 画素" + (diff === 0 ? "(同じ)" : ""), diff === 0 ? "ok" : "warn");
+  });
+  (function renderNodeRef() {
+    const box = $("nodeRef");
+    for (const k of Object.keys(N.NODES)) { const nd = N.NODES[k]; const d = document.createElement("div"); d.innerHTML = "<code></code> "; d.querySelector("code").textContent = k + (nd.ins && nd.ins.length ? "(" + nd.ins.join(", ") + ")" : ""); d.appendChild(document.createTextNode(nd.label + (nd.src ? " 〔" + nd.src + "〕" : ""))); box.appendChild(d); }
+    const s = document.createElement("p"); s.className = "hint"; s.textContent = "〔KTE〕Lee, Forlizzi, Hudson, UIST 2002 / 〔AE〕Adobe After Effects の Text Animator / 〔TextAlive〕加藤ほか CHI 2015 / 〔Koguchi〕Koguchi, Yamada, Taura ICED 2013。出典の詳しい話は RESEARCH.md。"; box.appendChild(s);
+  })();
+
+  // ---- 帳面(db) ----
+  let db = null, notes = {}, customs = [];
+  function noteKey() { return current.id ? current.id : ("free:" + current.text); }
+  function loadNoteInto() { const n = notes[noteKey()]; $("note").value = n ? n.text : ""; }
+  function setStatus(el, msg, cls) { $(el).textContent = msg; $(el).className = "status " + (cls || ""); }
+  function renderNotes() {
+    const keys = Object.keys(notes).sort(); $("noteCount").textContent = keys.length;
+    const box = $("noteList"); box.textContent = "";
+    for (const k of keys) {
+      const c = DATA.cues.find((x) => x.id === k);
+      const d = document.createElement("div"); d.style.marginBottom = "6px";
+      const b = document.createElement("b"); b.textContent = (c ? c.text + " (" + k + ")" : k) + ": "; d.appendChild(b);
+      d.appendChild(document.createTextNode(notes[k].text)); box.appendChild(d);
+    }
+    if (customs.length) {
+      const h = document.createElement("div"); h.innerHTML = "<b>残した自由入力</b>"; box.appendChild(h);
+      for (const c of customs) {
+        const d = document.createElement("div"); d.className = "em";
+        d.innerHTML = '<span class="txt"></span><span class="kind"></span> <button>置く</button>';
+        d.querySelector(".txt").textContent = c.text; d.querySelector(".kind").textContent = c.style + " ×" + c.size + (c.memo ? " / " + c.memo : "");
+        d.querySelector("button").addEventListener("click", () => { setCurrent({ id: null, text: c.text, style: c.style, size: c.size, color: c.color || "#ffe08a", group: "" }); addEmitter(stage.width / 2 / SCALE, stage.height / 2 / SCALE); });
+        box.appendChild(d);
+      }
+    }
+    for (const el of document.querySelectorAll("#cueList .cue")) el.querySelector(".note").hidden = !notes[el.dataset.id];
+  }
+  async function initDb() {
+    try { db = await window.claude?.use?.("db"); } catch (e) { db = null; }
+    if (!db) { setStatus("noteStatus", "帳面はこのページを claude.ai で開いたときだけ残る(いまは残らない)", "warn"); return; }
+    db.collection("notes").onSnapshot((snap) => { notes = {}; for (const d of snap.docs) notes[d.id] = d.data(); renderNotes(); loadNoteInto(); },
+      (e) => setStatus("noteStatus", "帳面を読めない: " + e.code, "warn"));
+    db.collection("custom").orderBy("at", "desc").limit(100).onSnapshot((snap) => { customs = snap.docs.map((d) => d.data()); renderNotes(); }, () => {});
+    db.collection("graphs").onSnapshot((snap) => {
+      for (const d of snap.docs) { try { graphs[d.id] = JSON.parse(d.data().json); } catch (e) { /* 壊れたものは飛ばす */ } }
+      showGraph(); if (!playing) draw();
+    }, () => {});
+  }
+  const safeId = (k) => k.replace(/[^A-Za-z0-9_.~:@+-]/g, (ch) => "u" + ch.codePointAt(0).toString(16));
+  $("saveNote").addEventListener("click", async () => {
+    if (!db) { setStatus("noteStatus", "ここでは残せない", "warn"); return; }
+    const text = $("note").value.trim(); const key = safeId(noteKey());
+    try {
+      if (text) await db.collection("notes").doc(key).set({ text, cue: current.id, cueText: current.text, style: current.style, size: current.size, at: new Date().toISOString() });
+      else await db.collection("notes").doc(key).delete();
+      setStatus("noteStatus", text ? "書いた" : "消した", "ok");
+    } catch (e) { setStatus("noteStatus", "書けない: " + (e && e.code), "warn"); }
+  });
+  $("saveCustom").addEventListener("click", async () => {
+    if (!db) { setStatus("noteStatus", "ここでは残せない", "warn"); return; }
+    readCurrentFromForm();
+    try { await db.collection("custom").add({ text: current.text, style: current.style, size: current.size, color: current.color, memo: $("note").value.trim(), at: new Date().toISOString() }); setStatus("noteStatus", "自由入力を残した", "ok"); }
+    catch (e) { setStatus("noteStatus", "残せない: " + (e && e.code), "warn"); }
+  });
+  $("copyAll").addEventListener("click", async () => {
+    let md = "# 擬音の実験室の帳面\n\n| 擬音 | id | 動き | 帳面 |\n|---|---|---|---|\n";
+    for (const k of Object.keys(notes).sort()) { const n = notes[k]; md += "| " + (n.cueText || "") + " | " + (n.cue || "自由入力") + " | " + (n.style || "") + " | " + n.text.replace(/\n/g, " ") + " |\n"; }
+    if (customs.length) { md += "\n## 残した自由入力\n\n"; for (const c of customs) md += "- " + c.text + " (" + c.style + " ×" + c.size + ")" + (c.memo ? " " + c.memo : "") + "\n"; }
+    try { await navigator.clipboard.writeText(md); setStatus("copyStatus", "コピーした", "ok"); }
+    catch (e) { const ta = document.createElement("textarea"); ta.value = md; document.body.appendChild(ta); ta.select(); setStatus("copyStatus", "下の欄から選んでコピー", "warn"); }
+  });
+
+  // ---- 起動 ----
+  renderList();
+  setCurrent(current);
+  showGraph();
+  document.fonts.ready.then(() => draw());
+  draw();
+  initDb();
+})();
+</script>
