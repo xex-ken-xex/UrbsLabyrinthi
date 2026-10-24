@@ -8,6 +8,7 @@ var pickups: Array = []             # 拾ったものの知らせ {key, tex, nam
 const PICKUP_LIFE := 4.0
 var overlay: Array = []             # 空でなければ全面の報告を出す(各要素は {text, color, size})
 var hint := ""
+var banner := {}                    # 画面の中央の一文(部屋の手がかり)。{text, color, age, life}。ken 10/24
 var title_shown := 7.0
 
 func _ready() -> void:
@@ -18,6 +19,11 @@ func add_log(text: String, color: Color = Color.WHITE) -> void:
 	log_lines.append({"text": text, "color": color, "age": 0.0})
 	while log_lines.size() > 8:
 		log_lines.pop_front()
+
+## 画面の中央に、大きめの一文を長めに出す。読み終わるころに自然に消える(長い文ほど長く)
+func show_banner(text: String, color: Color) -> void:
+	banner = {"text": text, "color": color, "age": 0.0, "life": clampf(2.5 + text.length() * 0.09, 4.0, 7.5)}
+	title_shown = minf(title_shown, 0.4)      # 潜った直後の操作の案内と重ねない
 
 ## 拾ったものを、右の地図の下に絵つきで知らせる。続けて同じ物を拾うと、数を足す
 func add_pickup(key: String, tex: Texture2D, name_s: String, color: Color, amount: float, unit: String) -> void:
@@ -39,6 +45,10 @@ func _process(delta: float) -> void:
 	for l in log_lines:
 		l["age"] += delta
 	title_shown = maxf(0.0, title_shown - delta)
+	if not banner.is_empty():
+		banner["age"] = float(banner["age"]) + delta
+		if float(banner["age"]) >= float(banner["life"]):
+			banner = {}
 	queue_redraw()
 
 func _draw() -> void:
@@ -92,6 +102,8 @@ func _draw() -> void:
 	if game.dtime != null:
 		_draw_sky(game.dtime, size_v, size_v.x - GameSettings.MINIMAP_SIZE.x - 20.0)
 	_draw_pickups(fl, size_v)
+	if not banner.is_empty():
+		_draw_banner(size_v)
 	if GameSettings.show_fps:
 		_draw_fps(fl, size_v)
 	if game.boss_fx != null and game.boss_fx.active:
@@ -112,6 +124,55 @@ func _draw() -> void:
 
 ## 層の主の HP の棒(ken 10/18。上の真ん中に、小さく二つ名、大きく魔物の名、その下に細長い赤い棒)。
 ## 戦いの間だけ。モノクロより上に描くので色がつく。2体目からは小さく下へ並べる
+## 中央の一文。ふわっと出て少し上がり、終わりの1秒で消える。暗い帯の上に、句点で折り返して描く
+func _draw_banner(size_v: Vector2) -> void:
+	var age := float(banner["age"])
+	var life := float(banner["life"])
+	var a := clampf(minf(age / 0.35, (life - age) / 1.0), 0.0, 1.0)
+	if a <= 0.0:
+		return
+	var px := 24
+	var lines := wrap_lines(String(banner["text"]), minf(760.0, size_v.x - 80.0), px)
+	var lh := px * 1.5
+	var y0 := size_v.y * 0.34 - lines.size() * lh / 2.0 - (1.0 - clampf(age / 0.35, 0.0, 1.0)) * -8.0
+	var wmax := 0.0
+	for l in lines:
+		wmax = maxf(wmax, UI.font().get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x)
+	var band := Rect2(size_v.x / 2.0 - wmax / 2.0 - 28.0, y0 - px * 0.9, wmax + 56.0, lines.size() * lh + px * 0.5)
+	draw_rect(band, Color(0.04, 0.03, 0.08, 0.62 * a))
+	var col: Color = banner["color"]
+	draw_rect(Rect2(band.position.x, band.position.y, band.size.x, 2.0), Color(col, 0.7 * a))
+	draw_rect(Rect2(band.position.x, band.end.y - 2.0, band.size.x, 2.0), Color(col, 0.7 * a))
+	for i in lines.size():
+		UI.text_center(self, size_v.x / 2.0, y0 + i * lh, lines[i], px, Color(col.lightened(0.35), a))
+
+## 文を、幅 w に収まるように折り返す。句点(。)のあとで切れるときはそこで、無ければ読点(、)のあとで切る
+static func wrap_lines(text: String, w: float, px: int) -> PackedStringArray:
+	var out := PackedStringArray()
+	var cur := ""
+	var cut := -1           # cur の中で、最後の句点の次の位置
+	var cut2 := -1          # 同じく、読点
+	for i in text.length():
+		var ch := text.substr(i, 1)
+		if UI.font().get_string_size(cur + ch, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > w and cur != "":
+			var at := cut if cut > 0 else cut2
+			if at > 0 and at < cur.length():
+				out.append(cur.substr(0, at))
+				cur = cur.substr(at)
+			else:
+				out.append(cur)
+				cur = ""
+			cut = -1
+			cut2 = -1
+		cur += ch
+		if ch == "。":
+			cut = cur.length()
+		elif ch == "、":
+			cut2 = cur.length()
+	if cur != "":
+		out.append(cur)
+	return out
+
 func _draw_boss(fl: FloorInstance, size_v: Vector2) -> void:
 	var y := 100.0
 	var k := 0

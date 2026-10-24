@@ -40,6 +40,7 @@ var lamp_on := false           # 燐晶の灯油を灯している(光に弱い�
 var webs := {}                 # 蜘蛛の巣のマス(番号 → true)。巣を張る魔物のまわりに張る。踏むと絡まる
 var wanderers: Array = []      # ワンダリング・モンスターで出た遭遇の id(DungeonTime)
 var world_props: Array = []    # 地図屋の印、壁の落書き、闇潜りの野営(FloorProps)
+var hook_marks: Array = []     # 物がある手がかりの印(RoomHooks)。{room, cell, pos, id, qty, text, taken}
 var decor: Array = []          # 絵だけの物: 錆鉄の軌条と止まったトロッコ、部屋の地物(湧き水、茸の畝、揚水機、骨の祭壇、聖歌席)
 var master_enc := -1           # 主の間の主(遭遇の id)。倒すと、まわりの控えの巣が散る
 const MASTER_REACH := 36.0         # 主の間からこのマス数までの巣は、みな散る
@@ -150,6 +151,7 @@ func setup(m: FloorMap) -> void:
 			ropes.append(Vector2i(int(p["x"]), int(p["y"])))
 	world_props = FloorProps.pick(d.get("props", []))
 	decor = FloorProps.decor(d)
+	hook_marks = RoomHooks.marks(self)
 	ground.setup(self)
 	ground.spawn_all()
 	_spawn_enemies()
@@ -530,6 +532,7 @@ func _draw() -> void:
 				for k in 4:
 					draw_rect(Rect2(rect.position.x, rect.position.y + k * 3.0, C, 3.0), Color(0, 0, 0, _shade(Color.WHITE, f).r * (0.42 - k * 0.1)))
 	FloorProps.draw_decor(self, vr)
+	RoomHooks.draw_marks(self, vr)
 	# 階段
 	_draw_stairs(up_cell, true, glow)
 	if not arena and down_cell.x >= 0:
