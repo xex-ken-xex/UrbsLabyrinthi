@@ -1014,7 +1014,8 @@ func _enter_room(pc: Vector2i) -> void:
 		log_msg("%s: %s" % [feat["name"], feat["desc"]], Color(0.78, 0.82, 0.86))
 	var hook: Variant = r.get("hook")
 	if typeof(hook) == TYPE_STRING:
-		log_msg(hook, Color("c9b6ff"))
+		log_msg(hook, RoomHooks.MARK_COL)
+		hud.show_banner(hook, RoomHooks.MARK_COL)      # 手がかりは画面の中央に大きく出て、自然に消える(ken 10/24)
 
 ## 部屋に初めて入ったときの描写(見える物と、聞こえる音かにおい。設計 §11.3)。部屋と夜で決まる(同じ部屋は同じ描写)
 static func room_flavor(fl: FloorInstance, r: Dictionary) -> String:
@@ -1403,6 +1404,8 @@ func _update_hint() -> void:
 		h = "%s: 罠をどうする?" % Controls.hint("interact")
 	elif arena == null and not current.ground.corpse_near(leader().position, CORPSE_REACH).is_empty():
 		h = "%s: 遺体を調べる" % Controls.hint("interact")
+	elif arena == null and not RoomHooks.mark_near(current, leader().position).is_empty():
+		h = "%s: %sを拾う" % [Controls.hint("interact"), RoomHooks.item_name(RoomHooks.mark_near(current, leader().position))]
 	elif arena != null:
 		h = "E: 闘技場を出る" if _near(current.up_cell, 1.4) else ""
 	elif (_near(current.down_cell, 1.4) or _near(current.up_cell, 1.4)) and dtime != null and dtime.stairs_sealed():
@@ -1450,6 +1453,10 @@ func interact() -> void:
 		current.ground.search_corpse(body)
 		current.queue_redraw()
 		_update_hint()
+		return
+	var mark := RoomHooks.mark_near(current, leader().position) if arena == null else {}
+	if not mark.is_empty():
+		take_hook_mark(mark)
 		return
 	if arena != null:
 		if _near(current.up_cell, 1.4):
@@ -1603,6 +1610,21 @@ func drop_item(id: String) -> String:
 		Sfx.cue(current, at + Vector2(0, -12), "toss")
 	_load_t = 0.0
 	return "%sを足もとに置いた" % nm
+
+## 手がかりの印の物を拾う(認識票・許可証・荷は遺品として遺品課へ、燐晶は袋へ)。拾い物と同じく、絵と名前で知らせる
+func take_hook_mark(mark: Dictionary) -> void:
+	mark["taken"] = true
+	var lead := leader()
+	var id := String(mark["id"])
+	if id == "crystal":
+		for i in int(mark["qty"]):
+			_on_ground_picked({"kind": "crystal", "purity": "mid", "kg": RoomHooks.CRYSTAL_KG, "pos": mark["pos"]}, lead)
+		log_msg("手がかりの燐晶を拾った。", Color(0.8, 0.85, 0.9))
+	else:
+		_on_ground_picked({"kind": "item", "id": id, "qty": int(mark["qty"]), "pos": mark["pos"]}, lead)
+		log_msg("%sを拾った。坑口館の遺品課に届けられる。" % ItemDB.item_name(id), Color("f1d98a"))
+	current.queue_redraw()
+	_update_hint()
 
 ## 第10層の空の座に座る。擬音 シン…(静けさ)とログ。初めて座ったときだけ、底から歌が聞こえる(実績「空座に座す」)
 func sit_on_seat(seat: Dictionary) -> void:

@@ -204,7 +204,7 @@ const SHOPS := {
 }
 
 ## 坑口館の遺品課でしか引き取らない遺品(店では売れない)
-const GUILD_ONLY := ["relic_tag", "relic_gear"]
+const GUILD_ONLY := ["relic_tag", "relic_gear", "relic_permit"]
 const RARE_WEAPONS := ["shadow_dagger", "miner_pick", "comet_spear"]
 const WEAPON_CAT_JP := {"sword": "剣", "dagger": "短剣", "blunt": "鈍器", "axe": "斧", "spear": "槍", "staff": "杖", "bow": "弓"}
 const ELEM_JP := {"fire": "火", "cold": "冷気", "lightning": "雷", "radiant": "光", "force": "力場", "poison": "毒"}

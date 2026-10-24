@@ -8,6 +8,7 @@ var pickups: Array = []             # 拾ったものの知らせ {key, tex, nam
 const PICKUP_LIFE := 4.0
 var overlay: Array = []             # 空でなければ全面の報告を出す(各要素は {text, color, size})
 var hint := ""
+var banner := {}                    # 画面の中央の一文(部屋の手がかり)。{text, color, age, life}。ken 10/24
 var title_shown := 7.0
 
 func _ready() -> void:
@@ -18,6 +19,11 @@ func add_log(text: String, color: Color = Color.WHITE) -> void:
 	log_lines.append({"text": text, "color": color, "age": 0.0})
 	while log_lines.size() > 8:
 		log_lines.pop_front()
+
+## 画面の中央に、大きめの一文を長めに出す。読み終わるころに自然に消える(長い文ほど長く)
+func show_banner(text: String, color: Color) -> void:
+	banner = {"text": text, "color": color, "age": 0.0, "life": clampf(2.5 + text.length() * 0.09, 4.0, 7.5)}
+	title_shown = minf(title_shown, 0.4)      # 潜った直後の操作の案内と重ねない
 
 ## 拾ったものを、右の地図の下に絵つきで知らせる。続けて同じ物を拾うと、数を足す
 func add_pickup(key: String, tex: Texture2D, name_s: String, color: Color, amount: float, unit: String) -> void:
@@ -39,6 +45,10 @@ func _process(delta: float) -> void:
 	for l in log_lines:
 		l["age"] += delta
 	title_shown = maxf(0.0, title_shown - delta)
+	if not banner.is_empty():
+		banner["age"] = float(banner["age"]) + delta
+		if float(banner["age"]) >= float(banner["life"]):
+			banner = {}
 	queue_redraw()
 
 func _draw() -> void:
@@ -92,6 +102,8 @@ func _draw() -> void:
 	if game.dtime != null:
 		_draw_sky(game.dtime, size_v, size_v.x - GameSettings.MINIMAP_SIZE.x - 20.0)
 	_draw_pickups(fl, size_v)
+	if not banner.is_empty():
+		_draw_banner(size_v)
 	if GameSettings.show_fps:
 		_draw_fps(fl, size_v)
 	if game.boss_fx != null and game.boss_fx.active:
@@ -109,6 +121,81 @@ func _draw() -> void:
 			UI.text_center(self, size_v.x / 2.0, 150.0 + i * 22.0, lines[i], 14, Color(1, 1, 1, a2))
 	if not overlay.is_empty():
 		_draw_overlay(size_v)
+
+## 中央の一文。ふわっと出て少し上がり、終わりの1秒で消える。暗い帯の上に、句点で折り返して描く。
+## 帯の縦の中心は画面の高さの 1/3。行間は文字の 1.5 倍、帯の上下の余白は文字の 0.8 倍で、和文の字面(全角の枠)を帯の上下まん中に置く。
+## 仲間が帯の下に入るときは、帯を薄くする(ken 10/24「文字の位置が美しくない」)
+const BANNER_PX := 24
+const CJK_ASCENT := 0.88       # 全角の枠の上から、文字の基準線まで(文字の大きさに対する割合)
+
+## 帯の四角と、各行の基準線の高さ
+static func banner_layout(lines: PackedStringArray, size_v: Vector2, px: int) -> Dictionary:
+	var lh := px * 1.5
+	var pad := px * 0.8
+	var wmax := 0.0
+	for l in lines:
+		wmax = maxf(wmax, UI.font().get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x)
+	var h := (lines.size() - 1) * lh + px + pad * 2.0
+	var band := Rect2(size_v.x / 2.0 - wmax / 2.0 - px * 1.2, size_v.y / 3.0 - h / 2.0, wmax + px * 2.4, h)
+	var bases: Array = []
+	for i in lines.size():
+		bases.append(band.position.y + pad + px * CJK_ASCENT + i * lh)
+	return {"band": band, "bases": bases}
+
+func _draw_banner(size_v: Vector2) -> void:
+	var age := float(banner["age"])
+	var life := float(banner["life"])
+	var a := clampf(minf(age / 0.35, (life - age) / 1.0), 0.0, 1.0)
+	if a <= 0.0:
+		return
+	var lines := wrap_lines(String(banner["text"]), minf(760.0, size_v.x - 80.0), BANNER_PX)
+	var lay := banner_layout(lines, size_v, BANNER_PX)
+	var rise := (1.0 - clampf(age / 0.35, 0.0, 1.0)) * 8.0
+	var band: Rect2 = lay["band"]
+	band.position.y += rise
+	var bg := 0.62
+	if _hero_under(band.grow(12.0)):
+		bg = 0.32
+	draw_rect(band, Color(0.04, 0.03, 0.08, bg * a))
+	var col: Color = banner["color"]
+	draw_rect(Rect2(band.position.x, band.position.y, band.size.x, 2.0), Color(col, 0.7 * a))
+	draw_rect(Rect2(band.position.x, band.end.y - 2.0, band.size.x, 2.0), Color(col, 0.7 * a))
+	for i in lines.size():
+		UI.text_center(self, size_v.x / 2.0, float(lay["bases"][i]) + rise, lines[i], BANNER_PX, Color(col.lightened(0.35), a))
+
+## 仲間のだれかが、画面の上でこの四角の下にいるか
+func _hero_under(r: Rect2) -> bool:
+	for h in game.heroes:
+		if is_instance_valid(h) and h.visible and r.has_point((h as Node2D).get_global_transform_with_canvas().origin + Vector2(0, -12)):
+			return true
+	return false
+
+## 文を、幅 w に収まるように折り返す。句点(。)のあとで切れるときはそこで、無ければ読点(、)のあとで切る
+static func wrap_lines(text: String, w: float, px: int) -> PackedStringArray:
+	var out := PackedStringArray()
+	var cur := ""
+	var cut := -1           # cur の中で、最後の句点の次の位置
+	var cut2 := -1          # 同じく、読点
+	for i in text.length():
+		var ch := text.substr(i, 1)
+		if UI.font().get_string_size(cur + ch, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > w and cur != "":
+			var at := cut if cut > 0 else cut2
+			if at > 0 and at < cur.length():
+				out.append(cur.substr(0, at))
+				cur = cur.substr(at)
+			else:
+				out.append(cur)
+				cur = ""
+			cut = -1
+			cut2 = -1
+		cur += ch
+		if ch == "。":
+			cut = cur.length()
+		elif ch == "、":
+			cut2 = cur.length()
+	if cur != "":
+		out.append(cur)
+	return out
 
 ## 層の主の HP の棒(ken 10/18。上の真ん中に、小さく二つ名、大きく魔物の名、その下に細長い赤い棒)。
 ## 戦いの間だけ。モノクロより上に描くので色がつく。2体目からは小さく下へ並べる

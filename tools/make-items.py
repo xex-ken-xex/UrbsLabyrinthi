@@ -366,6 +366,16 @@ def draw_tag(c, col):
         c.r(13, y, 18, y, shade(col, 0.55))
 
 
+def draw_permit(c, col):
+    # 潜行許可証: 横長の札。上に等級の帯、紐の穴、名義の行
+    col = hx(col)
+    c.r(5, 9, 26, 23, shade(col, 0.7)); c.r(6, 10, 25, 22, col)
+    c.r(6, 10, 25, 12, C("6a5a8a")); c.r(6, 10, 25, 10, shade(C("6a5a8a"), 1.3))
+    disc(c, 9, 17, 1, C("3a3a44"))
+    for y in (15, 18, 20):
+        c.r(12, y, 23, y, shade(col, 0.5))
+
+
 def draw_coins(c, col):
     col = hx(col)
     for (x, y) in ((10, 20), (17, 22), (14, 15), (21, 16)):
@@ -556,7 +566,7 @@ DRAW = {
     "jar": draw_jar, "bottle": draw_bottle, "charm": draw_charm, "scroll": draw_scroll, "fish": draw_fish, "shell": draw_shell,
     "pearl": draw_pearl, "slime": draw_slime, "lump": draw_lump, "meat": draw_meat, "pelt": draw_pelt, "fang": draw_fang,
     "bone": draw_bone, "scrap": draw_scrap, "scale": draw_scale, "gland": draw_gland, "feather": draw_feather, "fruit": draw_fruit,
-    "bundle": draw_bundle, "tag": draw_tag, "coins": draw_coins, "ingot": draw_ingot,
+    "bundle": draw_bundle, "tag": draw_tag, "permit": draw_permit, "coins": draw_coins, "ingot": draw_ingot,
     "sack": draw_sack, "root": draw_root, "cabbage": draw_cabbage, "cheese": draw_cheese, "egg": draw_egg, "pouch": draw_pouch,
     "logs": draw_logs, "bowl": draw_bowl, "plate": draw_plate, "skewer": draw_skewer, "cup": draw_cup, "bread": draw_bread,
     "jerky": draw_jerky, "pot": draw_pot,

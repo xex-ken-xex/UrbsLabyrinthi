@@ -227,6 +227,8 @@ FORAGE = [
          desc="冒険者の首にかかっていた札。遺族に届けると、謝礼が出る。", icon=("tag", dict(col="b8b8c8"))),
     dict(id="relic_coins", name="古い銀貨", price=15, kind="material",
          desc="袋に残っていた、少しの銀貨。", icon=("coins", dict(col="d8d8e0"))),
+    dict(id="relic_permit", name="潜行許可証", price=60, kind="material",
+         desc="迷宮で拾った、誰かの潜行許可証。坑口館の遺品課が引き取り、謝礼を出す。", icon=("permit", dict(col="a8a8b8"))),
 ]
 
 # ---- 魔物が落とすもの: (対象, 品物, 確率, 条件) ----

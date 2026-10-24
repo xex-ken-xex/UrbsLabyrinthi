@@ -56,6 +56,7 @@ const ITEMS := {
 	"relic_tools": {"name": "遺品の道具", "kind": "material", "price": 40, "free": true, "desc": "錆びていない道具一揃い。"},
 	"relic_tag": {"name": "認識票", "kind": "material", "price": 50, "free": true, "desc": "冒険者の首にかかっていた札。遺族に届けると、謝礼が出る。"},
 	"relic_coins": {"name": "古い銀貨", "kind": "material", "price": 15, "free": true, "desc": "袋に残っていた、少しの銀貨。"},
+	"relic_permit": {"name": "潜行許可証", "kind": "material", "price": 60, "free": true, "desc": "迷宮で拾った、誰かの潜行許可証。坑口館の遺品課が引き取り、謝礼を出す。"},
 }
 
 ## 舞台ごとの出現。[品物, 重み, 場所, 最も浅い層]

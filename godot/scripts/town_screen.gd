@@ -102,7 +102,7 @@ const NOTICES := [
 	"【求む】腕のいい盗賊。鍵のかかった宝物庫の前で、三日も足止めを食っている。",
 ]
 ## 遺品課が引き取るもの。[品物, 謝礼の割合(買い値に対して)]。認識票と遺品の装備は、ここでしか引き取らない
-const RELIC_RATE := {"relic_tag": 1.0, "relic_gear": 1.0, "relic_tools": 0.6, "relic_coins": 1.0}
+const RELIC_RATE := {"relic_tag": 1.0, "relic_gear": 1.0, "relic_tools": 0.6, "relic_coins": 1.0, "relic_permit": 1.0}
 const LEAVE_LINES := ["広場へ戻った。夜風が冷たい。", "広場へ戻った。坑口の光が、今夜も昇っている。", "広場へ戻った。どこかで、帰還を祝う声がする。"]
 
 var gs: GameState
