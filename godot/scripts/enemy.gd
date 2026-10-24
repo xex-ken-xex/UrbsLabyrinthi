@@ -711,7 +711,7 @@ func open_doors() -> void:
 			# 扉を壊す(攻城の怪物)
 			d["unlocked"] = true
 			var dp: Vector2 = game_floor.map.center_of(Vector2i(int(d["x"]), int(d["y"])))
-			Sfx.cue(game_floor, dp, "ram")
+			Sfx.cue(game_floor, dp, "ram", dp - position)
 			game_floor.spawn_text(dp + Vector2(0, -18), "扉を壊した", Color("ffb070"))
 		d["open"] = true
 		game_floor.map_changed()
@@ -1155,7 +1155,7 @@ func _charge_hit(h: Hero, leap: bool) -> void:
 		h.knock = charge_dir * 260.0 / maxf(0.5, h.ch.mass())
 		if traits.has("trample"):
 			h.hold("prone", 0.8)
-		Sfx.cue(game_floor, h.position, "ram")
+		Sfx.cue(game_floor, h.position, "ram", charge_dir)     # 突っ込んだ向きへ弾ける
 	_end_charge()
 
 func _end_charge() -> void:
@@ -1242,7 +1242,7 @@ func _gaze(dt: float) -> void:
 			continue
 		if h.stone_m <= 0.0 and gaze_cd <= 0.0:
 			gaze_cd = 5.0
-			_cue_seen("gaze")
+			_cue_seen("gaze", -to)       # 睨んだ向きへ
 		h.gaze_by(dt * (1.0 if h.controlled else 0.5), display_name)
 
 ## 糸を吐く: 当たった仲間は、しばらく動けない

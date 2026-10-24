@@ -19,6 +19,7 @@
     seed: { label: "乱数の種", f: (v, nd, c) => c.seed },
     dx: { label: "向き x", f: (v, nd, c) => c.dx },
     dy: { label: "向き y", f: (v, nd, c) => c.dy },
+    hd: { label: "向きを渡されたか(1 / 0)", f: (v, nd, c) => c.hd || 0 },
     g: { label: "残像の番号", f: (v, nd, c) => c.g || 0 },
     jrev: { label: "文字番号(右向きなら逆順)", f: (v, nd, c) => (c.dx >= 0 ? c.n - 1 - c.i : c.i) },
     big: { label: "大きいとき / ふつう", ins: ["yes", "no"], f: (v, nd, c) => (c.big ? v.yes : v.no) },
@@ -130,7 +131,7 @@
     const evalProps = makeEval(graph);
     const sylIdx = syllables(chars);
     const endm = window.CueLab ? window.CueLab.ending(chars) : ["", -1];
-    const base = { t, n, px, seed, dx: d.x, dy: d.y, big: !!big, life: lifeS, i: 0, g: 0, syl: 0, nsyl: sylIdx[n - 1] + 1 };
+    const base = { t, n, px, seed, dx: d.x, dy: d.y, hd: dl > 0 ? 1 : 0, big: !!big, life: lifeS, i: 0, g: 0, syl: 0, nsyl: sylIdx[n - 1] + 1 };
     ctx.font = px + "px " + font;
     const widths = chars.map((ch) => ctx.measureText(ch).width);
     const wordP = evalProps(Object.assign({}, base, { i: 0 }));
@@ -209,12 +210,17 @@
         s1: { type: "sub", a: 1, b: { type: "mul", a: 0.1, b: { type: "sin", x: { type: "mul", a: { type: "div", a: { type: "sub", a: T, b: 0.14 }, b: 0.1 }, b: Math.PI } } } },
         s: { type: "step", x: T, at: 0.14, before: "s0", after: { type: "step", x: T, at: 0.24, before: "s1", after: "s0" } },
         sk: { type: "mul", a: { type: "decay", x: T, dur: 0.35 }, b: { type: "big", yes: 6, no: 3.5 } },
+        // 向きがあれば弾ける: 語全体が向きへ飛び(kb)、向きの先の文字ほど遠くへ散る(ko。横向きのときだけ)
+        ke: { type: "out", x: T, dur: 0.2 },
+        kb: { type: "mul", a: "hd", b: "ke", c: { type: "mul", a: "px", b: 0.7 } },
+        jf: { type: "sub", a: { type: "sub", a: "n", b: 1 }, b: { type: "jrev" } },
+        ko: { type: "mul", a: { type: "mul", a: "hd", b: "jf" }, b: "ke", c: { type: "mul", a: "px", b: { type: "mul", a: 0.18, b: { type: "abs", x: "dx" } } } },
       },
       props: {
         sx: "s", sy: "s",
-        x: { type: "osc", x: T, f: 90, amp: "sk" },
-        y: { type: "add", a: { type: "cosc", x: T, f: 77, amp: "sk" }, b: { type: "mul", a: { type: "after", x: T, at: 0.3 }, b: -8 } },
-        rot: -0.08, alpha: { type: "fadeend", x: T },
+        x: { type: "add", a: { type: "osc", x: T, f: 90, amp: "sk" }, b: { type: "mul", a: "dx", b: "kb" }, c: { type: "mul", a: "dx", b: "ko" } },
+        y: { type: "add", a: { type: "cosc", x: T, f: 77, amp: "sk" }, b: { type: "mul", a: { type: "after", x: T, at: 0.3 }, b: -8 }, c: { type: "mul", a: "dy", b: "kb" }, d: { type: "mul", a: "dy", b: "ko" } },
+        rot: { type: "add", a: -0.08, b: { type: "mul", a: "hd", b: { type: "add", a: 0.08, b: { type: "mul", a: 0.14, b: "dx" } } } }, alpha: { type: "fadeend", x: T },
       },
     },
     shake: {
@@ -240,11 +246,12 @@
       props: { sx: "s", sy: "s", y: { type: "mul", a: T, b: -22 }, alpha: { type: "mul", a: { type: "fadeend", x: T }, b: { type: "ramp", x: T, dur: 0.18 } } },
     },
     snap: {
-      nodes: { k2: { type: "back", x: T, dur: 0.11, over: 2.2 } },
+      // 向きの後ろから滑り込む(向きが無ければ dx=1 なので左から)
+      nodes: { k2: { type: "back", x: T, dur: 0.11, over: 2.2 }, m: { type: "mul", a: { type: "sub", a: "k2", b: 1 }, b: { type: "mul", a: "px", b: 2 } } },
       props: {
-        x: { type: "mul", a: { type: "sub", a: "k2", b: 1 }, b: { type: "mul", a: "px", b: 2 } },
-        rot: { type: "add", a: { type: "mul", a: -0.18, b: { type: "sub", a: 1, b: { type: "ramp", x: T, dur: 0.11 } } }, b: -0.05 },
-        y: { type: "mul", a: T, b: -8 }, alpha: { type: "fadeend", x: T },
+        x: { type: "mul", a: "dx", b: "m" },
+        rot: { type: "add", a: { type: "mul", a: -0.18, b: { type: "sub", a: 1, b: { type: "ramp", x: T, dur: 0.11 } }, c: "dx" }, b: { type: "mul", a: -0.05, b: { type: "sign", x: "dx", pos: 1, neg: -1 } } },
+        y: { type: "add", a: { type: "mul", a: T, b: -8 }, b: { type: "mul", a: "dy", b: "m" } }, alpha: { type: "fadeend", x: T },
       },
     },
     bounce: {

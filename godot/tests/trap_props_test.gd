@@ -21,6 +21,13 @@ func _step(n: int) -> void:
 func _cued(fl: FloorInstance, text: String) -> bool:
 	return fl.get_children().any(func(n): return n is Sfx and (n as Sfx).text == text)
 
+## その文字の擬音に渡された向き(無ければ null)
+func _cue_dir(fl: FloorInstance, id: String) -> Variant:
+	for n in fl.get_children():
+		if n is Sfx and (n as Sfx).text == String(Sfx.CUES[id][0]):
+			return (n as Sfx).dir
+	return null
+
 func _run() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
@@ -37,6 +44,7 @@ func _run() -> void:
 	await _test_cart()
 	await _test_sink()
 	await _test_gaze()
+	await _test_cue_dirs()
 	await _test_draw()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 	DiveSave.clear()
@@ -168,6 +176,8 @@ func _test_cart() -> void:
 	await _step(120)
 	check(en.hp < 400.0, "軌条の上の魔物が轢かれる (%.0f)" % en.hp)
 	check(_cued(fl, "ガシャーン!"), "端まで走ると「ガシャーン!」")
+	var sd: Variant = _cue_dir(fl, "smash")
+	check(sd != null and (sd as Vector2) != Vector2.ZERO, "轢かれた「ドガッ」は、はね飛ばした向きへ弾ける")
 	fl.decor.erase(rail)
 	en.queue_free()
 	fl.enemies.clear()
@@ -234,7 +244,8 @@ func _test_gaze() -> void:
 	await _step(3)
 	check(_cued(fl, "ギラッ") and lead.fear_t <= 0.0, "視線の先に立つと、目が光る「ギラッ」(まだ射すくめない)")
 	await _step(40)
-	check(_cued(fl, "ギンッ!") and lead.fear_t > 0.0 and lead.ch.hp < 500.0, "一拍おいて「ギンッ!」、射すくめられて怯える")
+	check(_cued(fl, String(Sfx.CUES["skull_gaze"][0])) and lead.fear_t > 0.0 and lead.ch.hp < 500.0, "一拍おいて「ギンッ!」、射すくめられて怯える")
+	check(_cue_dir(fl, "skull_gaze") == Vector2.RIGHT, "「ギンッ!」は視線の向き(東)へ滑り込む")
 	# 光っている間に視線から外れれば、無事
 	_quiet(fl)
 	gz.tick = 0.0
@@ -266,6 +277,41 @@ func _test_gaze() -> void:
 	fl.enemies.clear()
 
 ## 地物の絵と軌条を、いまの階に置いて描いても止まらない
+## 擬音の向き(snap・slam): 棘は下から、転がりは転がる向きへ、溜めの一撃は振った向きへ
+func _test_cue_dirs() -> void:
+	print("[擬音の向き]")
+	var fl: FloorInstance = main.current
+	_quiet(fl)
+	var ab := _straight(fl)
+	var a: Vector2i = ab[0]
+	var lead: Hero = main.leader()
+	for h in main.heroes:
+		h.position = main.random_room_pos(fl, -1)
+	var sp := TrapFx.make(fl, _trap(fl, a, "spikes"), null)
+	fl.add_child(sp)
+	await _step(40)
+	check(_cue_dir(fl, "spikes") == Vector2.UP, "棘の「ジャキン」は下から突き上げる")
+	_quiet(fl)
+	lead.position = fl.map.center_of(a + Vector2i(3, 0))
+	lead.controlled = true
+	lead.roll_cd = 0.0
+	lead.cmd = {"move": Vector2.LEFT, "attack": false, "dodge": true}
+	await _step(2)
+	var dd: Variant = _cue_dir(fl, "dodge")
+	check(dd != null and (dd as Vector2).dot(Vector2.LEFT) > 0.9, "転がりの「サッ」は転がる向き(左)へ")
+	lead.cmd = {"move": Vector2.ZERO, "attack": false, "dodge": false}
+	await _step(30)
+	_quiet(fl)
+	lead.facing = Vector2.UP
+	lead.charged_attack(1.0)
+	var cd: Variant = _cue_dir(fl, "charge_miss")
+	if cd == null:
+		cd = _cue_dir(fl, "charge_hit")
+	check(cd != null and (cd as Vector2) != Vector2.ZERO, "溜めの一撃の擬音は振った向きへ")
+	# 向きを渡さないときは、これまでと同じ(snap は左から、slam は弾けない)
+	Sfx.cue(fl, lead.position, "disarm_fail")
+	check(_cue_dir(fl, "disarm_fail") == Vector2.ZERO, "向きの無い呼び方は、これまでどおり")
+
 func _test_draw() -> void:
 	print("[地物の絵]")
 	var fl: FloorInstance = main.current

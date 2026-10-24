@@ -1149,6 +1149,17 @@ const TRAP_CUE := {"pit": "pit", "teleport": "warp", "teleport_one": "warp", "ca
 	"summon": "summon", "rust": "rust", "rotate": "spin", "trip": "trip", "poison": "poison", "slide": "slide", "prone": "slide",
 	"blind": "flash", "fear": "wail", "chill": "chill", "restrain": "teeth", "lift": "lift", "bolt": "trap"}
 
+var _slide_v := Vector2.ZERO        # 滑る罠の向き(擬音と滑る動きで同じ向きにする)
+
+## 滑る罠の向き(壁でない隣のどれか。無ければ ZERO)
+func _slide_dir(victim: Body) -> Vector2:
+	var dirs: Array = []
+	var c := current.map.cell_of(victim.position)
+	for d in FloorMap.DIRS4:
+		if not current.map.opaque(c.x + d.x, c.y + d.y):
+			dirs.append(Vector2(d))
+	return dirs[Dice.rng.randi_range(0, dirs.size() - 1)] if not dirs.is_empty() else Vector2.ZERO
+
 func _cell_seen(p: Vector2) -> bool:
 	var c := current.map.cell_of(p)
 	return current.map.in_bounds(c.x, c.y) and current.map.visible[current.map.idx(c.x, c.y)] == 1
@@ -1174,7 +1185,8 @@ func _trigger_trap(t: Dictionary, victim: Body) -> void:
 			Sfx.cue(current, pos, cue, tf.dir)      # 大岩の ゴロゴロ は転がる向きへ
 		current.add_child(tf)
 		return
-	Sfx.cue(current, pos, String(TRAP_CUE.get(fx, "trap")))
+	_slide_v = _slide_dir(victim) if fx == "slide" else Vector2.ZERO
+	Sfx.cue(current, pos, String(TRAP_CUE.get(fx, "trap")), _slide_v)     # 滑る ズザザッ は滑る向きへ
 	var scale := 1.0
 	var failed := true          # 仕掛けの動き(落とし穴など)が働くか
 	var kind := String(t["kind"])
@@ -1261,13 +1273,7 @@ func _trap_effect(t: Dictionary, fx: String, victim: Body, pos: Vector2) -> void
 			if hero != null:
 				log_msg("%sは毒に冒された" % hero.ch.name, Color("9be06a"))
 		"slide":
-			var dirs: Array = []
-			var c := current.map.cell_of(victim.position)
-			for d in FloorMap.DIRS4:
-				if not current.map.opaque(c.x + d.x, c.y + d.y):
-					dirs.append(Vector2(d))
-			var v: Vector2 = dirs[Dice.rng.randi_range(0, dirs.size() - 1)] if not dirs.is_empty() else Vector2.ZERO
-			victim.knock = v * 360.0 / maxf(0.5, victim.body_mass() * 0.7)
+			victim.knock = _slide_v * 360.0 / maxf(0.5, victim.body_mass() * 0.7)
 			TrapFx.knock_down(victim, 0.9)
 		"prone": TrapFx.knock_down(victim, 1.2)
 		"lift": TrapFx.hold(victim, "lift", 1.0)
@@ -1991,7 +1997,7 @@ func climb_rope(dir: int, c: Vector2i) -> void:
 			Sfx.cue(current, h.position + Vector2(0, -10), "feather")      # 羽落ちの指輪
 			log_msg("%sは手を滑らせたが、羽落ちの指輪でふわりと降りた(%sm)" % [h.ch.name, _m(fall)], Color("c8e0ff"))
 			continue
-		Sfx.cue(current, h.position + Vector2(0, -10), "slip")
+		Sfx.cue(current, h.position + Vector2(0, -10), "slip", Vector2.DOWN)    # 滑り落ちる
 		log_msg("%sは %d%+d で手を滑らせ、%sm 落ちた" % [h.ch.name, int(r[1]), int(r[2]), _m(fall)], Color("ff9a7a"))
 		h.damage(maxf(1.0, fall * ROPE_FALL_DMG), h.position + Vector2(0, 1), true)
 

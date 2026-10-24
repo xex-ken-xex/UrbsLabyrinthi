@@ -185,7 +185,7 @@ func _explode() -> void:
 func _spikes() -> void:
 	if not done and age >= SPIKE_DELAY:
 		done = true
-		Sfx.cue(fl, origin, "spikes")
+		Sfx.cue(fl, origin, "spikes", Vector2.UP)       # 下から突き上げる
 		for b in _bodies():
 			if b.position.distance_to(origin) <= C * 0.6 + b.radius * 0.6:
 				hurt(b, 1.0, origin + Vector2(0, 4))
@@ -237,11 +237,11 @@ func _boulder(delta: float) -> void:
 					side = -side
 				if hurt(b, 1.0, p - side * 8.0, 0.0):
 					b.knock = (side * 260.0 + dir * 120.0) / maxf(0.5, b.body_mass() * 0.7)
-					Sfx.cue(fl, b.position, "smash")
+					Sfx.cue(fl, b.position, "smash", b.knock)      # はね飛ばした向きへ弾ける
 		if reach >= total:
 			done = true
 			zone_t = 0.6
-			Sfx.cue(fl, end, "cart_crash" if kind == "cart" else "smash")    # 鉱車は軌条の端で ガシャーン!
+			Sfx.cue(fl, end, "cart_crash" if kind == "cart" else "smash", dir)    # 鉱車は軌条の端で ガシャーン!
 			fl.shake.emit(0.2)
 	else:
 		zone_t -= delta
@@ -434,7 +434,7 @@ func _crush() -> void:
 func _net() -> void:
 	if not done and age >= NET_DELAY:
 		done = true
-		Sfx.cue(fl, origin, "net")
+		Sfx.cue(fl, origin, "net", Vector2.DOWN)       # 上から落ちてくる
 		fl.alert_radius(origin, 8.0)            # 網の鈴が鳴る
 		for b in _bodies():
 			if b.position.distance_to(origin) <= C * 0.9 + b.radius * 0.5 and not dodging(b):
@@ -563,7 +563,7 @@ func _gaze(delta: float) -> void:
 			(b as Enemy).state = "flee"
 			(b as Enemy).timer = GAZE_FEAR
 	if struck:
-		Sfx.cue(fl, _skull() + Vector2(0, -12), "skull_gaze")
+		Sfx.cue(fl, _skull() + Vector2(0, -12), "skull_gaze", dir)       # 視線の向きへ
 		tick = GAZE_REST
 	else:
 		tick = 0.8         # 視線から外れた(光っただけ)

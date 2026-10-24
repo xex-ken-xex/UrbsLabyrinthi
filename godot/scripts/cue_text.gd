@@ -2,7 +2,8 @@ class_name CueText
 extends RefCounted
 ## 擬音の文字を、一文字ずつ動かして描く(Sfx、DiceFx、UnlockFx が使う)。
 ## 動き方の名前は Sfx の説明を見る。t は出てからの秒、life は消えるまでの秒、px は文字の大きさ。
-## dir は drop / roll / fly の向き(転がる・飛ぶ向き。ZERO なら右へ)。
+## dir は drop / roll / fly / snap / slam の向き(転がる・飛ぶ・滑り込む・弾ける向き。ZERO なら右へ)。
+## snap は dir の向きへ滑り込む(ZERO なら左から右へ。これまでと同じ)。slam は dir があるときだけ、その向きへ弾ける。
 ## 動きの緩急はリリックモーション(歌詞を動かす文字の映像)の手を借りた: 行き過ぎて戻る、速く出て遅く止まる。
 ## 語末の標識(ッ = 収束、ン = 余韻。陳 2022)はどの動き方にも「仕上げ」として足す: ッ で終わる語は最後の字が
 ## 叩き込まれて止まり、ン で終わる語は出きったあとに揺れ戻す。flutter / stagger / tremble / loom は
@@ -71,6 +72,7 @@ static func draw_word(ci: CanvasItem, chars: PackedStringArray, style: String, t
 	var shake := Vector2.ZERO
 	var spread := 0.0
 	var d := dir.normalized() if dir != Vector2.ZERO else Vector2.RIGHT
+	var hd := 0.0 if dir == Vector2.ZERO else 1.0      # 向きを渡されたか(slam が弾けるのは、渡されたときだけ)
 	var slide := Vector2.ZERO      # 語全体のずれ(fly)
 	match style:
 		"pop":
@@ -84,7 +86,9 @@ static func draw_word(ci: CanvasItem, chars: PackedStringArray, style: String, t
 				scale = 1.0 - 0.1 * sin((t - 0.14) / 0.1 * PI)
 			var sk := maxf(0.0, 1.0 - t / 0.35) * (6.0 if big else 3.5)
 			shake = Vector2(sin(t * 90.0 + seed) * sk, cos(t * 77.0 + seed) * sk)
-			tilt = -0.08
+			# 向きがあれば、ぶつかった向きへ弾け飛び、そちらへ傾く
+			tilt = -0.08 + hd * (0.08 + 0.14 * d.x)
+			slide = d * (hd * ease_out(t / 0.2) * px * 0.7)
 			rise = -maxf(0.0, t - 0.3) * 8.0
 		"shake":
 			rise = -t * 6.0
@@ -96,10 +100,10 @@ static func draw_word(ci: CanvasItem, chars: PackedStringArray, style: String, t
 			scale = lerpf(0.8, 1.0, clampf(t / 0.25, 0.0, 1.0))
 			rise = -t * 22.0
 		"snap":
-			# 横から滑り込み、少し行き過ぎて止まる
+			# 向きの後ろから滑り込み、少し行き過ぎて止まる(向きが無ければ左から)
 			var k2 := ease_back(t / 0.11, 2.2)
-			shake.x = -(1.0 - k2) * px * 2.0
-			tilt = -0.18 * (1.0 - clampf(t / 0.11, 0.0, 1.0)) - 0.05
+			shake = -d * (1.0 - k2) * px * 2.0
+			tilt = -0.18 * (1.0 - clampf(t / 0.11, 0.0, 1.0)) * d.x - 0.05 * (1.0 if d.x >= 0.0 else -1.0)
 			rise = -t * 8.0
 		"drop":
 			rise = -maxf(0.0, t - 0.4) * 10.0
@@ -150,6 +154,10 @@ static func draw_word(ci: CanvasItem, chars: PackedStringArray, style: String, t
 		var sq := Vector2.ONE       # 縦横の伸び縮み(着地でつぶれる)
 		var rot := tilt
 		match style:
+			"slam":
+				# 弾けるとき、向きの先の文字ほど遠くへ散る(横向きのときだけ)
+				var jf := i if d.x >= 0.0 else n - 1 - i
+				off = d * (hd * jf * ease_out(t / 0.2) * px * 0.18 * absf(d.x))
 			"bounce":
 				# 一文字ずつ、跳ねながら出る
 				var ti := t - i * 0.06
