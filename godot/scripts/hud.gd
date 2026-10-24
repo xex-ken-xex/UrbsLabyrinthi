@@ -122,29 +122,53 @@ func _draw() -> void:
 	if not overlay.is_empty():
 		_draw_overlay(size_v)
 
-## 層の主の HP の棒(ken 10/18。上の真ん中に、小さく二つ名、大きく魔物の名、その下に細長い赤い棒)。
-## 戦いの間だけ。モノクロより上に描くので色がつく。2体目からは小さく下へ並べる
-## 中央の一文。ふわっと出て少し上がり、終わりの1秒で消える。暗い帯の上に、句点で折り返して描く
+## 中央の一文。ふわっと出て少し上がり、終わりの1秒で消える。暗い帯の上に、句点で折り返して描く。
+## 帯の縦の中心は画面の高さの 1/3。行間は文字の 1.5 倍、帯の上下の余白は文字の 0.8 倍で、和文の字面(全角の枠)を帯の上下まん中に置く。
+## 仲間が帯の下に入るときは、帯を薄くする(ken 10/24「文字の位置が美しくない」)
+const BANNER_PX := 24
+const CJK_ASCENT := 0.88       # 全角の枠の上から、文字の基準線まで(文字の大きさに対する割合)
+
+## 帯の四角と、各行の基準線の高さ
+static func banner_layout(lines: PackedStringArray, size_v: Vector2, px: int) -> Dictionary:
+	var lh := px * 1.5
+	var pad := px * 0.8
+	var wmax := 0.0
+	for l in lines:
+		wmax = maxf(wmax, UI.font().get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x)
+	var h := (lines.size() - 1) * lh + px + pad * 2.0
+	var band := Rect2(size_v.x / 2.0 - wmax / 2.0 - px * 1.2, size_v.y / 3.0 - h / 2.0, wmax + px * 2.4, h)
+	var bases: Array = []
+	for i in lines.size():
+		bases.append(band.position.y + pad + px * CJK_ASCENT + i * lh)
+	return {"band": band, "bases": bases}
+
 func _draw_banner(size_v: Vector2) -> void:
 	var age := float(banner["age"])
 	var life := float(banner["life"])
 	var a := clampf(minf(age / 0.35, (life - age) / 1.0), 0.0, 1.0)
 	if a <= 0.0:
 		return
-	var px := 24
-	var lines := wrap_lines(String(banner["text"]), minf(760.0, size_v.x - 80.0), px)
-	var lh := px * 1.5
-	var y0 := size_v.y * 0.34 - lines.size() * lh / 2.0 - (1.0 - clampf(age / 0.35, 0.0, 1.0)) * -8.0
-	var wmax := 0.0
-	for l in lines:
-		wmax = maxf(wmax, UI.font().get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x)
-	var band := Rect2(size_v.x / 2.0 - wmax / 2.0 - 28.0, y0 - px * 0.9, wmax + 56.0, lines.size() * lh + px * 0.5)
-	draw_rect(band, Color(0.04, 0.03, 0.08, 0.62 * a))
+	var lines := wrap_lines(String(banner["text"]), minf(760.0, size_v.x - 80.0), BANNER_PX)
+	var lay := banner_layout(lines, size_v, BANNER_PX)
+	var rise := (1.0 - clampf(age / 0.35, 0.0, 1.0)) * 8.0
+	var band: Rect2 = lay["band"]
+	band.position.y += rise
+	var bg := 0.62
+	if _hero_under(band.grow(12.0)):
+		bg = 0.32
+	draw_rect(band, Color(0.04, 0.03, 0.08, bg * a))
 	var col: Color = banner["color"]
 	draw_rect(Rect2(band.position.x, band.position.y, band.size.x, 2.0), Color(col, 0.7 * a))
 	draw_rect(Rect2(band.position.x, band.end.y - 2.0, band.size.x, 2.0), Color(col, 0.7 * a))
 	for i in lines.size():
-		UI.text_center(self, size_v.x / 2.0, y0 + i * lh, lines[i], px, Color(col.lightened(0.35), a))
+		UI.text_center(self, size_v.x / 2.0, float(lay["bases"][i]) + rise, lines[i], BANNER_PX, Color(col.lightened(0.35), a))
+
+## 仲間のだれかが、画面の上でこの四角の下にいるか
+func _hero_under(r: Rect2) -> bool:
+	for h in game.heroes:
+		if is_instance_valid(h) and h.visible and r.has_point((h as Node2D).get_global_transform_with_canvas().origin + Vector2(0, -12)):
+			return true
+	return false
 
 ## 文を、幅 w に収まるように折り返す。句点(。)のあとで切れるときはそこで、無ければ読点(、)のあとで切る
 static func wrap_lines(text: String, w: float, px: int) -> PackedStringArray:
@@ -173,6 +197,8 @@ static func wrap_lines(text: String, w: float, px: int) -> PackedStringArray:
 		out.append(cur)
 	return out
 
+## 層の主の HP の棒(ken 10/18。上の真ん中に、小さく二つ名、大きく魔物の名、その下に細長い赤い棒)。
+## 戦いの間だけ。モノクロより上に描くので色がつく。2体目からは小さく下へ並べる
 func _draw_boss(fl: FloorInstance, size_v: Vector2) -> void:
 	var y := 100.0
 	var k := 0
