@@ -443,7 +443,7 @@ func _move(delta: float) -> void:
 		roll_dir = facing if mv.length() <= 0.1 else mv.normalized()
 		roll_t = Balance.ROLL_TIME
 		roll_cd = ch.roll_cooldown()
-		Sfx.cue(game_floor, position + Vector2(0, 16), "dodge")
+		Sfx.cue(game_floor, position + Vector2(0, 16), "dodge", roll_dir)      # 転がる向きへ滑り込む
 		iframes = Balance.ROLL_TIME + 0.08
 	cmd["dodge"] = false
 	if roll_t > 0.0:
@@ -511,7 +511,7 @@ func charged_attack(frac: float) -> bool:
 	var aim := _aim()
 	var hit := _swing_hit(aim, mult, Balance.CHARGE_REACH, Balance.CHARGE_KNOCK, 0.28)
 	lunge = aim * 11.0
-	Sfx.cue(game_floor, position + aim * (radius + 14.0), "charge_hit" if hit > 0 else "charge_miss")
+	Sfx.cue(game_floor, position + aim * (radius + 14.0), "charge_hit" if hit > 0 else "charge_miss", aim)     # 振った向きへ
 	return true
 
 ## 振る。届く範囲の魔物に当て、当たった数を返す。dmg_mult・reach_mult・knock_mult は溜めの一撃で使う
@@ -726,7 +726,7 @@ func _skill_effects(en: Enemy, sk: Dictionary, away: Vector2) -> void:
 		en.apply_stun(float(sk["stun"]), String(sk.get("cond", "stun")))
 	if float(sk.get("sunder", 0.0)) > 0.0:
 		if en.sunder_t <= 0.0:
-			Sfx.cue(game_floor, en.position, "sunder")
+			Sfx.cue(game_floor, en.position, "sunder", en.position - position)
 		en.apply_sunder(float(sk["sunder"]))
 
 func _allies() -> Array:

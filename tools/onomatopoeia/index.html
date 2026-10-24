@@ -88,8 +88,8 @@ details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
       <div class="row" style="margin-top:6px">
         <div><label for="size">大きさ ×<span id="sizeV">1.0</span></label><input type="range" id="size" min="0.5" max="3" step="0.05" value="1"></div>
         <div class="narrow"><label for="color">色</label><input type="color" id="color" value="#ffe08a"></div>
-        <div class="narrow"><label for="dir">向き(roll / fly)</label>
-          <select id="dir"><option value="1,0">→ 右</option><option value="-1,0">← 左</option><option value="0,-1">↑ 上</option><option value="0,1">↓ 下</option><option value="1,-1">↗</option><option value="-1,1">↙</option></select></div>
+        <div class="narrow"><label for="dir">向き(roll / fly / snap / slam)</label>
+          <select id="dir"><option value="0,0">・ なし</option><option value="1,0">→ 右</option><option value="-1,0">← 左</option><option value="0,-1">↑ 上</option><option value="0,1">↓ 下</option><option value="1,-1">↗</option><option value="-1,1">↙</option></select></div>
       </div>
       <div class="row" style="margin-top:8px">
         <button id="addCurrent" class="primary">舞台の真ん中に置く</button>

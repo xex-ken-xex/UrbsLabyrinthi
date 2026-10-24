@@ -104,6 +104,7 @@
     let spread = 0;
     const dl = Math.hypot(dir.x, dir.y);
     const d = dl > 0 ? { x: dir.x / dl, y: dir.y / dl } : { x: 1, y: 0 };
+    const hd = dl > 0 ? 1 : 0;     // 向きを渡されたか(slam が弾けるのは、渡されたときだけ)
     let slide = { x: 0, y: 0 };
     switch (style) {
       case "pop":
@@ -115,7 +116,9 @@
         if (t >= 0.14 && t < 0.24) scale = 1 - 0.1 * Math.sin((t - 0.14) / 0.1 * Math.PI);
         const sk = Math.max(0, 1 - t / 0.35) * (big ? 6 : 3.5);
         shake = { x: Math.sin(t * 90 + seed) * sk, y: Math.cos(t * 77 + seed) * sk };
-        tilt = -0.08;
+        tilt = -0.08 + hd * (0.08 + 0.14 * d.x);
+        const kb = hd * easeOut(t / 0.2) * px * 0.7;
+        slide = { x: d.x * kb, y: d.y * kb };
         rise = -Math.max(0, t - 0.3) * 8;
         break;
       }
@@ -128,8 +131,8 @@
         break;
       case "snap": {
         const k2 = easeBack(t / 0.11, 2.2);
-        shake.x = -(1 - k2) * px * 2;
-        tilt = -0.18 * (1 - clampf(t / 0.11, 0, 1)) - 0.05;
+        shake = { x: -d.x * (1 - k2) * px * 2, y: -d.y * (1 - k2) * px * 2 };
+        tilt = -0.18 * (1 - clampf(t / 0.11, 0, 1)) * d.x - 0.05 * (d.x >= 0 ? 1 : -1);
         rise = -t * 8;
         break;
       }
@@ -181,6 +184,12 @@
       let ti = t;            // 実験用: この字の時間
       let skip = false;
       switch (style) {
+        case "slam": {
+          const jf = d.x >= 0 ? i : n - 1 - i;
+          const ko = hd * jf * easeOut(t / 0.2) * px * 0.18 * Math.abs(d.x);
+          off = { x: d.x * ko, y: d.y * ko };
+          break;
+        }
         case "bounce": {
           ti = t - i * 0.06;
           if (ti < 0) { skip = true; break; }

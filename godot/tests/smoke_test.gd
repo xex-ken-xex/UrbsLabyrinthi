@@ -1722,7 +1722,7 @@ func _test_game() -> void:
 	check(fl.get_child_count() == nk + 1, "擬音の文字が出る")
 	var unstyled: Array = []
 	for id in Sfx.CUES:
-		if not Sfx.STYLE.has(id) or not ["pop", "slam", "bounce", "shake", "stretch", "soft", "snap", "wave", "drop", "roll", "fly"].has(String(Sfx.STYLE[id])):
+		if not Sfx.STYLE.has(id) or not ["pop", "slam", "bounce", "shake", "stretch", "soft", "snap", "wave", "drop", "roll", "fly", "flutter", "stagger", "tremble", "loom"].has(String(Sfx.STYLE[id])):
 			unstyled.append(id)
 	check(unstyled.is_empty() and UI.cue_font() != UI.font(), "どの擬音にも動き方があり、擬音用のフォントで描く %s" % str(unstyled))
 	var no_cue: Array = []
