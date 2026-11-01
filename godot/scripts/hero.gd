@@ -416,6 +416,8 @@ func _tick(delta: float) -> void:
 
 func _move(delta: float) -> void:
 	_attack_input(delta)
+	if controlled and GameSettings.bump_attack:
+		_bump_attack()
 	var mv: Vector2 = cmd.get("move", Vector2.ZERO)
 	if confuse_t > 0.0:
 		mv = -mv           # 回転板: 前後左右が逆になる
@@ -470,6 +472,33 @@ func attack() -> bool:
 		return false
 	_swing_hit(_aim(), 1.0, 1.0, 1.0, 0.18)
 	return true
+
+const BUMP_SLACK := 4.0        # ぶつかったとみなす、体の縁どうしの隙間(画素)
+
+## ぶつかって殴る(操作中の一人。操作の設定「戦い方: ぶつかる」のとき)。触れている魔物へ、いつもの一撃を振る。
+## 背を向けて離れようとしているときは振らない。話し合える魔物(中立)は、すり抜けるだけで殴らない(殴るなら攻撃キーで)。
+## 溜めている間は振らない(溜めの一撃を邪魔しない)
+func _bump_attack() -> void:
+	if not can_attack() or charging():
+		return
+	var mv: Vector2 = cmd.get("move", Vector2.ZERO)
+	var best: Enemy = null
+	var bd := 1e9
+	for en in game_floor.enemies:
+		if en.dead or en.hidden_form() or en.state == "neutral":
+			continue
+		var to: Vector2 = en.position - position
+		var d := to.length()
+		if d > radius + en.radius + BUMP_SLACK:
+			continue
+		var toward := mv.normalized().dot(to / maxf(d, 0.01)) if mv.length() > 0.1 else 0.0
+		if toward < -0.5:
+			continue
+		if d < bd:
+			bd = d
+			best = en
+	if best != null:
+		_swing_hit((best.position - position).normalized(), 1.0, 1.0, 1.0, 0.18)
 
 ## 攻撃の押し方を読む(操作中の一人)。押した瞬間に一度振り、押し続けると溜まり、離すと溜めの一撃
 func _attack_input(delta: float) -> void:

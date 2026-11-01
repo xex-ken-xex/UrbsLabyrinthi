@@ -16,6 +16,7 @@ var first: Button
 var speed_btns: Array = []
 var enemy_btns: Array = []
 var fps_btns: Array = []
+var bump_btns: Array = []
 
 func _ready() -> void:
 	theme = UIKit.theme()
@@ -67,6 +68,16 @@ func _ready() -> void:
 		fs.add_child(fb)
 		fps_btns.append(fb)
 	root.add_child(fs)
+	# 戦い方。ぶつかると自動で殴る(オート寄り)か、攻撃キーで殴るか(ken 11/1)。操作していない仲間は、どちらでも自分で殴る
+	var bs := UIKit.hbox(8)
+	var bl := UIKit.label("戦い方", 16)
+	bl.custom_minimum_size = Vector2(sp.get_child(0).get_minimum_size().x, 0)
+	bs.add_child(bl)
+	for on in [true, false]:
+		var bb := UIKit.button("ぶつかる" if on else "キー", _on_bump.bind(on), 130)
+		bs.add_child(bb)
+		bump_btns.append(bb)
+	root.add_child(bs)
 	var panel := UIKit.panel()
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(panel)
@@ -119,7 +130,18 @@ func _on_fps(on: bool) -> void:
 	_refresh_speed()
 	msg.text = "FPS を、迷宮の画面の上に出す" if on else "FPS を出さない"
 
+func _on_bump(on: bool) -> void:
+	GameSettings.set_bump_attack(on)
+	_refresh_speed()
+	msg.text = "戦い方を「ぶつかる」にした。魔物にぶつかると自動で殴る(攻撃キーの一撃・溜め・技も使える)" if on else "戦い方を「キー」にした。攻撃キーを押したときだけ殴る"
+
 func _refresh_speed() -> void:
+	for i in bump_btns.size():
+		var bb: Button = bump_btns[i]
+		if (i == 0) == GameSettings.bump_attack:
+			bb.add_theme_stylebox_override("normal", UIKit.box(Color(0.3, 0.25, 0.14, 1.0), UIKit.GOLD, 2))
+		else:
+			bb.remove_theme_stylebox_override("normal")
 	for i in fps_btns.size():
 		var f: Button = fps_btns[i]
 		if (i == 1) == GameSettings.show_fps:

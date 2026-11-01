@@ -1,6 +1,6 @@
 class_name GameSettings
 extends RefCounted
-## 遊び方の設定(user://settings.cfg)。ゲームの速さ、魔物の速さ、迷宮の画面の拡大、FPS の表示。
+## 遊び方の設定(user://settings.cfg)。ゲームの速さ、魔物の速さ、迷宮の画面の拡大、FPS の表示、戦い方(ぶつかる / キー)。
 ## ゲームの速さは、迷宮の中だけ Engine.time_scale にかける(街やメニューは等速)。
 
 const PATH := "user://settings.cfg"
@@ -26,6 +26,9 @@ static var minimap_index := DEFAULT_MINIMAP
 static var zoom_index := DEFAULT_ZOOM
 static var enemy_speed_index := DEFAULT_ENEMY_SPEED
 static var show_fps := false      # 迷宮の画面の上に、FPS と起きている魔物の数を出す
+## 戦い方(操作中の一人): true = ぶつかると自動で殴る(既定。ken 11/1「オート戦闘も楽でいい」)、false = 攻撃キーで殴る。
+## どちらでも、攻撃キーの一撃・溜め・技は使える。操作していない仲間は、どちらでも届く敵を自分で殴る
+static var bump_attack := true
 
 static func load_settings() -> void:
 	var cf := ConfigFile.new()
@@ -34,8 +37,10 @@ static func load_settings() -> void:
 	zoom_index = DEFAULT_ZOOM
 	minimap_index = DEFAULT_MINIMAP
 	show_fps = false
+	bump_attack = true
 	if cf.load(PATH) == OK:
 		show_fps = bool(cf.get_value("game", "show_fps", false))
+		bump_attack = bool(cf.get_value("game", "bump_attack", true))
 		minimap_index = clampi(int(cf.get_value("game", "minimap", DEFAULT_MINIMAP)), 0, MINIMAPS.size() - 1)
 		zoom_index = clampi(int(cf.get_value("game", "zoom", DEFAULT_ZOOM)), 0, ZOOMS.size() - 1)
 		speed_index = clampi(int(cf.get_value("game", "speed", DEFAULT_SPEED)), 0, SPEEDS.size() - 1)
@@ -49,10 +54,15 @@ static func save() -> void:
 	cf.set_value("game", "zoom", zoom_index)
 	cf.set_value("game", "minimap", minimap_index)
 	cf.set_value("game", "show_fps", show_fps)
+	cf.set_value("game", "bump_attack", bump_attack)
 	cf.save(PATH)
 
 static func set_show_fps(on: bool) -> void:
 	show_fps = on
+	save()
+
+static func set_bump_attack(on: bool) -> void:
+	bump_attack = on
 	save()
 
 static func set_speed(i: int) -> void:
