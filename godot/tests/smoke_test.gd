@@ -1347,6 +1347,8 @@ func _test_tempo() -> void:
 
 func _test_contact() -> void:
 	print("[contact]")
+	var bump_keep := GameSettings.bump_attack
+	GameSettings.bump_attack = false      # ここは「戦い方: キー」のときの押し合いを見る(ぶつかりは bump_attack_test)
 	var made := _make_floor(4, 1)
 	var fl: FloorInstance = made[0]
 	var heroes: Array = made[1]
@@ -1529,6 +1531,7 @@ func _test_contact() -> void:
 		h.queue_free()
 	fl.queue_free()
 	await process_frame
+	GameSettings.bump_attack = bump_keep
 
 # ---------- ゲーム全体 ----------
 

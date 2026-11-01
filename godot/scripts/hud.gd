@@ -111,8 +111,8 @@ func _draw() -> void:
 	if title_shown > 0.0:
 		var a2 := clampf(title_shown / 2.0, 0.0, 1.0)
 		var H := func(id: String) -> String: return Controls.hint(id)
-		var lines := ["移動: %s%s%s%s   攻撃: %s(押し続けて溜め)   転がり: %s   スキル: %s〜%s(%sで選び、右クリックで使う)   仲間の切替: %s" % [
-				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), H.call("attack"), H.call("dodge"),
+		var lines := ["移動: %s%s%s%s   攻撃: %s%s(押し続けて溜め)   転がり: %s   スキル: %s〜%s(%sで選び、右クリックで使う)   仲間の切替: %s" % [
+				H.call("move_up"), H.call("move_left"), H.call("move_down"), H.call("move_right"), "ぶつかる / " if GameSettings.bump_attack else "", H.call("attack"), H.call("dodge"),
 				H.call("skill1"), H.call("skill6"), H.call("skill_next"), H.call("switch")],
 			"調べる: %s   探る: %s   持ち物: %s   治療薬: %s   休む: %s   ミニマップ: %s / %s(画面はホイール)   F1: クレジット(操作はタイトルか持ち物の画面の「操作の設定」で変えられる)" % [
 				H.call("interact"), H.call("search"), H.call("inventory"), H.call("quick_heal"), H.call("rest"), H.call("zoom_in"), H.call("zoom_out")],
